@@ -26,6 +26,11 @@ import Checkout from './pages/Checkout';
 import ChatList from './pages/chat/ChatList';
 import ChatDetail from './pages/chat/ChatDetail';
 
+import { FirebaseDebug } from './utils/firebaseDebug';
+import { useEffect } from 'react';
+
+
+
 // Protected route component
 const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   const { currentUser, userProfile, loading } = useAuth();
@@ -46,6 +51,11 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
 };
 
 const App = () => {
+  // Add this temporarily to debug
+useEffect(() => {
+  FirebaseDebug.checkConfiguration();
+  FirebaseDebug.testConnection();
+}, []);
   return (
     <AuthProvider>
       <CartProvider>

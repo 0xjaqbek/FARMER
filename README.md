@@ -37,8 +37,8 @@ A clean, server-side farm-to-table marketplace application built with React and 
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/farm-direct-clean.git
-   cd farm-direct-clean
+   git clone https://github.com/0xjaqbek/FARMER.git
+   cd FARMER
    ```
 
 2. **Install dependencies**
