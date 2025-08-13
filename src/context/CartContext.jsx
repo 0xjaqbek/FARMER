@@ -1,4 +1,5 @@
-// src/context/CartContext.jsx
+// Fixed CartContext.jsx - Ensure proper farmer data storage
+
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -13,15 +14,19 @@ export const CartProvider = ({ children }) => {
     const savedCart = localStorage.getItem('farmDirectCart');
     if (savedCart) {
       try {
-        setCartItems(JSON.parse(savedCart));
+        const parsedCart = JSON.parse(savedCart);
+        console.log('Loaded cart from localStorage:', parsedCart);
+        setCartItems(parsedCart);
       } catch (error) {
         console.error('Error loading cart from localStorage:', error);
+        setCartItems([]);
       }
     }
   }, []);
 
   // Save cart to localStorage whenever it changes
   useEffect(() => {
+    console.log('Saving cart to localStorage:', cartItems);
     localStorage.setItem('farmDirectCart', JSON.stringify(cartItems));
   }, [cartItems]);
 
@@ -29,8 +34,11 @@ export const CartProvider = ({ children }) => {
   const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0);
   const cartTotal = cartItems.reduce((total, item) => total + (item.price * item.quantity), 0);
 
-  // Add item to cart
+  // Add item to cart - FIXED: Ensure all farmer data is preserved
   const addToCart = (product, quantity = 1) => {
+    console.log('Adding product to cart:', product);
+    console.log('Quantity:', quantity);
+    
     setCartItems(prevItems => {
       const existingItem = prevItems.find(item => item.id === product.id);
       
@@ -47,22 +55,44 @@ export const CartProvider = ({ children }) => {
             : item
         );
       } else {
-        // Add new item
+        // Add new item - FIXED: Include all necessary farmer fields
+        const cartItem = {
+          id: product.id,
+          name: product.name,
+          price: product.price,
+          unit: product.unit || 'piece',
+          image: product.images?.[0] || null,
+          
+          // FIXED: Try multiple possible field names and ensure we have farmer info
+          rolnikId: product.rolnikId || product.farmerId || product.userId,
+          rolnikName: product.rolnikName || product.farmerName || product.userName || 'Unknown Farmer',
+          
+          // Backup fields for compatibility
+          farmerId: product.rolnikId || product.farmerId || product.userId,
+          farmerName: product.rolnikName || product.farmerName || product.userName || 'Unknown Farmer',
+          
+          quantity
+        };
+        
+        console.log('Created cart item:', cartItem);
+        
+        // Validate that we have farmer information
+        if (!cartItem.rolnikId && !cartItem.farmerId) {
+          console.error('Missing farmer ID in product:', product);
+          toast({
+            title: 'Error',
+            description: 'Unable to add product: missing farmer information',
+            variant: 'destructive'
+          });
+          return prevItems; // Don't add the item
+        }
+        
         toast({
           title: 'Added to cart',
           description: `${product.name} added to your cart`,
         });
         
-        return [...prevItems, {
-          id: product.id,
-          name: product.name,
-          price: product.price,
-          unit: product.unit,
-          image: product.images?.[0] || null,
-          farmerId: product.farmerId,
-          farmerName: product.farmerName,
-          quantity
-        }];
+        return [...prevItems, cartItem];
       }
     });
   };
@@ -107,6 +137,14 @@ export const CartProvider = ({ children }) => {
     });
   };
 
+  // Debug function to log cart state
+  const debugCart = () => {
+    console.log('Current cart state:');
+    console.log('Items:', cartItems);
+    console.log('Count:', cartCount);
+    console.log('Total:', cartTotal);
+  };
+
   const value = {
     cartItems,
     cartCount,
@@ -114,7 +152,8 @@ export const CartProvider = ({ children }) => {
     addToCart,
     updateCartItemQuantity,
     removeFromCart,
-    clearCart
+    clearCart,
+    debugCart
   };
 
   return (

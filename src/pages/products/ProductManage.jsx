@@ -36,35 +36,37 @@ export default function ProductManage() {
     }
   }, [currentUser, userProfile]);
 
-  const loadProducts = async () => {
-    try {
-      setLoading(true);
+const loadProducts = async () => {
+  try {
+    setLoading(true);
+    
+    console.log('Fetching products for user:', currentUser.uid);
+    console.log('User profile role:', userProfile?.role);
+    
+    const productsRef = collection(db, 'products');
+    
+    // Now you can use orderBy since the composite index is enabled
+    let q = query(
+      productsRef,
+      where('rolnikId', '==', currentUser.uid),
+      orderBy('createdAt', 'desc')
+    );
+    
+    console.log('Querying with rolnikId:', currentUser.uid);
+    let snapshot = await getDocs(q);
+    let productList = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    console.log('Products found with rolnikId:', productList.length);
+    
+    // If no products found with rolnikId, try with farmerId (fallback)
+    if (productList.length === 0) {
+      console.log('No products found with rolnikId, trying farmerId...');
       
-      console.log('Fetching products for user:', currentUser.uid);
-      console.log('User profile role:', userProfile?.role);
-      
-      // Try both field names to be safe - first try the current format
-      const productsRef = collection(db, 'products');
-      
-      // First try with rolnikId (current format in your data)
-      let q = query(
-        productsRef,
-        where('rolnikId', '==', currentUser.uid),
-        orderBy('createdAt', 'desc')
-      );
-      
-      console.log('Querying with rolnikId:', currentUser.uid);
-      let snapshot = await getDocs(q);
-      let productList = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      
-      console.log('Products found with rolnikId:', productList.length);
-      
-      // If no products found with rolnikId, try with farmerId
-      if (productList.length === 0) {
-        console.log('No products found with rolnikId, trying farmerId...');
+      // Check if you have a composite index for farmerId too
+      try {
         q = query(
           productsRef,
           where('farmerId', '==', currentUser.uid),
@@ -78,22 +80,44 @@ export default function ProductManage() {
         }));
         
         console.log('Products found with farmerId:', productList.length);
+      } catch (farmiderIndexError) {
+        console.log('No composite index for farmerId, querying without orderBy');
+        
+        // Fallback without orderBy for farmerId
+        q = query(
+          productsRef,
+          where('farmerId', '==', currentUser.uid)
+        );
+        
+        snapshot = await getDocs(q);
+        productList = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            createdAt: data.createdAt?.toDate() || new Date()
+          };
+        });
+        
+        // Sort in JavaScript for farmerId queries
+        productList.sort((a, b) => b.createdAt - a.createdAt);
       }
-      
-      console.log('Final product list:', productList);
-      setProducts(productList);
-      
-    } catch (error) {
-      console.error('Error loading products:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load products. Please try again.",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
     }
-  };
+    
+    console.log('Final product list:', productList);
+    setProducts(productList);
+    
+  } catch (error) {
+    console.error('Error loading products:', error);
+    toast({
+      title: "Error",
+      description: "Failed to load products. Please try again.",
+      variant: "destructive",
+    });
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Delete product
   const handleDeleteProduct = async (productId) => {

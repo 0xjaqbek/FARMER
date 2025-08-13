@@ -1,3 +1,5 @@
+// Fixed Checkout.jsx - Resolve cart data structure issues
+
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -49,28 +51,46 @@ const Checkout = () => {
       setLoading(true);
       setError('');
       
-      // Group items by farmer/rolnik
+      console.log('Cart items structure:', cartItems);
+      console.log('User profile:', userProfile);
+      
+      // Group items by farmer/rolnik - FIXED: Handle missing rolnikId
       const itemsByRolnik = {};
       cartItems.forEach(item => {
-        if (!itemsByRolnik[item.rolnikId]) {
-          itemsByRolnik[item.rolnikId] = {
-            rolnikId: item.rolnikId,
-            rolnikName: item.rolnikName,
+        console.log('Processing cart item:', item);
+        
+        // FIXED: Try multiple possible field names for farmer ID
+        const farmerId = item.rolnikId || item.farmerId || item.userId;
+        const farmerName = item.rolnikName || item.farmerName || item.userName || 'Unknown Farmer';
+        
+        if (!farmerId) {
+          console.warn('No farmer ID found for item:', item);
+          throw new Error(`Missing farmer information for product: ${item.name}`);
+        }
+        
+        if (!itemsByRolnik[farmerId]) {
+          itemsByRolnik[farmerId] = {
+            rolnikId: farmerId,
+            rolnikName: farmerName,
             items: []
           };
         }
-        itemsByRolnik[item.rolnikId].items.push(item);
+        itemsByRolnik[farmerId].items.push(item);
       });
+      
+      console.log('Items grouped by farmer:', itemsByRolnik);
       
       // Create order for each farmer
       const orderPromises = Object.values(itemsByRolnik).map(async ({ rolnikId, rolnikName, items }) => {
+        console.log('Creating order for farmer:', rolnikId, 'with items:', items);
+        
         const orderItems = items.map(item => ({
           productId: item.id,
           productName: item.name,
           productImage: item.image,
           quantity: item.quantity,
           price: item.price,
-          unit: item.unit,
+          unit: item.unit || 'piece',
           totalPrice: item.price * item.quantity
         }));
         
@@ -99,10 +119,16 @@ const Checkout = () => {
           rolnikName
         };
         
+        console.log('Order data to be created:', orderData);
+        
         return createOrder(orderData);
       });
       
+      console.log('Creating', orderPromises.length, 'orders...');
+      
       await Promise.all(orderPromises);
+      
+      console.log('All orders created successfully');
       
       // Show success and clear cart
       setSuccess(true);
@@ -115,7 +141,7 @@ const Checkout = () => {
       
     } catch (error) {
       console.error('Checkout error:', error);
-      setError('Failed to process your order. Please try again.');
+      setError(`Failed to process your order: ${error.message || 'Please try again.'}`);
     } finally {
       setLoading(false);
     }
@@ -166,27 +192,41 @@ const Checkout = () => {
       </div>
     );
   }
-  
+
   return (
-    <div>
+    <div className="max-w-4xl mx-auto">
+      <div className="mb-6">
+        <Link 
+          to="/cart" 
+          className="text-green-600 hover:underline flex items-center"
+        >
+          <ArrowLeft className="mr-1 h-4 w-4" />
+          Back to Cart
+        </Link>
+      </div>
+
       <h1 className="text-2xl font-bold mb-6">Checkout</h1>
-      
+
       {error && (
         <Alert variant="destructive" className="mb-6">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Order Form */}
+        <div>
           <Card>
             <CardHeader>
-              <CardTitle>Shipping Information</CardTitle>
+              <CardTitle className="flex items-center">
+                <CreditCard className="mr-2 h-5 w-5" />
+                Delivery Information
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
                     <Label htmlFor="firstName">First Name</Label>
                     <Input
                       id="firstName"
@@ -196,7 +236,7 @@ const Checkout = () => {
                       required
                     />
                   </div>
-                  <div className="space-y-2">
+                  <div>
                     <Label htmlFor="lastName">Last Name</Label>
                     <Input
                       id="lastName"
@@ -207,34 +247,33 @@ const Checkout = () => {
                     />
                   </div>
                 </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={handleChange}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Phone Number</Label>
-                    <Input
-                      id="phone"
-                      name="phone"
-                      type="tel"
-                      value={formData.phone}
-                      onChange={handleChange}
-                      required
-                    />
-                  </div>
+
+                <div>
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    required
+                  />
                 </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="address">Address</Label>
+
+                <div>
+                  <Label htmlFor="phone">Phone Number</Label>
+                  <Input
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    value={formData.phone}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="address">Street Address</Label>
                   <Input
                     id="address"
                     name="address"
@@ -243,9 +282,9 @@ const Checkout = () => {
                     required
                   />
                 </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
                     <Label htmlFor="city">City</Label>
                     <Input
                       id="city"
@@ -255,7 +294,7 @@ const Checkout = () => {
                       required
                     />
                   </div>
-                  <div className="space-y-2 md:col-span-2">
+                  <div>
                     <Label htmlFor="postalCode">Postal Code</Label>
                     <Input
                       id="postalCode"
@@ -266,118 +305,76 @@ const Checkout = () => {
                     />
                   </div>
                 </div>
-                
-                <div className="space-y-2">
-                  <Label>Payment Method</Label>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div 
-                      className={`border rounded-md p-4 cursor-pointer flex items-center ${
-                        formData.paymentMethod === 'card' ? 'border-green-500 bg-green-50' : ''
-                      }`}
-                      onClick={() => setFormData(prev => ({ ...prev, paymentMethod: 'card' }))}
-                    >
-                      <input
-                        type="radio"
-                        id="card"
-                        name="paymentMethod"
-                        value="card"
-                        checked={formData.paymentMethod === 'card'}
-                        onChange={handleChange}
-                        className="mr-2"
-                      />
-                      <label htmlFor="card" className="flex items-center cursor-pointer">
-                        <CreditCard className="h-5 w-5 mr-2 text-gray-600" />
-                        Credit Card
-                      </label>
-                    </div>
-                    <div 
-                      className={`border rounded-md p-4 cursor-pointer flex items-center ${
-                        formData.paymentMethod === 'cash' ? 'border-green-500 bg-green-50' : ''
-                      }`}
-                      onClick={() => setFormData(prev => ({ ...prev, paymentMethod: 'cash' }))}
-                    >
-                      <input
-                        type="radio"
-                        id="cash"
-                        name="paymentMethod"
-                        value="cash"
-                        checked={formData.paymentMethod === 'cash'}
-                        onChange={handleChange}
-                        className="mr-2"
-                      />
-                      <label htmlFor="cash" className="flex items-center cursor-pointer">
-                        <ShoppingCart className="h-5 w-5 mr-2 text-gray-600" />
-                        Cash on Delivery
-                      </label>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
+
+                <div>
                   <Label htmlFor="notes">Order Notes (Optional)</Label>
                   <Textarea
                     id="notes"
                     name="notes"
                     value={formData.notes}
                     onChange={handleChange}
-                    placeholder="Any special instructions for delivery"
+                    placeholder="Any special instructions for your order..."
                     rows={3}
                   />
                 </div>
-                
-                <div className="flex justify-between pt-4">
-                  <Button type="button" variant="ghost" asChild className="text-green-600">
-                    <Link to="/cart">
-                      <ArrowLeft className="mr-2 h-4 w-4" />
-                      Back to Cart
-                    </Link>
-                  </Button>
-                  <Button type="submit" disabled={loading}>
-                    {loading ? 'Processing...' : 'Place Order'}
-                  </Button>
-                </div>
+
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={loading}
+                >
+                  {loading ? 'Processing...' : `Place Order - $${cartTotal.toFixed(2)}`}
+                </Button>
               </form>
             </CardContent>
           </Card>
         </div>
-        
+
+        {/* Order Summary */}
         <div>
           <Card>
             <CardHeader>
               <CardTitle>Order Summary</CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="divide-y mb-4">
-                {cartItems.map(item => (
-                  <li key={item.id} className="py-2 flex justify-between">
-                    <div>
-                      <p className="font-medium">{item.name}</p>
+              <div className="space-y-4">
+                {cartItems.map((item) => (
+                  <div key={item.id} className="flex items-center space-x-3 pb-3 border-b last:border-b-0">
+                    <div className="h-12 w-12 overflow-hidden rounded-md border bg-gray-100">
+                      {item.image ? (
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="h-full w-full flex items-center justify-center">
+                          <ShoppingCart className="h-6 w-6 text-gray-400" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-medium truncate">{item.name}</h4>
                       <p className="text-sm text-gray-500">
-                        {item.quantity} x ${item.price.toFixed(2)}
+                        Qty: {item.quantity} × ${item.price.toFixed(2)}
                       </p>
                     </div>
-                    <p className="font-medium">
+                    <div className="text-sm font-medium">
                       ${(item.price * item.quantity).toFixed(2)}
-                    </p>
-                  </li>
+                    </div>
+                  </div>
                 ))}
-              </ul>
-              
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span>Subtotal</span>
-                  <span>${cartTotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm text-gray-500">
-                  <span>Shipping</span>
-                  <span>$0.00</span>
-                </div>
-                <div className="flex justify-between text-sm text-gray-500">
-                  <span>Taxes</span>
-                  <span>$0.00</span>
-                </div>
-                <div className="border-t pt-3 mt-3">
-                  <div className="flex justify-between font-semibold text-lg">
+
+                <div className="border-t pt-4 space-y-2">
+                  <div className="flex justify-between">
+                    <span>Subtotal</span>
+                    <span>${cartTotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-gray-500">
+                    <span>Delivery</span>
+                    <span>To be arranged</span>
+                  </div>
+                  <div className="flex justify-between font-semibold text-lg border-t pt-2">
                     <span>Total</span>
                     <span>${cartTotal.toFixed(2)}</span>
                   </div>

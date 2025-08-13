@@ -1,223 +1,190 @@
-// src/context/AuthContext.jsx
-// Fixed AuthContext with import fallback and error handling
+// Fixed AuthContext.jsx - Ensure user profile includes all necessary fields
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
+import { 
+  onAuthStateChanged, 
+  signOut as firebaseSignOut,
+  updateProfile as firebaseUpdateProfile
+} from 'firebase/auth';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
-import { doc, getDoc } from 'firebase/firestore';
 
 const AuthContext = createContext();
 
-export function useAuth() {
+export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-}
-
-// Utility function to convert Firestore timestamps (moved here to avoid import issues)
-const convertTimestamps = (data) => {
-  if (!data) return data;
-  
-  const converted = { ...data };
-  
-  // Handle common timestamp fields
-  const timestampFields = ['createdAt', 'updatedAt', 'lastLogin', 'verificationDate'];
-  
-  timestampFields.forEach(field => {
-    if (converted[field]) {
-      try {
-        // Check if it's a Firestore Timestamp object
-        if (converted[field].toDate && typeof converted[field].toDate === 'function') {
-          converted[field] = converted[field].toDate();
-        }
-        // If it's already a Date object, leave it as is
-        else if (converted[field] instanceof Date) {
-          // Already a Date object, keep it
-        }
-        // If it's a string, convert to Date
-        else if (typeof converted[field] === 'string') {
-          converted[field] = new Date(converted[field]);
-        }
-        // If it's a number (Unix timestamp), convert to Date
-        else if (typeof converted[field] === 'number') {
-          converted[field] = new Date(converted[field]);
-        }
-      } catch (error) {
-        console.warn(`Error converting timestamp field ${field}:`, error);
-        // Keep the original value if conversion fails
-      }
-    }
-  });
-  
-  return converted;
 };
 
-// Local function to get user profile (to avoid import issues)
-const getUserProfile = async (userId) => {
-  try {
-    console.log('Getting user profile for:', userId);
-    
-    const userDoc = await getDoc(doc(db, 'users', userId));
-    
-    if (!userDoc.exists()) {
-      console.warn('User profile not found, creating basic profile');
-      
-      // Return a basic user profile if it doesn't exist
-      const basicProfile = {
-        id: userId,
-        email: auth.currentUser?.email || '',
-        displayName: auth.currentUser?.displayName || 'User',
-        role: 'klient',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-      
-      return basicProfile;
-    }
-    
-    const userData = userDoc.data();
-    console.log('Raw user data from Firestore:', userData);
-    
-    const convertedData = convertTimestamps(userData);
-    console.log('Converted user data:', convertedData);
-    
-    return convertedData;
-    
-  } catch (error) {
-    console.error('Error getting user profile:', error);
-    
-    // Return a fallback profile instead of throwing
-    return {
-      id: userId,
-      email: auth.currentUser?.email || '',
-      displayName: auth.currentUser?.displayName || 'User',
-      role: 'klient',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      error: error.message
-    };
-  }
-};
-
-export function AuthProvider({ children }) {
+export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
-  // Test Firebase connection
-  useEffect(() => {
-    console.log('Testing Firebase connection...');
-    console.log('Auth instance exists:', !!auth);
-    console.log('Auth currentUser:', auth.currentUser ? auth.currentUser.email : 'No user');
-    
-    if (!auth) {
-      console.error('Firebase Auth not initialized!');
-      setError('Firebase Auth not initialized');
-      setLoading(false);
-      return;
+  // Get user profile from Firestore
+  const getUserProfile = async (userId) => {
+    try {
+      console.log('Getting user profile for:', userId);
+      
+      if (!userId) {
+        console.warn('No userId provided to getUserProfile');
+        return null;
+      }
+      
+      const userDocRef = doc(db, 'users', userId);
+      const userDoc = await getDoc(userDocRef);
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        console.log('User profile found:', userData);
+        
+        // Ensure all required fields are present
+        const completeProfile = {
+          uid: userId,
+          id: userId, // Add id field for compatibility
+          email: userData.email || currentUser?.email,
+          firstName: userData.firstName || userData.displayName?.split(' ')[0] || 'User',
+          lastName: userData.lastName || userData.displayName?.split(' ')[1] || '',
+          displayName: userData.displayName || `${userData.firstName || 'User'} ${userData.lastName || ''}`.trim(),
+          role: userData.role || 'klient',
+          postalCode: userData.postalCode || '', // Ensure postalCode is always a string
+          createdAt: userData.createdAt?.toDate() || new Date(),
+          updatedAt: userData.updatedAt?.toDate() || new Date(),
+          ...userData // Include any other fields
+        };
+        
+        return completeProfile;
+      } else {
+        console.log('User profile not found, creating basic profile');
+        
+        // Create a basic profile if none exists
+        const basicProfile = {
+          uid: userId,
+          id: userId,
+          email: currentUser?.email || '',
+          displayName: currentUser?.displayName || 'User',
+          firstName: currentUser?.displayName?.split(' ')[0] || 'User',
+          lastName: currentUser?.displayName?.split(' ')[1] || '',
+          role: 'klient', // Default role
+          postalCode: '', // Default empty string
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        };
+        
+        // Save the basic profile to Firestore
+        await setDoc(userDocRef, basicProfile);
+        console.log('Basic profile created');
+        
+        // Return with converted timestamps
+        return {
+          ...basicProfile,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+      }
+    } catch (error) {
+      console.error('Error getting user profile:', error);
+      return null;
     }
-    
+  };
+
+  // Update user profile in Firestore
+  const updateUserProfile = async (updates) => {
+    try {
+      if (!currentUser) throw new Error('No authenticated user');
+      
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      const updateData = {
+        ...updates,
+        updatedAt: serverTimestamp()
+      };
+      
+      await setDoc(userDocRef, updateData, { merge: true });
+      
+      // Refresh the user profile
+      const updatedProfile = await getUserProfile(currentUser.uid);
+      setUserProfile(updatedProfile);
+      
+      return updatedProfile;
+    } catch (error) {
+      console.error('Error updating user profile:', error);
+      throw error;
+    }
+  };
+
+  // Sign out function
+  const signOut = async () => {
+    try {
+      await firebaseSignOut(auth);
+      setCurrentUser(null);
+      setUserProfile(null);
+    } catch (error) {
+      console.error('Error signing out:', error);
+      throw error;
+    }
+  };
+
+  // Update Firebase Auth profile
+  const updateProfile = async (updates) => {
+    try {
+      if (!currentUser) throw new Error('No authenticated user');
+      
+      await firebaseUpdateProfile(currentUser, updates);
+      
+      // Also update in Firestore
+      await updateUserProfile(updates);
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      throw error;
+    }
+  };
+
+  useEffect(() => {
     console.log('Setting up auth state listener...');
     
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       console.log('Auth state changed. User:', user ? user.email : 'No user');
       
-      try {
-        setError(null); // Clear any previous errors
-        
-        if (user) {
-          console.log('User logged in, fetching profile...');
-          
-          // Get user profile from Firestore
-          try {
-            const profile = await getUserProfile(user.uid);
-            console.log('User profile loaded:', profile);
-            
-            setCurrentUser(user);
-            setUserProfile(profile);
-          } catch (profileError) {
-            console.error('Error loading user profile:', profileError);
-            
-            // If profile loading fails, still set the user but with a basic profile
-            setCurrentUser(user);
-            setUserProfile({
-              id: user.uid,
-              email: user.email,
-              displayName: user.displayName || 'User',
-              role: 'klient',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            });
-            
-            // Set a non-critical error
-            setError(`Profile loading issue: ${profileError.message}`);
-          }
-        } else {
-          console.log('User logged out');
-          setCurrentUser(null);
+      setCurrentUser(user);
+      
+      if (user) {
+        console.log('User logged in, fetching profile...');
+        try {
+          const profile = await getUserProfile(user.uid);
+          setUserProfile(profile);
+          console.log('User profile loaded:', profile);
+        } catch (error) {
+          console.error('Error loading user profile:', error);
           setUserProfile(null);
         }
-      } catch (authError) {
-        console.error('Auth state change error:', authError);
-        setError(`Authentication error: ${authError.message}`);
-        setCurrentUser(null);
+      } else {
+        console.log('User logged out');
         setUserProfile(null);
-      } finally {
-        setLoading(false);
       }
+      
+      setLoading(false);
     });
 
     return unsubscribe;
   }, []);
 
-  // Refresh user profile
-  const refreshUserProfile = async () => {
-    if (!currentUser) return;
-    
-    try {
-      console.log('Refreshing user profile...');
-      const profile = await getUserProfile(currentUser.uid);
-      setUserProfile(profile);
-      setError(null);
-    } catch (error) {
-      console.error('Error refreshing user profile:', error);
-      setError(`Profile refresh failed: ${error.message}`);
-    }
-  };
-
-  // Update user profile in context
-  const updateUserProfileContext = (updates) => {
-    if (userProfile) {
-      setUserProfile(prev => ({
-        ...prev,
-        ...updates,
-        updatedAt: new Date()
-      }));
-    }
-  };
-
-  // Clear error
-  const clearError = () => {
-    setError(null);
-  };
+  // Debug logging
+  useEffect(() => {
+    console.log('Current user state:', currentUser ? currentUser.email : 'None');
+    console.log('User profile state:', userProfile);
+  }, [currentUser, userProfile]);
 
   const value = {
     currentUser,
     userProfile,
     loading,
-    error,
-    refreshUserProfile,
-    updateUserProfileContext,
-    clearError,
-    
-    // Helper functions
-    isAuthenticated: !!currentUser,
-    isFarmer: userProfile?.role === 'rolnik' || userProfile?.role === 'farmer',
-    isCustomer: userProfile?.role === 'klient' || userProfile?.role === 'customer',
-    isAdmin: userProfile?.role === 'admin'
+    getUserProfile,
+    updateUserProfile,
+    updateProfile,
+    signOut
   };
 
   return (
@@ -225,4 +192,4 @@ export function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   );
-}
+};

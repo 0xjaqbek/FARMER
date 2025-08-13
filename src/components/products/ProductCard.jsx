@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import StarRating from '@/components/reviews/StarRating';
 
+
+
 const ProductCard = ({ product }) => {
   return (
     <Card className="h-full flex flex-col">

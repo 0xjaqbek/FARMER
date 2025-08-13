@@ -1,3 +1,4 @@
+
 import { 
   collection, 
   query, 
@@ -11,8 +12,18 @@ import { db } from './config.jsx';
 // Find nearby rolniks based on postal code
 export const findNearbyRolniks = async (postalCode) => {
   try {
+    // FIXED: Check if postalCode is valid before processing
+    if (!postalCode || typeof postalCode !== 'string' || postalCode.trim().length < 2) {
+      console.warn('Invalid postalCode provided:', postalCode);
+      // Return all rolniks if no valid postal code
+      return await getAllRolniks();
+    }
+    
     // Get the postal prefix for filtering
-    const postalPrefix = postalCode.substring(0, 2);
+    const cleanedPostalCode = postalCode.trim();
+    const postalPrefix = cleanedPostalCode.substring(0, 2);
+    
+    console.log('Searching nearby rolniks with postal prefix:', postalPrefix);
     
     // Use a simpler query that just filters by role
     // This avoids requiring a composite index
@@ -24,19 +35,45 @@ export const findNearbyRolniks = async (postalCode) => {
     const querySnapshot = await getDocs(q);
     
     // Filter the results by postal code in JavaScript
-    return querySnapshot.docs
+    const allRolniks = querySnapshot.docs
       .map(doc => ({
         id: doc.id,
         ...doc.data()
-      }))
-      .filter(user => {
-        // Check if user has a postalCode and it starts with the same prefix
-        return user.postalCode && 
-               user.postalCode.substring(0, 2) === postalPrefix;
-      });
+      }));
+      
+    console.log('Found total rolniks:', allRolniks.length);
+    
+    // Filter by postal code prefix if available
+    const nearbyRolniks = allRolniks.filter(user => {
+      // Check if user has a postalCode and it starts with the same prefix
+      if (!user.postalCode || typeof user.postalCode !== 'string') {
+        return false;
+      }
+      
+      const userPrefix = user.postalCode.trim().substring(0, 2);
+      return userPrefix === postalPrefix;
+    });
+    
+    console.log('Found nearby rolniks:', nearbyRolniks.length);
+    
+    // If no nearby rolniks found, return a subset of all rolniks
+    if (nearbyRolniks.length === 0) {
+      console.log('No nearby rolniks found, returning subset of all rolniks');
+      return allRolniks.slice(0, 10); // Return first 10 rolniks
+    }
+    
+    return nearbyRolniks;
   } catch (error) {
     console.error('Error finding nearby rolniks:', error);
-    throw error;
+    
+    // Fallback: try to get all rolniks
+    try {
+      console.log('Attempting fallback to getAllRolniks');
+      return await getAllRolniks();
+    } catch (fallbackError) {
+      console.error('Fallback also failed:', fallbackError);
+      return []; // Return empty array as last resort
+    }
   }
 };
 
@@ -83,6 +120,10 @@ export const getAllClients = async () => {
 // Get user by ID
 export const getUserById = async (userId) => {
   try {
+    if (!userId) {
+      throw new Error('User ID is required');
+    }
+    
     const docRef = doc(db, 'users', userId);
     const docSnap = await getDoc(docRef);
     
