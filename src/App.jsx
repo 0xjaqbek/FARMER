@@ -4,6 +4,7 @@ import { Toaster } from '@/components/ui/use-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import MainLayout from './components/layout/MainLayout';
+import NotificationCenter from './components/notifications/NotificationCenter';
 
 // Existing imports
 import Login from './pages/Login';
@@ -67,6 +68,11 @@ useEffect(() => {
               <Route path="/register" element={<Register />} />
               
               {/* Main Routes */}
+              <Route path="/notifications" element={
+                <ProtectedRoute>
+                  <NotificationCenter />
+                </ProtectedRoute>
+              } />
               <Route 
                 path="/dashboard" 
                 element={

@@ -29,7 +29,7 @@ export default function EnhancedProductCard({ product, showFarmerInfo = true, on
   const [rating, setRating] = useState(null);
   const [farmer, setFarmer] = useState(null);
   const [deliveryInfo, setDeliveryInfo] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, _setLoading] = useState(false);
 
   // Load additional product data
   useEffect(() => {
@@ -87,7 +87,7 @@ export default function EnhancedProductCard({ product, showFarmerInfo = true, on
         title: "Added to Cart",
         description: `${product.name} has been added to your cart`
       });
-    } catch (error) {
+    } catch  {
       toast({
         title: "Error",
         description: "Failed to add product to cart",

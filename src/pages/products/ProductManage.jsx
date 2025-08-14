@@ -80,7 +80,7 @@ const loadProducts = async () => {
         }));
         
         console.log('Products found with farmerId:', productList.length);
-      } catch (farmiderIndexError) {
+      } catch {
         console.log('No composite index for farmerId, querying without orderBy');
         
         // Fallback without orderBy for farmerId
@@ -389,7 +389,7 @@ const loadProducts = async () => {
       )}
 
       {/* Debug Info (remove in production) */}
-      {process.env.NODE_ENV === 'development' && (
+      {import.meta.env.MODE === 'development' && (
         <Card className="bg-gray-50">
           <CardHeader>
             <CardTitle className="text-sm">Debug Info</CardTitle>

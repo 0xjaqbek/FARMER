@@ -8,7 +8,6 @@ import {
   getDoc, 
   addDoc, 
   updateDoc, 
-  deleteDoc, 
   query, 
   where, 
   orderBy, 
@@ -524,7 +523,7 @@ export class InventoryService {
   }
 
   // Bulk update multiple products (for seasonal management)
-  static async bulkUpdateSeasonality(farmerId, updates) {
+  static async bulkUpdateSeasonality(farmerId) {
     try {
       const productsRef = collection(db, COLLECTIONS.PRODUCTS);
       const q = query(productsRef, where('farmerId', '==', farmerId));

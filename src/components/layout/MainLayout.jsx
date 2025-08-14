@@ -1,4 +1,4 @@
-// src/components/layout/MainLayout.jsx - Clean version without blockchain
+// src/components/layout/MainLayout.jsx - Updated with NotificationBell
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -27,6 +27,9 @@ import {
   Settings,
   Plus
 } from 'lucide-react';
+
+// ADD THIS IMPORT
+import NotificationBell from '../notifications/NotificationBell';
 
 const MainLayout = ({ children }) => {
   const { currentUser, userProfile } = useAuth();
@@ -166,6 +169,10 @@ const MainLayout = ({ children }) => {
 
             {/* Right side navigation */}
             <div className="hidden sm:ml-6 sm:flex sm:items-center space-x-4">
+              
+              {/* ADD THIS: Notification Bell - Available for all authenticated users */}
+              <NotificationBell />
+              
               {/* Cart for clients */}
               {isKlient && (
                 <Link to="/cart" className="relative p-2">
@@ -189,39 +196,48 @@ const MainLayout = ({ children }) => {
                     </Avatar>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56" align="end" forceMount>
+                <DropdownMenuContent className="w-56" align="end">
                   <div className="flex items-center justify-start gap-2 p-2">
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className="bg-green-600 text-white">
+                        {getInitials()}
+                      </AvatarFallback>
+                    </Avatar>
                     <div className="flex flex-col space-y-1 leading-none">
-                      <p className="font-medium text-sm">
+                      <p className="font-medium">
                         {userProfile?.firstName} {userProfile?.lastName}
                       </p>
                       <p className="w-[200px] truncate text-xs text-muted-foreground">
                         {userProfile?.email}
                       </p>
-                      <p className="text-xs text-muted-foreground capitalize">
-                        {userProfile?.role === 'klient' ? 'Customer' : 
-                         userProfile?.role === 'rolnik' ? 'Farmer' : 
-                         userProfile?.role}
-                      </p>
                     </div>
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
-                    <Link to="/profile" className="flex items-center">
+                    <Link to="/profile" className="cursor-pointer">
                       <User className="mr-2 h-4 w-4" />
                       Profile
                     </Link>
                   </DropdownMenuItem>
+                  
+                  {/* ADD THIS: Notifications menu item */}
+                  <DropdownMenuItem asChild>
+                    <Link to="/notifications" className="cursor-pointer">
+                      <Settings className="mr-2 h-4 w-4" />
+                      Notifications
+                    </Link>
+                  </DropdownMenuItem>
+                  
                   {isAdmin && (
                     <DropdownMenuItem asChild>
-                      <Link to="/admin" className="flex items-center">
-                        <Settings className="mr-2 h-4 w-4" />
+                      <Link to="/admin" className="cursor-pointer">
+                        <Shield className="mr-2 h-4 w-4" />
                         Admin Panel
                       </Link>
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout}>
+                  <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
                     <LogOut className="mr-2 h-4 w-4" />
                     Logout
                   </DropdownMenuItem>
@@ -230,13 +246,20 @@ const MainLayout = ({ children }) => {
             </div>
 
             {/* Mobile menu button */}
-            <div className="sm:hidden flex items-center">
-              {isKlient && cartCount > 0 && (
-                <Link to="/cart" className="relative p-2 mr-2">
+            <div className="sm:hidden flex items-center space-x-2">
+              
+              {/* ADD THIS: Mobile Notification Bell */}
+              <NotificationBell />
+              
+              {/* Mobile cart for clients */}
+              {isKlient && (
+                <Link to="/cart" className="relative p-2">
                   <ShoppingCart className="h-6 w-6 text-gray-400" />
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                    {cartCount > 9 ? '9+' : cartCount}
-                  </span>
+                  {cartCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                      {cartCount > 9 ? '9+' : cartCount}
+                    </span>
+                  )}
                 </Link>
               )}
               <button
@@ -277,6 +300,20 @@ const MainLayout = ({ children }) => {
                   </Link>
                 );
               })}
+              
+              {/* ADD THIS: Mobile Notifications Link */}
+              <Link
+                to="/notifications"
+                className={`flex items-center pl-3 pr-4 py-2 border-l-4 text-base font-medium ${
+                  location.pathname === '/notifications'
+                    ? 'bg-green-50 border-green-500 text-green-700'
+                    : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
+                }`}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <Settings className="w-5 h-5 mr-3" />
+                Notifications
+              </Link>
             </div>
             <div className="pt-4 pb-3 border-t border-gray-200">
               <div className="flex items-center px-4">

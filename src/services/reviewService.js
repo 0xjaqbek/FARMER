@@ -4,9 +4,7 @@
 import { 
   collection, 
   doc, 
-  addDoc, 
   updateDoc, 
-  deleteDoc,
   getDocs, 
   getDoc, 
   query, 
@@ -15,7 +13,6 @@ import {
   limit,
   runTransaction,
   serverTimestamp,
-  writeBatch
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { COLLECTIONS, createReviewSchema, createRatingSchema } from '../lib/firebaseSchema';
@@ -369,7 +366,7 @@ export class ReviewService {
   }
   
   // Vote review as helpful
-  static async voteHelpful(reviewId, userId) {
+  static async voteHelpful(reviewId) {
     try {
       // In a real app, track who voted to prevent duplicate votes
       // For simplicity, we'll just increment the count

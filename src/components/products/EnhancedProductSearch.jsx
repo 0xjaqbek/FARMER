@@ -17,7 +17,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useLocation } from '../../hooks/useLocation';
 
 export default function EnhancedProductSearch({ onResults, onLoading }) {
-  const { userProfile } = useAuth();
+  const { _userProfile } = useAuth();
   const { location: userLocation, requestLocation } = useLocation();
   
   // Search state
