@@ -1,4 +1,5 @@
-// Fixed AuthContext.jsx - Ensure user profile includes all necessary fields
+// src/context/AuthContext.jsx
+// Fixed AuthContext - Prevent invalid hook calls
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { 
@@ -9,11 +10,12 @@ import {
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 
-const AuthContext = createContext();
+const AuthContext = createContext({});
 
+// Custom hook to use AuthContext
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
@@ -45,45 +47,29 @@ export const AuthProvider = ({ children }) => {
         const completeProfile = {
           uid: userId,
           id: userId, // Add id field for compatibility
-          email: userData.email || currentUser?.email,
-          firstName: userData.firstName || userData.displayName?.split(' ')[0] || 'User',
-          lastName: userData.lastName || userData.displayName?.split(' ')[1] || '',
-          displayName: userData.displayName || `${userData.firstName || 'User'} ${userData.lastName || ''}`.trim(),
-          role: userData.role || 'klient',
-          postalCode: userData.postalCode || '', // Ensure postalCode is always a string
-          createdAt: userData.createdAt?.toDate() || new Date(),
-          updatedAt: userData.updatedAt?.toDate() || new Date(),
-          ...userData // Include any other fields
+          email: userData.email || '',
+          firstName: userData.firstName || '',
+          lastName: userData.lastName || '',
+          role: userData.role || 'customer',
+          displayName: userData.displayName || `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || 'User',
+          farmName: userData.farmName || '',
+          farmLocation: userData.farmLocation || '',
+          profileComplete: userData.profileComplete || false,
+          phone: userData.phone || '',
+          address: userData.address || {},
+          notificationPreferences: userData.notificationPreferences || {
+            email: true,
+            sms: false,
+            inApp: true
+          },
+          createdAt: userData.createdAt,
+          updatedAt: userData.updatedAt
         };
         
         return completeProfile;
       } else {
-        console.log('User profile not found, creating basic profile');
-        
-        // Create a basic profile if none exists
-        const basicProfile = {
-          uid: userId,
-          id: userId,
-          email: currentUser?.email || '',
-          displayName: currentUser?.displayName || 'User',
-          firstName: currentUser?.displayName?.split(' ')[0] || 'User',
-          lastName: currentUser?.displayName?.split(' ')[1] || '',
-          role: 'klient', // Default role
-          postalCode: '', // Default empty string
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        };
-        
-        // Save the basic profile to Firestore
-        await setDoc(userDocRef, basicProfile);
-        console.log('Basic profile created');
-        
-        // Return with converted timestamps
-        return {
-          ...basicProfile,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        };
+        console.log('No user profile found in Firestore for:', userId);
+        return null;
       }
     } catch (error) {
       console.error('Error getting user profile:', error);
@@ -113,6 +99,16 @@ export const AuthProvider = ({ children }) => {
       console.error('Error updating user profile:', error);
       throw error;
     }
+  };
+
+  // Refresh user profile (useful for manual refresh)
+  const refreshUserProfile = async () => {
+    if (currentUser) {
+      const profile = await getUserProfile(currentUser.uid);
+      setUserProfile(profile);
+      return profile;
+    }
+    return null;
   };
 
   // Sign out function
@@ -169,7 +165,7 @@ export const AuthProvider = ({ children }) => {
     });
 
     return unsubscribe;
-  }, []);
+  }, []); // Empty dependency array is correct here
 
   // Debug logging
   useEffect(() => {
@@ -183,6 +179,7 @@ export const AuthProvider = ({ children }) => {
     loading,
     getUserProfile,
     updateUserProfile,
+    refreshUserProfile,
     updateProfile,
     signOut
   };

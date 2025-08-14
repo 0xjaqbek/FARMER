@@ -21,6 +21,215 @@ import { db } from '../firebase/config';
 import { COLLECTIONS, NOTIFICATION_TYPES } from '../lib/firebaseSchema';
 
 export class NotificationService {
+
+        // Subscribe to real-time unread count updates
+    static subscribeToUnreadCount(userId, callback) {
+    try {
+        const q = query(
+        collection(db, COLLECTIONS.NOTIFICATIONS),
+        where('userId', '==', userId),
+        where('readAt', '==', null)
+        );
+        
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const unreadCount = querySnapshot.size;
+        callback(unreadCount);
+        }, (error) => {
+        console.error('Error in unread count subscription:', error);
+        callback(0); // Default to 0 on error
+        });
+
+        return unsubscribe;
+    } catch (error) {
+        console.error('Error setting up unread count subscription:', error);
+        return () => {}; // Return empty function as fallback
+    }
+    }
+
+
+
+  // Delete multiple notifications
+  static async deleteMultiple(notificationIds) {
+    try {
+      const batch = writeBatch(db);
+      
+      notificationIds.forEach(notificationId => {
+        const notificationRef = doc(db, COLLECTIONS.NOTIFICATIONS, notificationId);
+        batch.delete(notificationRef);
+      });
+
+      await batch.commit();
+      console.log(`Deleted ${notificationIds.length} notifications`);
+    } catch (error) {
+      console.error('Error deleting multiple notifications:', error);
+      throw error;
+    }
+  }
+
+  // Archive notification (mark as archived instead of deleting)
+  static async archiveNotification(notificationId) {
+    try {
+      const notificationRef = doc(db, COLLECTIONS.NOTIFICATIONS, notificationId);
+      await updateDoc(notificationRef, {
+        archived: true,
+        archivedAt: serverTimestamp()
+      });
+      
+      console.log('Notification archived:', notificationId);
+    } catch (error) {
+      console.error('Error archiving notification:', error);
+      throw error;
+    }
+  }
+
+  // Subscribe to real-time notifications updates
+  static subscribeToNotifications(userId, options = {}, callback) {
+    try {
+      let q = query(
+        collection(db, COLLECTIONS.NOTIFICATIONS),
+        where('userId', '==', userId)
+      );
+
+      // Add filters based on options
+      if (options.unreadOnly) {
+        q = query(q, where('readAt', '==', null));
+      }
+
+      if (options.types && options.types.length > 0) {
+        q = query(q, where('type', 'in', options.types));
+      }
+
+      // Add ordering
+      q = query(q, orderBy('createdAt', 'desc'));
+
+      // Add limit
+      if (options.limitCount) {
+        q = query(q, limit(options.limitCount));
+      }
+
+      const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const notifications = [];
+        querySnapshot.forEach(doc => {
+          notifications.push({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
+            readAt: doc.data().readAt?.toDate?.() || doc.data().readAt,
+            scheduledFor: doc.data().scheduledFor?.toDate?.() || doc.data().scheduledFor,
+            expiresAt: doc.data().expiresAt?.toDate?.() || doc.data().expiresAt
+          });
+        });
+        
+        callback(notifications);
+      }, (error) => {
+        console.error('Error in notifications subscription:', error);
+        callback([]);
+      });
+
+      return unsubscribe;
+    } catch (error) {
+      console.error('Error setting up notifications subscription:', error);
+      return () => {};
+    }
+  }
+
+  // Get notification statistics
+  static async getNotificationStats(userId) {
+    try {
+      const notifications = await this.getUserNotifications(userId, { limitCount: 1000 });
+      
+      const stats = {
+        total: notifications.length,
+        unread: notifications.filter(n => !n.readAt).length,
+        byType: {},
+        byPriority: {
+          urgent: 0,
+          high: 0,
+          medium: 0,
+          low: 0
+        },
+        recent: notifications.filter(n => {
+          const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+          return new Date(n.createdAt) > dayAgo;
+        }).length
+      };
+
+      // Count by type
+      notifications.forEach(notification => {
+        stats.byType[notification.type] = (stats.byType[notification.type] || 0) + 1;
+        stats.byPriority[notification.priority] = (stats.byPriority[notification.priority] || 0) + 1;
+      });
+
+      return stats;
+    } catch (error) {
+      console.error('Error getting notification stats:', error);
+      return {
+        total: 0,
+        unread: 0,
+        byType: {},
+        byPriority: { urgent: 0, high: 0, medium: 0, low: 0 },
+        recent: 0
+      };
+    }
+  }
+
+  // Clear all notifications for a user (mark as deleted)
+  static async clearAllNotifications(userId) {
+    try {
+      const q = query(
+        collection(db, COLLECTIONS.NOTIFICATIONS),
+        where('userId', '==', userId)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const batch = writeBatch(db);
+      
+      querySnapshot.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+
+      await batch.commit();
+      console.log(`Cleared all notifications for user: ${userId}`);
+      return querySnapshot.size;
+    } catch (error) {
+      console.error('Error clearing all notifications:', error);
+      throw error;
+    }
+  }
+
+  // Update notification preferences
+  static async updateNotificationPreferences(userId, preferences) {
+    try {
+      const userRef = doc(db, 'users', userId);
+      await updateDoc(userRef, {
+        notificationPreferences: preferences,
+        updatedAt: serverTimestamp()
+      });
+      
+      console.log('Notification preferences updated for user:', userId);
+    } catch (error) {
+      console.error('Error updating notification preferences:', error);
+      throw error;
+    }
+  }
+
+  // Get notification preferences
+  static async getNotificationPreferences(userId) {
+    try {
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      if (userDoc.exists()) {
+        return userDoc.data().notificationPreferences || {
+          email: { enabled: true, types: [] },
+          sms: { enabled: false, types: [] },
+          inApp: { enabled: true, types: [] }
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting notification preferences:', error);
+      return null;
+    }
+  }
   
   // Send notification to user
   static async sendNotification(userId, notificationData) {
@@ -414,52 +623,6 @@ export class NotificationService {
       return querySnapshot.size;
     } catch (error) {
       console.error('Error cleaning up expired notifications:', error);
-      throw error;
-    }
-  }
-
-  // Get notification statistics for a user
-  static async getNotificationStats(userId) {
-    try {
-      const allNotificationsQuery = query(
-        collection(db, COLLECTIONS.NOTIFICATIONS),
-        where('userId', '==', userId)
-      );
-      
-      const unreadNotificationsQuery = query(
-        collection(db, COLLECTIONS.NOTIFICATIONS),
-        where('userId', '==', userId),
-        where('readAt', '==', null)
-      );
-
-      const [allSnapshot, unreadSnapshot] = await Promise.all([
-        getDocs(allNotificationsQuery),
-        getDocs(unreadNotificationsQuery)
-      ]);
-
-      // Count by type
-      const typeStats = {};
-      allSnapshot.forEach(doc => {
-        const type = doc.data().type;
-        typeStats[type] = (typeStats[type] || 0) + 1;
-      });
-
-      // Count by priority
-      const priorityStats = {};
-      allSnapshot.forEach(doc => {
-        const priority = doc.data().priority || 'medium';
-        priorityStats[priority] = (priorityStats[priority] || 0) + 1;
-      });
-
-      return {
-        total: allSnapshot.size,
-        unread: unreadSnapshot.size,
-        read: allSnapshot.size - unreadSnapshot.size,
-        byType: typeStats,
-        byPriority: priorityStats
-      };
-    } catch (error) {
-      console.error('Error getting notification stats:', error);
       throw error;
     }
   }

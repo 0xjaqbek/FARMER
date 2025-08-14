@@ -1,10 +1,12 @@
-// src/App.jsx - Cleaned version without blockchain
+// src/App.jsx - Enhanced with notification creator and better structure
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from '@/components/ui/use-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import MainLayout from './components/layout/MainLayout';
-import NotificationCenter from './components/notifications/NotificationCenter';
+import NotificationPage from './pages/NotificationPage';
+import NotificationCreator from './components/farmer/NotificationCreator';
 
 // Existing imports
 import Login from './pages/Login';
@@ -28,16 +30,20 @@ import ChatList from './pages/chat/ChatList';
 import ChatDetail from './pages/chat/ChatDetail';
 
 import { FirebaseDebug } from './utils/firebaseDebug';
-import { useEffect } from 'react';
 
-
-
-// Protected route component
+// Protected route component - MUST be inside AuthProvider
 const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   const { currentUser, userProfile, loading } = useAuth();
   
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
   }
   
   if (!currentUser) {
@@ -51,180 +57,222 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   return children;
 };
 
+// Main App Routes component - MUST be inside AuthProvider
+const AppRoutes = () => {
+  useEffect(() => {
+    FirebaseDebug.checkConfiguration();
+    FirebaseDebug.testConnection();
+  }, []);
+
+  return (
+    <Router>
+      <Routes>
+        {/* Auth Routes - No layout needed */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        
+        {/* Protected Routes with Layout */}
+        <Route path="/dashboard" element={
+          <ProtectedRoute>
+            <MainLayout>
+              <Dashboard />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/profile" element={
+          <ProtectedRoute>
+            <MainLayout>
+              <Profile />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        {/* Notification Routes */}
+        <Route path="/notifications" element={
+          <ProtectedRoute>
+            <MainLayout>
+              <NotificationPage />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/notifications/create" element={
+          <ProtectedRoute allowedRoles={['farmer', 'rolnik', 'admin']}>
+            <MainLayout>
+              <NotificationCreator />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        {/* Product Routes */}
+        <Route path="/browse" element={
+          <ProtectedRoute allowedRoles={['klient', 'customer', 'admin']}>
+            <MainLayout>
+              <ProductList />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/products/:id" element={
+          <ProtectedRoute>
+            <MainLayout>
+              <ProductDetail />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/products/add" element={
+          <ProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
+            <MainLayout>
+              <ProductAdd />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/products/manage" element={
+          <ProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
+            <MainLayout>
+              <ProductManage />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/products/:id/edit" element={
+          <ProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
+            <MainLayout>
+              <ProductEdit />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/products/:id/images" element={
+          <ProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
+            <MainLayout>
+              <ProductImages />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/products/:id/qr" element={
+          <ProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
+            <MainLayout>
+              <ProductQR />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/products/:id/tracker" element={
+          <ProtectedRoute>
+            <MainLayout>
+              <ProductTracker />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        {/* Order Routes */}
+        <Route path="/orders" element={
+          <ProtectedRoute>
+            <MainLayout>
+              <OrderList />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/orders/:id" element={
+          <ProtectedRoute>
+            <MainLayout>
+              <OrderDetail />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/orders/create/:productId" element={
+          <ProtectedRoute allowedRoles={['klient', 'customer', 'admin']}>
+            <MainLayout>
+              <OrderCreate />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        {/* Cart and Checkout Routes */}
+        <Route path="/cart" element={
+          <ProtectedRoute allowedRoles={['klient', 'customer', 'admin']}>
+            <MainLayout>
+              <Cart />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/checkout" element={
+          <ProtectedRoute allowedRoles={['klient', 'customer', 'admin']}>
+            <MainLayout>
+              <Checkout />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        {/* Chat Routes */}
+        <Route path="/chat" element={
+          <ProtectedRoute>
+            <MainLayout>
+              <ChatList />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/chat/:chatId" element={
+          <ProtectedRoute>
+            <MainLayout>
+              <ChatDetail />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        {/* Admin Routes (if you have admin functionality) */}
+        <Route path="/admin" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <MainLayout>
+              <div className="text-center py-12">
+                <h1 className="text-2xl font-bold text-gray-900 mb-4">Admin Panel</h1>
+                <p className="text-gray-600">Admin functionality coming soon...</p>
+              </div>
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        {/* Default redirect */}
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={
+          <ProtectedRoute>
+            <MainLayout>
+              <div className="text-center py-12">
+                <h1 className="text-2xl font-bold text-gray-900 mb-4">Page Not Found</h1>
+                <p className="text-gray-600 mb-6">The page you're looking for doesn't exist.</p>
+                <button 
+                  onClick={() => window.history.back()} 
+                  className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
+                >
+                  Go Back
+                </button>
+              </div>
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+      </Routes>
+      
+      {/* Toast notifications */}
+      <Toaster />
+    </Router>
+  );
+};
+
+// Root App component
 const App = () => {
-  // Add this temporarily to debug
-useEffect(() => {
-  FirebaseDebug.checkConfiguration();
-  FirebaseDebug.testConnection();
-}, []);
   return (
     <AuthProvider>
       <CartProvider>
-        <Router>
-          <MainLayout>
-            <Routes>
-              {/* Auth Routes */}
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              
-              {/* Main Routes */}
-              <Route path="/notifications" element={
-                <ProtectedRoute>
-                  <NotificationCenter />
-                </ProtectedRoute>
-              } />
-              <Route 
-                path="/dashboard" 
-                element={
-                  <ProtectedRoute>
-                    <Dashboard />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/profile" 
-                element={
-                  <ProtectedRoute>
-                    <Profile />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              {/* Product Routes */}
-              <Route 
-                path="/browse" 
-                element={
-                  <ProtectedRoute allowedRoles={['klient', 'customer', 'admin']}>
-                    <ProductList />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/products/:id" 
-                element={
-                  <ProtectedRoute>
-                    <ProductDetail />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/products/add" 
-                element={
-                  <ProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
-                    <ProductAdd />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/products/manage" 
-                element={
-                  <ProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
-                    <ProductManage />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/products/edit/:id" 
-                element={
-                  <ProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
-                    <ProductEdit />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/products/images/:id" 
-                element={
-                  <ProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
-                    <ProductImages />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/products/qr/:id" 
-                element={
-                  <ProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
-                    <ProductQR />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              {/* Public tracking */}
-              <Route 
-                path="/track/product/:id" 
-                element={<ProductTracker />} 
-              />
-              
-              {/* Order Routes */}
-              <Route 
-                path="/orders" 
-                element={
-                  <ProtectedRoute>
-                    <OrderList />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/orders/:id" 
-                element={
-                  <ProtectedRoute>
-                    <OrderDetail />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/products/:id/order" 
-                element={
-                  <ProtectedRoute allowedRoles={['klient', 'customer']}>
-                    <OrderCreate />
-                  </ProtectedRoute>
-                } 
-              />
-
-              {/* Cart Routes */}
-              <Route 
-                path="/cart" 
-                element={
-                  <ProtectedRoute allowedRoles={['klient', 'customer']}>
-                    <Cart />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/checkout" 
-                element={
-                  <ProtectedRoute allowedRoles={['klient', 'customer']}>
-                    <Checkout />
-                  </ProtectedRoute>
-                } 
-              />
-
-              {/* Chat Routes */}
-              <Route 
-                path="/chat" 
-                element={
-                  <ProtectedRoute>
-                    <ChatList />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/chat/:id" 
-                element={
-                  <ProtectedRoute>
-                    <ChatDetail />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              {/* Redirect root to dashboard if logged in, otherwise to login */}
-              <Route 
-                path="/" 
-                element={<Navigate to="/dashboard" replace />} 
-              />
-            </Routes>
-          </MainLayout>
-          <Toaster />
-        </Router>
+        <AppRoutes />
       </CartProvider>
     </AuthProvider>
   );
