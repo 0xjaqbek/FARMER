@@ -1,11 +1,9 @@
-// Update src/services/enhancedSearchService.js to use Google Maps
+// src/services/enhancedSearchService.js
 import { 
   collection, 
   query, 
   where, 
-  orderBy, 
   limit, 
-  startAfter,
   getDocs,
   getDoc,
   doc
@@ -19,7 +17,8 @@ export class EnhancedSearchService {
   static async searchProductsWithLocation(searchParams = {}) {
     try {
       const {
-        query: searchQuery,
+        query: searchQuery = '',
+        category = '',
         categories = [],
         priceRange = [0, 1000],
         maxDistance = 50,
@@ -31,26 +30,143 @@ export class EnhancedSearchService {
         sortBy = 'distance',
         verifiedOnly = false,
         inSeason = false,
-        userLocation = null,
+        location = null,      // Changed from userLocation to location
         limit: searchLimit = 20,
-        lastDoc = null
       } = searchParams;
 
-      // Start with base query
+      console.log('🔍 Starting enhanced search with params:', searchParams);
+
+      if (!location || !location.lat || !location.lng) {
+        throw new Error('Valid location coordinates are required for search');
+      }
+
+      // Step 1: Get all active products
+      console.log('📦 Fetching products...');
+      const products = await this.getActiveProducts({
+        category,
+        categories,
+        searchQuery,
+        organic,
+        availability,
+        freshness,
+        verifiedOnly,
+        inSeason,
+        priceRange,
+        limit: searchLimit * 2 // Get more to account for distance filtering
+      });
+
+      console.log(`📦 Found ${products.length} products`);
+
+      if (products.length === 0) {
+        return { products: [], farmers: [], hasMore: false, totalFound: 0 };
+      }
+
+      // Step 2: Apply text search if provided
+      let filteredProducts = products;
+      if (searchQuery && searchQuery.trim()) {
+        filteredProducts = this.applyTextSearch(filteredProducts, searchQuery);
+      }
+
+      // Step 3: Apply location-based filtering using Google Maps
+      console.log('🗺️ Applying location filtering...');
+      const productsWithDistance = await this.applyGoogleMapsLocationFiltering(
+        filteredProducts, 
+        location, 
+        maxDistance
+      );
+
+      console.log(`🎯 ${productsWithDistance.length} products within ${maxDistance}km`);
+
+      // Step 4: Apply delivery options filter
+      let finalProducts = productsWithDistance;
+      if (deliveryOptions.length > 0) {
+        finalProducts = finalProducts.filter(product => 
+          deliveryOptions.some(option => 
+            product.deliveryOptions?.includes(option)
+          )
+        );
+      }
+
+      // Step 5: Apply farmer rating filter
+      if (farmerRating > 0) {
+        finalProducts = await this.filterByFarmerRating(finalProducts, farmerRating);
+      }
+
+      // Step 6: Apply final sorting
+      const sortedProducts = this.applySorting(finalProducts, sortBy, location);
+
+      // Step 7: Limit final results
+      const limitedProducts = sortedProducts.slice(0, searchLimit);
+
+      // Step 8: Extract unique farmers
+      const farmers = this.extractUniqueFarmers(limitedProducts);
+
+      const results = {
+        products: limitedProducts,
+        farmers,
+        hasMore: sortedProducts.length > searchLimit,
+        totalFound: sortedProducts.length,
+        searchParams,
+        searchTime: Date.now()
+      };
+
+      console.log('✅ Search completed:', {
+        products: results.products.length,
+        farmers: results.farmers.length
+      });
+
+      return results;
+
+    } catch (error) {
+      console.error('❌ Search error:', error);
+      throw error;
+    }
+  }
+
+  // Get active products from Firestore with all filters
+  static async getActiveProducts(params) {
+    try {
+      const {
+        category,
+        categories = [],
+        organic = false,
+        availability = 'all',
+        freshness = '',
+        verifiedOnly = false,
+        inSeason = false,
+        priceRange = [0, 1000],
+        limit: resultLimit = 50
+      } = params;
+
       let productsQuery = collection(db, 'products');
       const constraints = [];
 
-      // Basic filters
-      constraints.push(where('status', '==', 'active'));
+      // Try both status field variations
+      try {
+        constraints.push(where('status', '==', 'active'));
+      } catch {
+        try {
+          constraints.push(where('isActive', '==', true));
+        } catch {
+          // If neither field exists, continue without status filter
+          console.warn('No status or isActive field found in products');
+        }
+      }
 
-      // Category filter
-      if (categories.length > 0) {
+      // Category filter - handle both single category and array
+      if (category) {
+        constraints.push(where('category', '==', category));
+      } else if (categories.length > 0) {
         constraints.push(where('category', 'in', categories));
       }
 
       // Price range filter
-      constraints.push(where('price', '>=', priceRange[0]));
-      constraints.push(where('price', '<=', priceRange[1]));
+      if (priceRange[0] > 0) {
+        constraints.push(where('price', '>=', priceRange[0]));
+      }
+      if (priceRange[1] < 1000) {
+        constraints.push(where('price', '<=', priceRange[1]));
+      }
 
       // Availability filter
       if (availability === 'in_stock') {
@@ -80,70 +196,24 @@ export class EnhancedSearchService {
         constraints.push(where('freshness', '==', freshness));
       }
 
-      // Apply sorting (if not distance-based)
-      if (sortBy !== 'distance' && sortBy !== 'rating') {
-        const sortField = this.getSortField(sortBy);
-        const sortOrder = sortBy.includes('_high') ? 'desc' : 'asc';
-        constraints.push(orderBy(sortField, sortOrder));
+      // Add limit
+      constraints.push(limit(resultLimit));
+
+      // Build and execute query
+      if (constraints.length > 0) {
+        productsQuery = query(productsQuery, ...constraints);
       }
 
-      // Pagination
-      constraints.push(limit(searchLimit * 2)); // Get more to account for distance filtering
-      if (lastDoc) {
-        constraints.push(startAfter(lastDoc));
-      }
-
-      // Execute query
-      const q = query(productsQuery, ...constraints);
-      const snapshot = await getDocs(q);
-
-      let products = snapshot.docs.map(doc => ({
+      const snapshot = await getDocs(productsQuery);
+      const products = snapshot.docs.map(doc => ({
         id: doc.id,
-        ...doc.data(),
-        _doc: doc
+        ...doc.data()
       }));
 
-      // Apply text search if provided
-      if (searchQuery && searchQuery.trim()) {
-        products = this.applyTextSearch(products, searchQuery);
-      }
-
-      // Apply location-based filtering using Google Maps
-      if (userLocation) {
-        products = await this.applyGoogleMapsLocationFiltering(products, userLocation, maxDistance);
-      }
-
-      // Apply delivery options filter
-      if (deliveryOptions.length > 0) {
-        products = products.filter(product => 
-          deliveryOptions.some(option => 
-            product.deliveryOptions?.includes(option)
-          )
-        );
-      }
-
-      // Apply farmer rating filter
-      if (farmerRating > 0) {
-        products = await this.filterByFarmerRating(products, farmerRating);
-      }
-
-      // Apply final sorting
-      products = this.applySorting(products, sortBy, userLocation);
-
-      // Limit final results
-      const finalProducts = products.slice(0, searchLimit);
-
-      return {
-        products: finalProducts,
-        farmers: this.extractUniqueFarmers(finalProducts),
-        hasMore: products.length > searchLimit,
-        lastDoc: snapshot.docs[Math.min(finalProducts.length - 1, snapshot.docs.length - 1)] || null,
-        totalFound: products.length,
-        searchTime: Date.now()
-      };
+      return products;
 
     } catch (error) {
-      console.error('Error in enhanced search:', error);
+      console.error('Error fetching products:', error);
       throw error;
     }
   }
@@ -152,18 +222,32 @@ export class EnhancedSearchService {
   static async applyGoogleMapsLocationFiltering(products, userLocation, maxDistance) {
     try {
       // Get unique farmer IDs
-      const farmerIds = [...new Set(products.map(p => p.farmerId))];
+      const farmerIds = [...new Set(products.map(p => p.farmerId || p.rolnikId).filter(Boolean))];
+      
+      if (farmerIds.length === 0) {
+        console.warn('No farmer IDs found in products');
+        return [];
+      }
+
+      console.log(`🧑‍🌾 Getting locations for ${farmerIds.length} farmers`);
       
       // Get farmer locations
       const farmerLocations = await this.getFarmerLocations(farmerIds);
       
+      console.log(`📍 Found locations for ${Object.keys(farmerLocations).length} farmers`);
+
       // Filter by distance using Google Maps calculation
       const filteredProducts = products
         .map(product => {
-          const farmerLocation = farmerLocations[product.farmerId];
-          if (!farmerLocation) return null;
+          const farmerId = product.farmerId || product.rolnikId;
+          const farmerLocation = farmerLocations[farmerId];
           
-          const distance = GoogleMapsService.calculateDistance(
+          if (!farmerLocation) {
+            console.log(`⚠️ No location found for farmer: ${farmerId}`);
+            return null;
+          }
+          
+          const distance = this.calculateDistance(
             userLocation.lat,
             userLocation.lng,
             farmerLocation.lat,
@@ -172,7 +256,7 @@ export class EnhancedSearchService {
           
           return distance <= maxDistance ? { 
             ...product, 
-            distance,
+            distance: Math.round(distance * 10) / 10,
             farmerLocation,
             farmName: farmerLocation.farmName,
             farmerName: farmerLocation.farmerName,
@@ -186,6 +270,23 @@ export class EnhancedSearchService {
       console.error('Error applying Google Maps location filtering:', error);
       return products;
     }
+  }
+
+  // Calculate distance between two points using Haversine formula
+  static calculateDistance(lat1, lng1, lat2, lng2) {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLng/2) * Math.sin(dLng/2);
+    
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const distance = R * c;
+    
+    return distance;
   }
 
   // Get farmer locations from database
@@ -228,14 +329,18 @@ export class EnhancedSearchService {
     const farmersMap = new Map();
     
     products.forEach(product => {
-      if (product.farmerId && !farmersMap.has(product.farmerId)) {
-        farmersMap.set(product.farmerId, {
-          id: product.farmerId,
+      const farmerId = product.farmerId || product.rolnikId;
+      if (farmerId && !farmersMap.has(farmerId)) {
+        farmersMap.set(farmerId, {
+          id: farmerId,
           farmName: product.farmName,
           farmerName: product.farmerName,
           location: product.farmerLocation,
           distance: product.distance,
-          verified: product.farmerVerified || false
+          verified: product.farmerVerified || false,
+          productCount: products.filter(p => 
+            (p.farmerId || p.rolnikId) === farmerId
+          ).length
         });
       }
     });
@@ -273,11 +378,12 @@ export class EnhancedSearchService {
   // Filter products by farmer rating
   static async filterByFarmerRating(products, minRating) {
     try {
-      const farmerIds = [...new Set(products.map(p => p.farmerId))];
+      const farmerIds = [...new Set(products.map(p => p.farmerId || p.rolnikId))];
       const farmerRatings = await this.getFarmerRatings(farmerIds);
       
       return products.filter(product => {
-        const rating = farmerRatings[product.farmerId] || 0;
+        const farmerId = product.farmerId || product.rolnikId;
+        const rating = farmerRatings[farmerId] || 0;
         return rating >= minRating;
       });
     } catch (error) {
@@ -326,6 +432,7 @@ export class EnhancedSearchService {
           products;
           
       case 'price_low':
+      case 'price':
         return products.sort((a, b) => (a.price || 0) - (b.price || 0));
         
       case 'price_high':
@@ -362,7 +469,7 @@ export class EnhancedSearchService {
   }
 
   // Search suggestions with Google Maps context
-  static async getSearchSuggestions(query, userLocation = null, limit = 10) {
+  static async getSearchSuggestions(query, limit = 10) {
     try {
       if (!query || query.length < 2) return [];
 
@@ -372,7 +479,6 @@ export class EnhancedSearchService {
       // Product name suggestions
       const productsQuery = query(
         collection(db, 'products'),
-        where('status', '==', 'active'),
         limit(5)
       );
       
@@ -404,22 +510,6 @@ export class EnhancedSearchService {
         }
       });
 
-      // Get place suggestions from Google Maps
-      if (userLocation) {
-        try {
-          const placeSuggestions = await GoogleMapsService.getPlaceSuggestions(query, userLocation);
-          placeSuggestions.slice(0, 3).forEach(place => {
-            suggestions.push({
-              text: place.description,
-              type: 'location',
-              place_id: place.place_id
-            });
-          });
-        } catch (error) {
-          console.error('Error getting place suggestions:', error);
-        }
-      }
-
       return suggestions.slice(0, limit);
     } catch (error) {
       console.error('Error getting search suggestions:', error);
@@ -430,21 +520,20 @@ export class EnhancedSearchService {
   // Get available filter options
   static async getFilterOptions() {
     try {
-      const [categoriesSnapshot, priceStats] = await Promise.all([
-        getDocs(query(collection(db, 'products'), where('status', '==', 'active'))),
-        this.getPriceStatistics()
-      ]);
+      const productsSnapshot = await getDocs(collection(db, 'products'));
 
       const categories = new Set();
       const deliveryOptions = new Set();
       
-      categoriesSnapshot.docs.forEach(doc => {
+      productsSnapshot.docs.forEach(doc => {
         const product = doc.data();
         if (product.category) categories.add(product.category);
         if (product.deliveryOptions) {
           product.deliveryOptions.forEach(option => deliveryOptions.add(option));
         }
       });
+
+      const priceStats = await this.getPriceStatistics();
 
       return {
         categories: Array.from(categories).sort(),
@@ -467,9 +556,7 @@ export class EnhancedSearchService {
   // Get price statistics
   static async getPriceStatistics() {
     try {
-      const productsSnapshot = await getDocs(
-        query(collection(db, 'products'), where('status', '==', 'active'))
-      );
+      const productsSnapshot = await getDocs(collection(db, 'products'));
 
       const prices = productsSnapshot.docs
         .map(doc => doc.data().price)
@@ -490,3 +577,5 @@ export class EnhancedSearchService {
     }
   }
 }
+
+export default EnhancedSearchService;

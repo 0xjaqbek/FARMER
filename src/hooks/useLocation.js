@@ -1,28 +1,39 @@
-
-
 // src/hooks/useLocation.js
 import { useState, useEffect } from 'react';
+import { doc, updateDoc, getDoc } from 'firebase/firestore';
+import { db } from '../firebase/config';
+import { useAuth } from '../context/AuthContext';
 
 export const useLocation = () => {
+  const { userProfile } = useAuth();
   const [location, setLocation] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [permission, setPermission] = useState('prompt'); // 'granted', 'denied', 'prompt'
 
-  // Check if location is already stored
+  // Load location from user profile on mount
   useEffect(() => {
-    const storedLocation = localStorage.getItem('userLocation');
-    if (storedLocation) {
-      try {
-        const parsed = JSON.parse(storedLocation);
-        // Check if location is less than 1 hour old
-        if (Date.now() - parsed.timestamp < 3600000) {
-          setLocation(parsed);
-        } else {
+    if (userProfile?.location?.coordinates) {
+      setLocation({
+        lat: userProfile.location.coordinates.lat,
+        lng: userProfile.location.coordinates.lng,
+        timestamp: userProfile.location.updatedAt?.toMillis() || Date.now()
+      });
+    } else {
+      // Fallback to localStorage for backward compatibility
+      const storedLocation = localStorage.getItem('userLocation');
+      if (storedLocation) {
+        try {
+          const parsed = JSON.parse(storedLocation);
+          // Check if location is less than 1 hour old
+          if (Date.now() - parsed.timestamp < 3600000) {
+            setLocation(parsed);
+          } else {
+            localStorage.removeItem('userLocation');
+          }
+        } catch {
           localStorage.removeItem('userLocation');
         }
-      } catch  {
-        localStorage.removeItem('userLocation');
       }
     }
 
@@ -32,7 +43,7 @@ export const useLocation = () => {
         setPermission(result.state);
       });
     }
-  }, []);
+  }, [userProfile]);
 
   const requestLocation = async () => {
     try {
@@ -56,6 +67,7 @@ export const useLocation = () => {
             switch (error.code) {
               case error.PERMISSION_DENIED:
                 message = 'Location access denied by user';
+                setPermission('denied');
                 break;
               case error.POSITION_UNAVAILABLE:
                 message = 'Location information is unavailable';
@@ -81,22 +93,74 @@ export const useLocation = () => {
       };
       
       setLocation(locationData);
+      
+      // Store in localStorage for immediate use
       localStorage.setItem('userLocation', JSON.stringify(locationData));
+      
+      // Store in database if user is logged in
+      if (userProfile?.uid) {
+        await saveLocationToDatabase(userProfile.uid, position);
+      }
+      
       setPermission('granted');
       
       return locationData;
     } catch (error) {
       setError(error.message);
-      setPermission('denied');
+      if (error.message.includes('denied')) {
+        setPermission('denied');
+      }
       throw error;
     } finally {
       setLoading(false);
     }
   };
 
-  const clearLocation = () => {
+  // Save location to Firestore user profile
+  const saveLocationToDatabase = async (userId, coordinates) => {
+    try {
+      const userRef = doc(db, 'users', userId);
+      
+      // Check if user document exists
+      const userDoc = await getDoc(userRef);
+      if (!userDoc.exists()) {
+        console.warn('User document does not exist:', userId);
+        return;
+      }
+
+      await updateDoc(userRef, {
+        'location.coordinates': {
+          lat: coordinates.lat,
+          lng: coordinates.lng
+        },
+        'location.updatedAt': new Date(),
+        'location.accuracy': coordinates.accuracy || null
+      });
+
+      console.log('✅ Location saved to database for user:', userId);
+    } catch (error) {
+      console.error('❌ Error saving location to database:', error);
+      // Don't throw error to prevent blocking location functionality
+    }
+  };
+
+  const clearLocation = async () => {
     setLocation(null);
     localStorage.removeItem('userLocation');
+    
+    // Clear from database if user is logged in
+    if (userProfile?.uid) {
+      try {
+        const userRef = doc(db, 'users', userProfile.uid);
+        await updateDoc(userRef, {
+          'location.coordinates': null,
+          'location.updatedAt': new Date()
+        });
+        console.log('✅ Location cleared from database');
+      } catch (error) {
+        console.error('❌ Error clearing location from database:', error);
+      }
+    }
   };
 
   return {
@@ -106,7 +170,6 @@ export const useLocation = () => {
     permission,
     requestLocation,
     clearLocation,
-    hasLocation: !!location
+    hasLocation: !!(location?.lat && location?.lng)
   };
 };
-

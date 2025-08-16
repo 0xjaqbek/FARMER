@@ -2,44 +2,115 @@
 class GoogleMapsService {
   static isLoaded = false;
   static loadPromise = null;
+  static scriptElement = null;
 
-  // Load Google Maps API
+  // Load Google Maps API (centralized method)
   static async loadGoogleMaps() {
-    if (this.isLoaded) {
+    // If already loaded, return immediately
+    if (this.isLoaded && window.google && window.google.maps) {
       return window.google;
     }
 
+    // If already loading, return the existing promise
     if (this.loadPromise) {
       return this.loadPromise;
     }
 
+    // Check if script is already in DOM (prevents duplicates)
+    const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
+    if (existingScript) {
+      console.log('📍 Google Maps script already exists in DOM, waiting for load...');
+      
+      this.loadPromise = new Promise((resolve, reject) => {
+        if (window.google && window.google.maps) {
+          this.isLoaded = true;
+          resolve(window.google);
+          return;
+        }
+
+        const checkLoaded = () => {
+          if (window.google && window.google.maps) {
+            this.isLoaded = true;
+            resolve(window.google);
+          } else {
+            setTimeout(checkLoaded, 100);
+          }
+        };
+        
+        checkLoaded();
+        
+        // Timeout after 10 seconds
+        setTimeout(() => {
+          reject(new Error('Google Maps API load timeout'));
+        }, 10000);
+      });
+
+      return this.loadPromise;
+    }
+
+    // Create new loading promise
     this.loadPromise = new Promise((resolve, reject) => {
-      // Check if already loaded
+      // Final check if already loaded
       if (window.google && window.google.maps) {
         this.isLoaded = true;
         resolve(window.google);
         return;
       }
 
+      const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+      
+      if (!apiKey || apiKey === 'your_api_key_here' || apiKey === '') {
+        reject(new Error('Google Maps API key not configured. Please set VITE_GOOGLE_MAPS_API_KEY in your .env file.'));
+        return;
+      }
+
+      console.log('📍 Loading Google Maps API...');
+
       // Create script element
       const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&libraries=places,geometry`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&loading=async`;
       script.async = true;
       script.defer = true;
+      script.id = 'google-maps-script'; // Add ID for easier identification
 
       script.onload = () => {
+        console.log('✅ Google Maps API loaded successfully');
         this.isLoaded = true;
+        this.scriptElement = script;
         resolve(window.google);
       };
 
-      script.onerror = () => {
-        reject(new Error('Failed to load Google Maps API'));
+      script.onerror = (error) => {
+        console.error('❌ Failed to load Google Maps API:', error);
+        
+        // Clean up failed script
+        if (script.parentNode) {
+          script.parentNode.removeChild(script);
+        }
+        
+        // Reset promises so we can try again
+        this.loadPromise = null;
+        this.isLoaded = false;
+        
+        reject(new Error('Failed to load Google Maps API. Please check your API key and internet connection.'));
       };
 
       document.head.appendChild(script);
     });
 
     return this.loadPromise;
+  }
+
+  // Check if Google Maps is available
+  static isAvailable() {
+    return this.isLoaded && window.google && window.google.maps;
+  }
+
+  // Get loading status
+  static getLoadingStatus() {
+    if (this.isLoaded) return 'loaded';
+    if (this.loadPromise) return 'loading';
+    return 'not_loaded';
   }
 
   // Geocode address to coordinates
@@ -234,7 +305,20 @@ class GoogleMapsService {
       return `${Math.round(kilometers)}km`;
     }
   }
+
+  // Clean up (for development/testing)
+  static cleanup() {
+    if (this.scriptElement && this.scriptElement.parentNode) {
+      this.scriptElement.parentNode.removeChild(this.scriptElement);
+    }
+    
+    this.isLoaded = false;
+    this.loadPromise = null;
+    this.scriptElement = null;
+    
+    // Note: Can't easily remove window.google, but this helps reset state
+    console.log('🧹 GoogleMapsService cleaned up');
+  }
 }
 
 export default GoogleMapsService;
-

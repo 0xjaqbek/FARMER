@@ -12,6 +12,7 @@ import { MapPin, List, AlertCircle, RefreshCw } from 'lucide-react';
 // Import components with correct paths
 import GeoLocationSearch from '../../components/search/GeoLocationSearch';
 import SearchResults from '../../components/search/SearchResults';
+import FarmersMap from '../../components/maps/FarmersMap';
 import { useLocation } from '../../hooks/useLocation';
 import { useAuth } from '../../context/AuthContext';
 
@@ -51,13 +52,21 @@ const SearchWithMap = () => {
       // Auto-search based on URL params
       performInitialSearch();
     }
-  }, [searchParams]);
+  }, [searchParams, userLocation]); // Added userLocation dependency
 
   // Perform initial search based on URL parameters
   const performInitialSearch = async () => {
     const query = searchParams.get('q') || '';
     const category = searchParams.get('category') || '';
     const distance = parseInt(searchParams.get('distance')) || 25;
+
+    // Check if we have location for location-based search
+    if (!userLocation && !userProfile?.location?.coordinates) {
+      console.log('⚠️ No location available for search');
+      return;
+    }
+
+    console.log(`🔍 Performing initial search: query="${query}", category="${category}", distance=${distance}km`);
 
     // Mock search implementation - replace with actual service
     try {
@@ -100,14 +109,26 @@ const SearchWithMap = () => {
             farmName: 'EkoFarm Kowalski',
             farmerName: 'Jan Kowalski',
             verified: true,
-            distance: 2.5
+            distance: 2.5,
+            location: {
+              coordinates: {
+                lat: 54.3520, 
+                lng: 18.6466
+              }
+            }
           },
           {
             id: 'farmer2',
             farmName: 'Organic Valley',
             farmerName: 'Anna Nowak',
             verified: false,
-            distance: 5.1
+            distance: 5.1,
+            location: {
+              coordinates: {
+                lat: 54.3720,
+                lng: 18.6266
+              }
+            }
           }
         ],
         hasMore: false,
@@ -129,6 +150,7 @@ const SearchWithMap = () => {
 
   // Handle search results from search component
   const handleSearchResults = (results) => {
+    console.log('📊 Search results received:', results);
     setSearchResults(results);
     setSelectedFarmer(null);
     
@@ -167,9 +189,15 @@ const SearchWithMap = () => {
 
   // Handle farmer selection from map
   const handleFarmerSelect = (farmer) => {
+    console.log('👨‍🌾 Farmer selected:', farmer);
     setSelectedFarmer(farmer);
     // Switch to list view to show farmer's products
     setActiveTab('list');
+  };
+
+  // Get current user location for components
+  const getCurrentUserLocation = () => {
+    return userLocation || userProfile?.location?.coordinates || null;
   };
 
   return (
@@ -259,7 +287,7 @@ const SearchWithMap = () => {
       <GeoLocationSearch
         onResults={handleSearchResults}
         onLoading={handleSearchLoading}
-        userLocation={userLocation}
+        userLocation={getCurrentUserLocation()}
         onLocationRequest={handleLocationRequest}
       />
 
@@ -295,7 +323,7 @@ const SearchWithMap = () => {
               <TabsContent value="list" className="mt-0">
                 <SearchResults
                   results={searchResults}
-                  userLocation={userLocation}
+                  userLocation={getCurrentUserLocation()}
                   onProductClick={handleProductClick}
                   loading={isSearching}
                   selectedFarmer={selectedFarmer}
@@ -303,15 +331,14 @@ const SearchWithMap = () => {
               </TabsContent>
               
               <TabsContent value="map" className="mt-0">
-                <div className="h-96 bg-gray-100 rounded-lg flex items-center justify-center">
-                  <div className="text-center text-gray-500">
-                    <MapPin className="h-12 w-12 mx-auto mb-2" />
-                    <p>Interactive Map View</p>
-                    <p className="text-sm">
-                      {searchResults.farmers?.length || 0} farmers would be displayed here
-                    </p>
-                  </div>
-                </div>
+                <FarmersMap
+                  userLocation={getCurrentUserLocation()}
+                  farmers={searchResults.farmers || []}
+                  products={searchResults.products || []}
+                  onFarmerSelect={handleFarmerSelect}
+                  selectedFarmer={selectedFarmer}
+                  height="500px"
+                />
               </TabsContent>
             </Tabs>
           </CardContent>
