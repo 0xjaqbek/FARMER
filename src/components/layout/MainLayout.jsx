@@ -120,8 +120,18 @@ const MainLayout = ({ children }) => {
       icon: MessageSquare,
       show: isAuthenticated,
       description: 'Chat with customers/farmers'
-    }
+    },
+    {
+      name: 'Admin Panel',
+      href: '/admin',
+      icon: Shield, // Import Shield from lucide-react
+      show: isAdmin,
+      description: 'Admin dashboard and user management'
+    },
+
   ];
+
+  
 
   const visibleNavItems = navigationItems.filter(item => item.show);
 

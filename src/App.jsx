@@ -7,6 +7,7 @@ import { CartProvider } from './context/CartContext';
 import MainLayout from './components/layout/MainLayout';
 import NotificationPage from './pages/NotificationPage';
 import NotificationCreator from './components/farmer/NotificationCreator';
+import AdminDashboard from './pages/admin/AdminDashboard';
 
 // Existing imports
 import Login from './pages/Login';
@@ -233,14 +234,11 @@ const AppRoutes = () => {
         <Route path="/admin" element={
           <ProtectedRoute allowedRoles={['admin']}>
             <MainLayout>
-              <div className="text-center py-12">
-                <h1 className="text-2xl font-bold text-gray-900 mb-4">Admin Panel</h1>
-                <p className="text-gray-600">Admin functionality coming soon...</p>
-              </div>
+              <AdminDashboard />
             </MainLayout>
           </ProtectedRoute>
         } />
-        
+               
         {/* Default redirect */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={
