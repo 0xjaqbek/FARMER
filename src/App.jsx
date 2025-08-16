@@ -10,6 +10,7 @@ import NotificationCreator from './components/farmer/NotificationCreator';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import CampaignCreator from './pages/campaigns/CampaignCreator';
 import CampaignViewer from './pages/campaigns/CampaignViewer';
+import CampaignManager from './pages/campaigns/CampaignManager';
 
 // Existing imports
 import Login from './pages/Login';
@@ -120,6 +121,14 @@ const AppRoutes = () => {
          <ProtectedRoute>
             <MainLayout>
              <CampaignCreator />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/campaigns/manage" element={
+          <ProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
+            <MainLayout>
+              <CampaignManager />
             </MainLayout>
           </ProtectedRoute>
         } />

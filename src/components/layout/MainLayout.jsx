@@ -29,7 +29,9 @@ import {
   Settings,
   Plus,
   Bell,
-  ChevronDown
+  ChevronDown,
+  Target,
+  Heart
 } from 'lucide-react';
 
 // Import NotificationBell component
@@ -104,7 +106,7 @@ const MainLayout = ({ children }) => {
       name: 'Add Product',
       href: '/products/add',
       icon: Plus,
-      show: isRolnik || isAdmin,
+      show: isRolnik,
       description: 'List a new product'
     },
     {
@@ -127,6 +129,20 @@ const MainLayout = ({ children }) => {
       icon: Shield, // Import Shield from lucide-react
       show: isAdmin,
       description: 'Admin dashboard and user management'
+    },
+    {
+      name: 'My Campaigns',
+      href: '/campaigns/manage',
+      icon: Target, // Import Target from lucide-react
+      show: isRolnik,
+      description: 'Manage your crowdfunding campaigns'
+    },
+    {
+      name: 'Browse Campaigns',
+      href: '/campaigns',
+      icon: Heart, // Import Heart from lucide-react
+      show: isKlient || isAdmin,
+      description: 'Support farming projects'
     },
 
   ];
