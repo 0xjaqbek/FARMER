@@ -1,4 +1,4 @@
-// src/App.jsx - Fixed version with no duplicates or errors
+// src/App.jsx - Updated with Farmer Profile Routes
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from '@/components/ui/use-toast';
@@ -15,6 +15,10 @@ import CampaignManager from './pages/campaigns/CampaignManager';
 // FIXED: Correct import paths for search components
 import SearchWithMap from './components/search/SearchWithMap';
 import EnhancedLocationPicker from './components/location/EnhancedLocationPicker';
+
+// NEW: Farmer profile components
+import FarmersDirectory from './pages/farmers/FarmersDirectory';
+import FarmerProfile from './pages/farmers/FarmerProfile';
 
 // Existing imports
 import Login from './pages/Login';
@@ -96,6 +100,23 @@ const AppRoutes = () => {
           </ProtectedRoute>
         } />
         
+        {/* NEW: Farmer Directory and Profile Routes */}
+        <Route path="/farmers" element={
+          <ProtectedRoute>
+            <MainLayout>
+              <FarmersDirectory />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/farmers/:farmerId" element={
+          <ProtectedRoute>
+            <MainLayout>
+              <FarmerProfile />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        
         {/* Notification Routes */}
         <Route path="/notifications" element={
           <ProtectedRoute>
@@ -140,7 +161,7 @@ const AppRoutes = () => {
         
         {/* SEARCH ROUTES - FIXED: Single route, correct component name */}
         <Route path="/search" element={
-          <ProtectedRoute allowedRoles={['customer', 'client', 'klient']}>
+          <ProtectedRoute>
             <MainLayout>
               <SearchWithMap />
             </MainLayout>
@@ -161,7 +182,7 @@ const AppRoutes = () => {
 
         {/* Product Routes */}
         <Route path="/browse" element={
-          <ProtectedRoute allowedRoles={['klient', 'customer', 'admin']}>
+          <ProtectedRoute>
             <MainLayout>
               <ProductList />
             </MainLayout>

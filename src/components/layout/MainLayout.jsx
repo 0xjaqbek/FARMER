@@ -1,4 +1,4 @@
-// src/components/layout/MainLayout.jsx - Fixed with proper search navigation
+// src/components/layout/MainLayout.jsx - Updated with Farmer Navigation
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -33,7 +33,8 @@ import {
   ChevronDown,
   Target,
   Heart,
-  MapPin
+  MapPin,
+  Users // NEW: Added Users icon for farmers
 } from 'lucide-react';
 
 // Import NotificationBell component
@@ -82,7 +83,7 @@ const MainLayout = ({ children }) => {
     }
   };
 
-  // FIXED: Clean navigation items without duplicates
+  // UPDATED: Enhanced navigation items with farmer directory
   const navigationItems = [
     {
       name: 'Dashboard',
@@ -91,9 +92,17 @@ const MainLayout = ({ children }) => {
       show: isAuthenticated,
       description: 'Overview and quick actions'
     },
+    // NEW: Farmers Directory - Show for customers and admins
+    {
+      name: 'Find Farmers',
+      href: '/farmers',
+      icon: Users,
+      show: isKlient || isAdmin,
+      description: 'Browse local farmers and their specialties'
+    },
     // SEARCH: Show for customers and admins
     {
-      name: 'Search Products',
+      name: 'Search & Map',
       href: '/search',
       icon: Search,
       show: isKlient || isAdmin,
@@ -244,15 +253,27 @@ const MainLayout = ({ children }) => {
             {/* Right side navigation */}
             <div className="hidden sm:ml-6 sm:flex sm:items-center space-x-3">
               
-              {/* Quick Search Button (for customers) */}
-              {isKlient && (
-                <Link 
-                  to="/search" 
-                  className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-md hover:bg-gray-100"
-                  title="Quick Search"
-                >
-                  <Search className="h-5 w-5" />
-                </Link>
+              {/* Quick Access Buttons for customers */}
+              {(isKlient || isAdmin) && (
+                <div className="flex items-center space-x-2">
+                  {/* Quick Farmers Button */}
+                  <Link 
+                    to="/farmers" 
+                    className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-md hover:bg-gray-100"
+                    title="Find Local Farmers"
+                  >
+                    <Users className="h-5 w-5" />
+                  </Link>
+                  
+                  {/* Quick Search Button */}
+                  <Link 
+                    to="/search" 
+                    className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-md hover:bg-gray-100"
+                    title="Search Products & Map"
+                  >
+                    <Search className="h-5 w-5" />
+                  </Link>
+                </div>
               )}
               
               {/* Notification Bell */}
@@ -342,6 +363,32 @@ const MainLayout = ({ children }) => {
                     </Link>
                   </DropdownMenuItem>
                   
+                  {/* NEW: Customer-specific menu items */}
+                  {(isKlient || isAdmin) && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link to="/farmers" className="cursor-pointer">
+                          <Users className="mr-3 h-4 w-4" />
+                          <div>
+                            <p className="font-medium">Find Farmers</p>
+                            <p className="text-xs text-gray-500">Browse local farmers</p>
+                          </div>
+                        </Link>
+                      </DropdownMenuItem>
+                      
+                      <DropdownMenuItem asChild>
+                        <Link to="/search" className="cursor-pointer">
+                          <Search className="mr-3 h-4 w-4" />
+                          <div>
+                            <p className="font-medium">Search & Map</p>
+                            <p className="text-xs text-gray-500">Find products near you</p>
+                          </div>
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  
                   {/* Farmer-specific menu items */}
                   {(isRolnik || isAdmin) && (
                     <>
@@ -398,6 +445,18 @@ const MainLayout = ({ children }) => {
 
             {/* Mobile menu button */}
             <div className="sm:hidden flex items-center space-x-2">
+              
+              {/* Mobile Quick Actions */}
+              {(isKlient || isAdmin) && (
+                <>
+                  <Link to="/farmers" className="p-2 text-gray-400" title="Find Farmers">
+                    <Users className="h-5 w-5" />
+                  </Link>
+                  <Link to="/search" className="p-2 text-gray-400" title="Search">
+                    <Search className="h-5 w-5" />
+                  </Link>
+                </>
+              )}
               
               {/* Mobile Notification Bell */}
               <NotificationBell />
@@ -548,6 +607,29 @@ const MainLayout = ({ children }) => {
                   <User className="mr-3 h-5 w-5" />
                   Profile Settings
                 </Link>
+                
+                {/* NEW: Mobile customer menu items */}
+                {(isKlient || isAdmin) && (
+                  <>
+                    <Link
+                      to="/farmers"
+                      className="flex items-center px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <Users className="mr-3 h-5 w-5" />
+                      Find Farmers
+                    </Link>
+                    
+                    <Link
+                      to="/search"
+                      className="flex items-center px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <Search className="mr-3 h-5 w-5" />
+                      Search & Map
+                    </Link>
+                  </>
+                )}
                 
                 {isAdmin && (
                   <Link

@@ -1,11 +1,13 @@
-// src/components/maps/FarmersMap.jsx
+// src/components/maps/FarmersMap.jsx - Final Enhanced Version
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, MapPin, Star, Navigation, Maximize2, Minimize2, AlertCircle } from 'lucide-react';
+import { Loader2, MapPin, Navigation, Maximize2, Minimize2, AlertCircle, Map, Satellite } from 'lucide-react';
 import GoogleMapsService from '../../services/googleMapsService';
+import './FarmersMap.css'; // Import custom styles
 
 const FarmersMap = ({ 
   userLocation, 
@@ -14,17 +16,22 @@ const FarmersMap = ({
   onFarmerSelect, 
   selectedFarmer = null,
   className = "",
-  height = "400px" 
+  height = "400px",
+  showControls = true,
+  showLegend = true
 }) => {
+  const navigate = useNavigate();
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersRef = useRef([]);
   const infoWindowRef = useRef(null);
+  const hoverTimeoutRef = useRef(null);
   
   const [isLoaded, setIsLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [mapType, setMapType] = useState('roadmap');
 
   // Check if Google Maps API key is available
   const hasGoogleMapsKey = () => {
@@ -32,57 +39,152 @@ const FarmersMap = ({
     return apiKey && apiKey !== 'your_api_key_here' && apiKey !== '';
   };
 
-  // Initialize Google Maps using the centralized service
+  // Create custom marker icon with enhanced visuals
+  const createFarmerMarkerIcon = (farmer, isHovered = false) => {
+    const baseScale = isHovered ? 14 : 10;
+    const strokeWeight = isHovered ? 3 : 2;
+    
+    return {
+      path: window.google.maps.SymbolPath.CIRCLE,
+      scale: baseScale,
+      fillColor: farmer.verified ? '#10B981' : '#F59E0B',
+      fillOpacity: isHovered ? 1 : 0.8,
+      strokeColor: isHovered ? '#1f2937' : '#ffffff',
+      strokeWeight: strokeWeight,
+      zIndex: isHovered ? 1000 : (farmer.verified ? 100 : 50)
+    };
+  };
+
+  // Create hover info window content (minimal information)
+  const createHoverInfoContent = (farmer, farmerProducts) => {
+    const farmName = farmer.farmName || farmer.farmerName || farmer.displayName || 'Local Farm';
+    const productCount = farmerProducts.length;
+    const distance = farmer.distance ? `${farmer.distance}km away` : '';
+
+    return `
+      <div class="farmer-info-content" style="padding: 8px; max-width: 200px; cursor: pointer;">
+        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+          <h4 style="margin: 0; font-size: 14px; font-weight: 600; color: #1f2937;">${farmName}</h4>
+          <span class="verification-badge ${farmer.verified ? '' : 'unverified'}">
+            ${farmer.verified ? '✓ Verified' : '○ Unverified'}
+          </span>
+        </div>
+        ${distance ? `<p style="margin: 2px 0; color: #6b7280; font-size: 12px;">📍 ${distance}</p>` : ''}
+        <p style="margin: 2px 0; color: #6b7280; font-size: 12px;">🥕 ${productCount} products</p>
+        <div class="click-hint">
+          Click to view profile →
+        </div>
+      </div>
+    `;
+  };
+
+  // Create detailed info window content
+  const createDetailedInfoContent = (farmer, farmerProducts) => {
+    const farmName = farmer.farmName || farmer.farmerName || farmer.displayName || 'Local Farm';
+    const productCount = farmerProducts.length;
+    const distance = farmer.distance ? `${farmer.distance}km away` : '';
+    const sampleProducts = farmerProducts.slice(0, 3).map(p => p.name).join(', ');
+
+    return `
+      <div class="farmer-info-content" style="padding: 12px; max-width: 280px;">
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+          <h3 style="margin: 0; font-size: 16px; font-weight: 600;">${farmName}</h3>
+          <span class="verification-badge ${farmer.verified ? '' : 'unverified'}">
+            ${farmer.verified ? '✓ Verified' : '○ Unverified'}
+          </span>
+        </div>
+        ${distance ? `<p style="margin: 4px 0; color: #666; font-size: 14px;">📍 ${distance}</p>` : ''}
+        <p style="margin: 4px 0; color: #666; font-size: 14px;">🥕 ${productCount} products available</p>
+        
+        ${sampleProducts ? `
+          <p style="margin: 4px 0; color: #666; font-size: 12px;">
+            <strong>Products:</strong> ${sampleProducts}${farmerProducts.length > 3 ? '...' : ''}
+          </p>
+        ` : ''}
+        
+        ${farmer.location?.address ? 
+          `<p style="margin: 4px 0; color: #666; font-size: 12px;">${farmer.location.address}</p>` : 
+          ''
+        }
+        
+        ${farmer.farmInfo?.specialties?.length > 0 ? `
+          <p style="margin: 6px 0 4px 0; color: #666; font-size: 12px;">
+            <strong>Specialties:</strong> ${farmer.farmInfo.specialties.slice(0, 3).join(', ')}
+          </p>
+        ` : ''}
+        
+        <div class="click-hint">
+          → Click to view full profile
+        </div>
+      </div>
+    `;
+  };
+
+  // Initialize Google Maps
   useEffect(() => {
     const initializeMap = async () => {
-        console.log("🚀 initializeMap called, mapRef:", mapRef.current);
-        console.log("🧩 FarmersMap rendered with props:", { userLocation, farmers, products });
+      console.log("🚀 initializeMap called, mapRef:", mapRef.current);
+      console.log("🧩 FarmersMap rendered with props:", { userLocation, farmers, products });
 
       try {
         setIsLoading(true);
         setError(null);
 
         if (!hasGoogleMapsKey()) {
-            console.log("🔑 Google Maps key check:", import.meta.env.VITE_GOOGLE_MAPS_API_KEY);
-
+          console.log("🔑 Google Maps key check:", import.meta.env.VITE_GOOGLE_MAPS_API_KEY);
           throw new Error('Google Maps API key not configured');
         }
 
-        // Use the centralized GoogleMapsService instead of local loading
+        // Wait for Google Maps to load
         await GoogleMapsService.loadGoogleMaps();
         
+        // Double check that Google Maps is available
+        if (!window.google || !window.google.maps || !window.google.maps.Map) {
+          console.error("Google Maps not fully loaded");
+          throw new Error('Google Maps API failed to load completely');
+        }
+        
         if (!mapRef.current) {
-        console.warn("⏳ mapRef still null, retrying in 100ms...");
-        setTimeout(initializeMap, 100);
-        return;
+          console.warn("⏳ mapRef still null, retrying in 100ms...");
+          setTimeout(initializeMap, 100);
+          return;
         }
 
-        // Default center (Poland)
         const defaultCenter = userLocation || { lat: 52.0693, lng: 19.4803 };
         console.log("🗺️ Initializing map with center:", defaultCenter, "zoom:", userLocation ? 11 : 6);
 
-        
-        // Create map
-        const map = new window.google.maps.Map(mapRef.current, {
-          zoom: userLocation ? 11 : 6,
-          center: defaultCenter,
-          mapTypeId: 'roadmap',
-          styles: [
-            {
-              featureType: 'poi',
-              elementType: 'labels',
-              stylers: [{ visibility: 'off' }]
-            }
-          ]
-        });
+        // Create map with error handling
+        try {
+          const map = new window.google.maps.Map(mapRef.current, {
+            zoom: userLocation ? 11 : 6,
+            center: defaultCenter,
+            mapTypeId: mapType,
+            styles: [
+              {
+                featureType: 'poi',
+                elementType: 'labels',
+                stylers: [{ visibility: 'off' }]
+              }
+            ],
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: false
+          });
 
-        mapInstanceRef.current = map;
+          mapInstanceRef.current = map;
+          
+          // Create info window
+          if (window.google.maps.InfoWindow) {
+            infoWindowRef.current = new window.google.maps.InfoWindow();
+          }
+          
+          setIsLoaded(true);
+          console.log('✅ Google Maps loaded successfully');
+        } catch (mapError) {
+          console.error('❌ Error creating map instance:', mapError);
+          throw new Error(`Failed to create map: ${mapError.message}`);
+        }
         
-        // Create info window
-        infoWindowRef.current = new window.google.maps.InfoWindow();
-        
-        setIsLoaded(true);
-        console.log('✅ Google Maps loaded successfully');
       } catch (error) {
         console.error('❌ Error initializing map:', error);
         setError(error.message);
@@ -91,15 +193,19 @@ const FarmersMap = ({
       }
     };
 
-    initializeMap();
+    // Add a small delay to ensure DOM is ready
+    const timeoutId = setTimeout(initializeMap, 100);
 
     return () => {
-      // Cleanup
+      clearTimeout(timeoutId);
       if (infoWindowRef.current) {
         infoWindowRef.current.close();
       }
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
     };
-  }, [userLocation]);
+  }, [userLocation, mapType]);
 
   // Add user location marker
   useEffect(() => {
@@ -116,7 +222,8 @@ const FarmersMap = ({
         fillOpacity: 1,
         strokeColor: '#ffffff',
         strokeWeight: 2
-      }
+      },
+      zIndex: 2000
     });
 
     return () => {
@@ -124,95 +231,116 @@ const FarmersMap = ({
     };
   }, [isLoaded, userLocation]);
 
-  // Add farmer markers
+  // Add enhanced farmer markers with hover and click functionality
   useEffect(() => {
     if (!isLoaded || !mapInstanceRef.current) return;
 
-    console.log('🗺️ Adding farmer markers:', farmers);
+    console.log('🗺️ Adding enhanced farmer markers:', farmers);
 
     // Clear existing markers
     markersRef.current.forEach(marker => marker.setMap(null));
     markersRef.current = [];
 
-    // Add farmer markers
     farmers.forEach((farmer, index) => {
       console.log(`📍 Processing farmer ${index + 1}:`, farmer);
 
-      // FIXED: Handle both coordinate formats
+      // Handle both coordinate formats
       let coords = null;
-      
-      // Check for nested coordinates first (schema format)
       if (farmer.location?.coordinates?.lat && farmer.location?.coordinates?.lng) {
         coords = farmer.location.coordinates;
-        console.log(`📍 Found nested coordinates:`, coords);
-      }
-      // Check for direct lat/lng in location (current data format)
-      else if (farmer.location?.lat && farmer.location?.lng) {
-        coords = {
-          lat: farmer.location.lat,
-          lng: farmer.location.lng
-        };
-        console.log(`📍 Found direct coordinates:`, coords);
+      } else if (farmer.location?.lat && farmer.location?.lng) {
+        coords = { lat: farmer.location.lat, lng: farmer.location.lng };
       }
       
       if (!coords) {
-        console.warn(`⚠️ No coordinates for farmer:`, {
-          id: farmer.id,
-          name: farmer.farmName || farmer.farmerName,
-          location: farmer.location
-        });
+        console.warn(`⚠️ No coordinates for farmer:`, farmer);
         return;
       }
 
-      // Extract lat/lng values (handle both formats)
       const position = {
         lat: coords.lat || coords.latitude,
         lng: coords.lng || coords.longitude
       };
 
-      // Validate coordinates are valid numbers
+      // Validate coordinates
       if (typeof position.lat !== 'number' || typeof position.lng !== 'number' ||
           position.lat < -90 || position.lat > 90 || 
           position.lng < -180 || position.lng > 180) {
-        console.warn(`⚠️ Invalid coordinates for farmer:`, {
-          id: farmer.id,
-          name: farmer.farmName || farmer.farmerName,
-          position
-        });
+        console.warn(`⚠️ Invalid coordinates for farmer:`, farmer);
         return;
       }
-
-      console.log(`📍 Creating marker at:`, position);
 
       // Count products for this farmer
       const farmerProducts = products.filter(p => 
         (p.farmerId || p.rolnikId) === farmer.id
       );
       
+      // Create enhanced marker
       const marker = new window.google.maps.Marker({
         position,
         map: mapInstanceRef.current,
         title: farmer.farmName || farmer.farmerName || farmer.displayName || `Farmer ${index + 1}`,
-        icon: {
-          path: window.google.maps.SymbolPath.CIRCLE,
-          scale: 10,
-          fillColor: farmer.verified ? '#10B981' : '#F59E0B',
-          fillOpacity: 0.8,
-          strokeColor: '#ffffff',
-          strokeWeight: 2
-        }
+        icon: createFarmerMarkerIcon(farmer, false),
+        animation: null
       });
 
-      // Create info window content
-      const infoContent = createFarmerInfoContent(farmer, farmerProducts);
+      // Enhanced hover listeners
+      marker.addListener('mouseover', () => {
+        // Clear any existing timeout
+        if (hoverTimeoutRef.current) {
+          clearTimeout(hoverTimeoutRef.current);
+        }
 
-      // Add click listener
+        // Update marker appearance immediately
+        marker.setIcon(createFarmerMarkerIcon(farmer, true));
+        
+        // Show hover info with slight delay for better UX
+        hoverTimeoutRef.current = setTimeout(() => {
+          const hoverContent = createHoverInfoContent(farmer, farmerProducts);
+          if (infoWindowRef.current) {
+            infoWindowRef.current.setContent(hoverContent);
+            infoWindowRef.current.open(mapInstanceRef.current, marker);
+          }
+        }, 200);
+      });
+
+      marker.addListener('mouseout', () => {
+        // Clear timeout to prevent showing info window
+        if (hoverTimeoutRef.current) {
+          clearTimeout(hoverTimeoutRef.current);
+        }
+
+        // Reset marker appearance
+        marker.setIcon(createFarmerMarkerIcon(farmer, false));
+        
+        // Close info window with slight delay
+        setTimeout(() => {
+          if (infoWindowRef.current) {
+            infoWindowRef.current.close();
+          }
+        }, 100);
+      });
+
+      // Enhanced click listener with navigation
       marker.addListener('click', () => {
+        // Clear any hover timeouts
+        if (hoverTimeoutRef.current) {
+          clearTimeout(hoverTimeoutRef.current);
+        }
+
+        // Show detailed info first
+        const detailedContent = createDetailedInfoContent(farmer, farmerProducts);
         if (infoWindowRef.current) {
-          infoWindowRef.current.setContent(infoContent);
+          infoWindowRef.current.setContent(detailedContent);
           infoWindowRef.current.open(mapInstanceRef.current, marker);
         }
+
+        // Navigate to farmer profile after a short delay
+        setTimeout(() => {
+          navigate(`/farmers/${farmer.id}`);
+        }, 300);
         
+        // Trigger callback if provided
         if (onFarmerSelect) {
           onFarmerSelect(farmer);
         }
@@ -221,7 +349,7 @@ const FarmersMap = ({
       markersRef.current.push(marker);
     });
 
-    console.log(`✅ Added ${markersRef.current.length} farmer markers`);
+    console.log(`✅ Added ${markersRef.current.length} enhanced farmer markers`);
 
     // Fit map to show all markers
     if (farmers.length > 0) {
@@ -232,16 +360,11 @@ const FarmersMap = ({
       }
       
       farmers.forEach(farmer => {
-        // Use the same coordinate extraction logic as above
         let coords = null;
-        
         if (farmer.location?.coordinates?.lat && farmer.location?.coordinates?.lng) {
           coords = farmer.location.coordinates;
         } else if (farmer.location?.lat && farmer.location?.lng) {
-          coords = {
-            lat: farmer.location.lat,
-            lng: farmer.location.lng
-          };
+          coords = { lat: farmer.location.lat, lng: farmer.location.lng };
         }
         
         if (coords) {
@@ -250,7 +373,6 @@ const FarmersMap = ({
             lng: coords.lng || coords.longitude
           };
           
-          // Validate before extending bounds
           if (typeof position.lat === 'number' && typeof position.lng === 'number' &&
               position.lat >= -90 && position.lat <= 90 && 
               position.lng >= -180 && position.lng <= 180) {
@@ -270,9 +392,9 @@ const FarmersMap = ({
       });
     }
 
-  }, [isLoaded, farmers, products, onFarmerSelect]);
+  }, [isLoaded, farmers, products, onFarmerSelect, navigate]);
 
-  // Highlight selected farmer
+  // Handle selected farmer highlighting
   useEffect(() => {
     if (!selectedFarmer || !isLoaded) return;
 
@@ -281,48 +403,27 @@ const FarmersMap = ({
     );
 
     if (marker) {
-      // Center map on selected farmer
       mapInstanceRef.current.setCenter(marker.getPosition());
       mapInstanceRef.current.setZoom(13);
       
-      // Open info window
       const farmerProducts = products.filter(p => 
         (p.farmerId || p.rolnikId) === selectedFarmer.id
       );
-      const infoContent = createFarmerInfoContent(selectedFarmer, farmerProducts);
+      const detailedContent = createDetailedInfoContent(selectedFarmer, farmerProducts);
       
       if (infoWindowRef.current) {
-        infoWindowRef.current.setContent(infoContent);
+        infoWindowRef.current.setContent(detailedContent);
         infoWindowRef.current.open(mapInstanceRef.current, marker);
       }
     }
   }, [selectedFarmer, isLoaded, products]);
 
-  // Create farmer info window content
-  const createFarmerInfoContent = (farmer, farmerProducts) => {
-    const distance = farmer.distance ? 
-      `${farmer.distance}km away` : '';
-
-    const farmName = farmer.farmName || farmer.farmerName || farmer.displayName || 'Local Farm';
-    const productCount = farmerProducts.length;
-
-    return `
-      <div style="padding: 12px; max-width: 250px; font-family: system-ui;">
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-          <h3 style="margin: 0; font-size: 16px; font-weight: 600;">${farmName}</h3>
-          ${farmer.verified ? 
-            '<span style="color: #10B981; font-size: 12px;">✓ Verified</span>' : 
-            '<span style="color: #F59E0B; font-size: 12px;">○ Unverified</span>'
-          }
-        </div>
-        ${distance ? `<p style="margin: 4px 0; color: #666; font-size: 14px;">📍 ${distance}</p>` : ''}
-        <p style="margin: 4px 0; color: #666; font-size: 14px;">🥕 ${productCount} products available</p>
-        ${farmer.location?.address ? 
-          `<p style="margin: 4px 0; color: #666; font-size: 12px;">${farmer.location.address}</p>` : 
-          ''
-        }
-      </div>
-    `;
+  // Handle map type changes
+  const handleMapTypeChange = (newMapType) => {
+    setMapType(newMapType);
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.setMapTypeId(newMapType);
+    }
   };
 
   // Render error state
@@ -357,7 +458,7 @@ const FarmersMap = ({
                 <div 
                   key={farmer.id || index}
                   className="p-3 border rounded-lg cursor-pointer hover:bg-gray-50"
-                  onClick={() => onFarmerSelect && onFarmerSelect(farmer)}
+                  onClick={() => navigate(`/farmers/${farmer.id}`)}
                 >
                   <div className="flex items-center justify-between">
                     <div>
@@ -387,7 +488,7 @@ const FarmersMap = ({
           <div className="flex items-center justify-center" style={{ height }}>
             <div className="text-center">
               <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-              <p className="text-sm text-gray-600">Loading map...</p>
+              <p className="text-sm text-gray-600">Loading enhanced map...</p>
             </div>
           </div>
         </CardContent>
@@ -395,73 +496,97 @@ const FarmersMap = ({
     );
   }
 
-  // Render map
+  // Render enhanced map
   return (
-    <Card className={className}>
+    <Card className={`${className} ${isFullscreen ? 'farmers-map-fullscreen' : ''}`}>
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <MapPin className="h-5 w-5" />
-            Interactive Map View
+            Interactive Farmers Map
           </CardTitle>
           <div className="flex items-center gap-2">
             <Badge variant="outline">
               {farmers.length} farmer{farmers.length !== 1 ? 's' : ''} nearby
             </Badge>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setIsFullscreen(!isFullscreen)}
-            >
-              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-            </Button>
+            {showControls && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setIsFullscreen(!isFullscreen)}
+              >
+                {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </Button>
+            )}
           </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="relative p-0">
         <div 
           ref={mapRef}
           style={{ 
-            height: isFullscreen ? '70vh' : height,
+            height: isFullscreen ? '100vh' : height,
             width: '100%',
-            borderRadius: '8px'
+            borderRadius: isFullscreen ? '0' : '0 0 8px 8px'
           }}
-          className="bg-gray-100"
+          className="bg-gray-100 farmers-map-container"
         />
         
-        {/* Map controls */}
-        <div className="flex items-center justify-between mt-3 text-sm text-gray-600">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+        {/* Map Type Controls */}
+        {showControls && (
+          <div className="map-type-selector">
+            <button 
+              className={`map-type-btn ${mapType === 'roadmap' ? 'active' : ''}`}
+              onClick={() => handleMapTypeChange('roadmap')}
+            >
+              <Map className="w-3 h-3 mr-1" />
+              Map
+            </button>
+            <button 
+              className={`map-type-btn ${mapType === 'satellite' ? 'active' : ''}`}
+              onClick={() => handleMapTypeChange('satellite')}
+            >
+              <Satellite className="w-3 h-3 mr-1" />
+              Satellite
+            </button>
+          </div>
+        )}
+
+        {/* Map Legend */}
+        {showLegend && (
+          <div className="map-legend">
+            <div className="legend-item">
+              <div className="legend-dot user"></div>
               <span>Your location</span>
             </div>
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 rounded-full bg-green-500"></div>
+            <div className="legend-item">
+              <div className="legend-dot verified"></div>
               <span>Verified farmers</span>
             </div>
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+            <div className="legend-item">
+              <div className="legend-dot unverified"></div>
               <span>Unverified farmers</span>
             </div>
           </div>
-          
-          {userLocation && (
-            <Button 
-              size="sm" 
-              variant="ghost"
+        )}
+
+        {/* Center on User Button */}
+        {showControls && userLocation && (
+          <div className="map-controls">
+            <button 
+              className="map-control-btn"
               onClick={() => {
                 if (mapInstanceRef.current && userLocation) {
                   mapInstanceRef.current.setCenter(userLocation);
                   mapInstanceRef.current.setZoom(11);
                 }
               }}
+              title="Center on my location"
             >
-              <Navigation className="h-3 w-3 mr-1" />
-              Center on me
-            </Button>
-          )}
-        </div>
+              <Navigation className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

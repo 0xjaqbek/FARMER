@@ -1,0 +1,373 @@
+/* src/components/maps/FarmersMap.css */
+/* Custom styles for enhanced farmers map functionality */
+
+/* Map container improvements */
+.farmers-map-container {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* Info window custom styling */
+.gm-style .gm-style-iw-c {
+  border-radius: 8px !important;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+}
+
+.gm-style .gm-style-iw-tc {
+  display: none !important; /* Hide the tail/arrow */
+}
+
+/* Custom info window close button */
+.gm-style .gm-style-iw-chr {
+  background-color: #f3f4f6 !important;
+  border-radius: 50% !important;
+  width: 22px !important;
+  height: 22px !important;
+  top: 8px !important;
+  right: 8px !important;
+}
+
+.gm-style .gm-style-iw-chr:hover {
+  background-color: #e5e7eb !important;
+}
+
+/* Marker cluster styling */
+.cluster-marker {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 12px;
+  color: white;
+  transition: all 0.2s ease;
+}
+
+.cluster-marker:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Map controls styling */
+.map-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.map-control-btn {
+  background: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.map-control-btn:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  background-color: #f9fafb;
+}
+
+/* Loading overlay */
+.map-loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  border-radius: 8px;
+}
+
+/* Farmer info popup animations */
+.farmer-popup-enter {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
+.farmer-popup-enter-active {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition: all 0.2s ease-out;
+}
+
+.farmer-popup-exit {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.farmer-popup-exit-active {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+  transition: all 0.15s ease-in;
+}
+
+/* Map legend */
+.map-legend {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background: white;
+  padding: 12px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  font-size: 12px;
+  z-index: 10;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.legend-item:last-child {
+  margin-bottom: 0;
+}
+
+.legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.legend-dot.verified {
+  background-color: #10b981;
+}
+
+.legend-dot.unverified {
+  background-color: #f59e0b;
+}
+
+.legend-dot.user {
+  background-color: #3b82f6;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .map-controls {
+    top: 5px;
+    right: 5px;
+    gap: 4px;
+  }
+  
+  .map-control-btn {
+    padding: 6px;
+  }
+  
+  .map-legend {
+    bottom: 10px;
+    left: 10px;
+    padding: 8px;
+    font-size: 11px;
+  }
+  
+  .gm-style .gm-style-iw-d {
+    max-width: 250px !important;
+  }
+}
+
+/* Custom scrollbar for info windows */
+.gm-style .gm-style-iw-d::-webkit-scrollbar {
+  width: 4px;
+}
+
+.gm-style .gm-style-iw-d::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 2px;
+}
+
+.gm-style .gm-style-iw-d::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 2px;
+}
+
+.gm-style .gm-style-iw-d::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Fullscreen mode adjustments */
+.farmers-map-fullscreen {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9999 !important;
+  border-radius: 0 !important;
+}
+
+.farmers-map-fullscreen .map-controls {
+  top: 20px;
+  right: 20px;
+}
+
+.farmers-map-fullscreen .map-legend {
+  bottom: 30px;
+  left: 30px;
+}
+
+/* Pulse animation for active markers */
+@keyframes marker-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.marker-pulse {
+  animation: marker-pulse 1.5s ease-in-out infinite;
+}
+
+/* Hover state for markers */
+.marker-hover {
+  transform: scale(1.1);
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+  transition: all 0.2s ease;
+}
+
+/* Info window custom content styling */
+.farmer-info-content {
+  font-family: system-ui, -apple-system, sans-serif;
+  line-height: 1.4;
+}
+
+.farmer-info-content h3,
+.farmer-info-content h4 {
+  margin: 0;
+  color: #1f2937;
+}
+
+.farmer-info-content p {
+  margin: 4px 0;
+  color: #6b7280;
+}
+
+.farmer-info-content .verification-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.farmer-info-content .verification-badge.unverified {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
+.farmer-info-content .click-hint {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 11px;
+  color: #3b82f6;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.farmer-info-content .click-hint:hover {
+  color: #2563eb;
+}
+
+/* Map type controls */
+.map-type-selector {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 10;
+  background: white;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.map-type-btn {
+  background: none;
+  border: none;
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  color: #6b7280;
+}
+
+.map-type-btn:hover {
+  background-color: #f3f4f6;
+}
+
+.map-type-btn.active {
+  background-color: #3b82f6;
+  color: white;
+}
+
+/* Distance circle overlay */
+.distance-circle {
+  fill: rgba(59, 130, 246, 0.1);
+  stroke: #3b82f6;
+  stroke-width: 2;
+  stroke-dasharray: 5, 5;
+}
+
+/* Custom map styles for better farmer visibility */
+.farmers-map-dark .gm-style > div:first-child > div + div > div {
+  background: #1f2937 !important;
+}
+
+/* Accessibility improvements */
+.farmers-map-container:focus-within {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.map-control-btn:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+  .farmers-map-container {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  
+  .map-controls,
+  .map-legend {
+    display: none;
+  }
+}
