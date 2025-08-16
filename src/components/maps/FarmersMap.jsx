@@ -35,21 +35,32 @@ const FarmersMap = ({
   // Initialize Google Maps using the centralized service
   useEffect(() => {
     const initializeMap = async () => {
+        console.log("🚀 initializeMap called, mapRef:", mapRef.current);
+        console.log("🧩 FarmersMap rendered with props:", { userLocation, farmers, products });
+
       try {
         setIsLoading(true);
         setError(null);
 
         if (!hasGoogleMapsKey()) {
+            console.log("🔑 Google Maps key check:", import.meta.env.VITE_GOOGLE_MAPS_API_KEY);
+
           throw new Error('Google Maps API key not configured');
         }
 
         // Use the centralized GoogleMapsService instead of local loading
         await GoogleMapsService.loadGoogleMaps();
         
-        if (!mapRef.current) return;
+        if (!mapRef.current) {
+        console.warn("⏳ mapRef still null, retrying in 100ms...");
+        setTimeout(initializeMap, 100);
+        return;
+        }
 
         // Default center (Poland)
         const defaultCenter = userLocation || { lat: 52.0693, lng: 19.4803 };
+        console.log("🗺️ Initializing map with center:", defaultCenter, "zoom:", userLocation ? 11 : 6);
+
         
         // Create map
         const map = new window.google.maps.Map(mapRef.current, {
