@@ -8,6 +8,8 @@ import MainLayout from './components/layout/MainLayout';
 import NotificationPage from './pages/NotificationPage';
 import NotificationCreator from './components/farmer/NotificationCreator';
 import AdminDashboard from './pages/admin/AdminDashboard';
+import CampaignCreator from './pages/campaigns/CampaignCreator';
+import CampaignViewer from './pages/campaigns/CampaignViewer';
 
 // Existing imports
 import Login from './pages/Login';
@@ -102,6 +104,22 @@ const AppRoutes = () => {
           <ProtectedRoute allowedRoles={['farmer', 'rolnik', 'admin']}>
             <MainLayout>
               <NotificationCreator />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/campaigns" element={
+         <ProtectedRoute>
+            <MainLayout>
+              <CampaignViewer />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/campaigns/create" element={
+         <ProtectedRoute>
+            <MainLayout>
+             <CampaignCreator />
             </MainLayout>
           </ProtectedRoute>
         } />
@@ -238,7 +256,7 @@ const AppRoutes = () => {
             </MainLayout>
           </ProtectedRoute>
         } />
-               
+
         {/* Default redirect */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={

@@ -40,7 +40,9 @@ import {
   MapPin,
   Building,
   Star,
-  DollarSign
+  DollarSign,
+  Target,
+  Leaf
 } from 'lucide-react';
 
 // Import real Firebase admin functions
@@ -50,8 +52,17 @@ import {
   unverifyFarmer as unverifyFarmerFirebase,
   deleteUser as deleteUserFirebase,
   getSystemStats,
-  getRecentActivity
+  getRecentActivity,
+  logAdminActivity
 } from '../../firebase/admin';
+
+// Import crowdfunding functions
+import {
+  getActiveCampaigns,
+  updateCampaign,
+  deleteCampaign,
+  getCampaignStats
+} from '../../firebase/crowdfunding';
 
 const AdminDashboard = () => {
   const { userProfile } = useAuth();
@@ -68,6 +79,15 @@ const AdminDashboard = () => {
   const [recentActivity, setRecentActivity] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [showUserDetails, setShowUserDetails] = useState(false);
+  
+  // Campaign management state
+  const [campaigns, setCampaigns] = useState([]);
+  const [filteredCampaigns, setFilteredCampaigns] = useState([]);
+  const [campaignSearchTerm, setCampaignSearchTerm] = useState('');
+  const [campaignFilterStatus, setCampaignFilterStatus] = useState('all');
+  const [selectedCampaign, setSelectedCampaign] = useState(null);
+  const [showCampaignDetails, setShowCampaignDetails] = useState(false);
+  const [campaignStats, setCampaignStats] = useState({});
 
   // Check if user is admin
   const isAdmin = userProfile?.role === 'admin';
@@ -81,18 +101,26 @@ const AdminDashboard = () => {
     filterUsers();
   }, [users, searchTerm, filterRole, filterStatus]);
 
+  useEffect(() => {
+    filterCampaigns();
+  }, [campaigns, campaignSearchTerm, campaignFilterStatus]);
+
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const [usersData, statsData, activityData] = await Promise.all([
+      const [usersData, statsData, activityData, campaignsData, campaignStatsData] = await Promise.all([
         getAllUsers(),
         getSystemStats(),
-        getRecentActivity()
+        getRecentActivity(10),
+        getActiveCampaigns(true), // true = adminView
+        getCampaignStats()
       ]);
       
       setUsers(usersData);
       setSystemStats(statsData);
       setRecentActivity(activityData);
+      setCampaigns(campaignsData);
+      setCampaignStats(campaignStatsData);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       toast({
@@ -136,9 +164,40 @@ const AdminDashboard = () => {
     setFilteredUsers(filtered);
   };
 
+  const filterCampaigns = () => {
+    let filtered = [...campaigns];
+
+    // Search filter
+    if (campaignSearchTerm) {
+      filtered = filtered.filter(campaign =>
+        campaign.title.toLowerCase().includes(campaignSearchTerm.toLowerCase()) ||
+        campaign.farmerName?.toLowerCase().includes(campaignSearchTerm.toLowerCase()) ||
+        campaign.farmName?.toLowerCase().includes(campaignSearchTerm.toLowerCase()) ||
+        campaign.category?.toLowerCase().includes(campaignSearchTerm.toLowerCase())
+      );
+    }
+
+    // Status filter
+    if (campaignFilterStatus !== 'all') {
+      if (campaignFilterStatus === 'pending') {
+        filtered = filtered.filter(campaign => !campaign.verified && campaign.status === 'active');
+      } else if (campaignFilterStatus === 'verified') {
+        filtered = filtered.filter(campaign => campaign.verified);
+      } else {
+        filtered = filtered.filter(campaign => campaign.status === campaignFilterStatus);
+      }
+    }
+
+    setFilteredCampaigns(filtered);
+  };
+
   const handleVerifyFarmer = async (uid) => {
     try {
       await verifyFarmerFirebase(uid);
+      
+      // Log admin activity
+      await logAdminActivity(userProfile.uid, 'verify_farmer', { farmerId: uid });
+      
       setUsers(prev => prev.map(user => 
         user.uid === uid ? { ...user, isVerified: true } : user
       ));
@@ -146,7 +205,8 @@ const AdminDashboard = () => {
         title: "Success",
         description: "Farmer verified successfully"
       });
-    } catch  {
+    } catch (error) {
+      console.error('Error verifying farmer:', error);
       toast({
         title: "Error",
         description: "Failed to verify farmer",
@@ -158,6 +218,10 @@ const AdminDashboard = () => {
   const handleUnverifyFarmer = async (uid) => {
     try {
       await unverifyFarmerFirebase(uid);
+      
+      // Log admin activity
+      await logAdminActivity(userProfile.uid, 'unverify_farmer', { farmerId: uid });
+      
       setUsers(prev => prev.map(user => 
         user.uid === uid ? { ...user, isVerified: false } : user
       ));
@@ -165,7 +229,8 @@ const AdminDashboard = () => {
         title: "Success",
         description: "Farmer verification removed"
       });
-    } catch {
+    } catch (error) {
+      console.error('Error removing verification:', error);
       toast({
         title: "Error",
         description: "Failed to remove verification",
@@ -181,15 +246,100 @@ const AdminDashboard = () => {
 
     try {
       await deleteUserFirebase(uid);
+      
+      // Log admin activity
+      await logAdminActivity(userProfile.uid, 'delete_user', { deletedUserId: uid });
+      
       setUsers(prev => prev.filter(user => user.uid !== uid));
       toast({
         title: "Success",
         description: "User deleted successfully"
       });
-    } catch {
+    } catch (error) {
+      console.error('Error deleting user:', error);
       toast({
         title: "Error",
         description: "Failed to delete user",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleVerifyCampaign = async (campaignId) => {
+    try {
+      await updateCampaign(campaignId, { 
+        verified: true, 
+        featured: true // Make verified campaigns featured by default
+      });
+      
+      // Log admin activity
+      await logAdminActivity(userProfile.uid, 'verify_campaign', { campaignId });
+      
+      setCampaigns(prev => prev.map(campaign => 
+        campaign.id === campaignId ? { ...campaign, verified: true, featured: true } : campaign
+      ));
+      
+      toast({
+        title: "Success",
+        description: "Campaign verified successfully"
+      });
+    } catch (error) {
+      console.error('Error verifying campaign:', error);
+      toast({
+        title: "Error",
+        description: "Failed to verify campaign",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleUnverifyCampaign = async (campaignId) => {
+    try {
+      await updateCampaign(campaignId, { verified: false, featured: false });
+      
+      // Log admin activity
+      await logAdminActivity(userProfile.uid, 'unverify_campaign', { campaignId });
+      
+      setCampaigns(prev => prev.map(campaign => 
+        campaign.id === campaignId ? { ...campaign, verified: false, featured: false } : campaign
+      ));
+      
+      toast({
+        title: "Success",
+        description: "Campaign verification removed"
+      });
+    } catch (error) {
+      console.error('Error removing campaign verification:', error);
+      toast({
+        title: "Error",
+        description: "Failed to remove verification",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeleteCampaign = async (campaignId) => {
+    if (!confirm('Are you sure you want to delete this campaign? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await deleteCampaign(campaignId, userProfile.uid, true); // true = isAdmin
+      
+      // Log admin activity
+      await logAdminActivity(userProfile.uid, 'delete_campaign', { campaignId });
+      
+      setCampaigns(prev => prev.filter(campaign => campaign.id !== campaignId));
+      
+      toast({
+        title: "Success",
+        description: "Campaign deleted successfully"
+      });
+    } catch (error) {
+      console.error('Error deleting campaign:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete campaign",
         variant: "destructive"
       });
     }
@@ -252,7 +402,7 @@ const AdminDashboard = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-          <p className="text-gray-600">Manage users, verifications, and system settings</p>
+          <p className="text-gray-600">Manage users, verifications, campaigns, and system settings</p>
         </div>
         
         <div className="flex gap-2">
@@ -310,8 +460,8 @@ const AdminDashboard = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Revenue</p>
-                <p className="text-3xl font-bold text-purple-600">{systemStats.totalRevenue?.toLocaleString()} PLN</p>
+                <p className="text-sm font-medium text-gray-600">Campaign Funds Raised</p>
+                <p className="text-3xl font-bold text-purple-600">{campaignStats.totalRaised?.toLocaleString() || 0} PLN</p>
               </div>
               <DollarSign className="h-8 w-8 text-purple-600" />
             </div>
@@ -321,10 +471,11 @@ const AdminDashboard = () => {
 
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="users">User Management</TabsTrigger>
           <TabsTrigger value="verifications">Verifications</TabsTrigger>
+          <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
@@ -367,12 +518,12 @@ const AdminDashboard = () => {
                     <span className="text-sm">Verify Farmers</span>
                   </Button>
                   <Button variant="outline" className="h-20 flex flex-col gap-2">
-                    <BarChart3 className="h-6 w-6" />
-                    <span className="text-sm">View Analytics</span>
+                    <Target className="h-6 w-6" />
+                    <span className="text-sm">Verify Campaigns</span>
                   </Button>
                   <Button variant="outline" className="h-20 flex flex-col gap-2">
-                    <Mail className="h-6 w-6" />
-                    <span className="text-sm">Send Notifications</span>
+                    <BarChart3 className="h-6 w-6" />
+                    <span className="text-sm">View Analytics</span>
                   </Button>
                   <Button variant="outline" className="h-20 flex flex-col gap-2">
                     <Download className="h-6 w-6" />
@@ -626,6 +777,319 @@ const AdminDashboard = () => {
           </Card>
         </TabsContent>
 
+        {/* Campaigns Tab */}
+        <TabsContent value="campaigns" className="space-y-6">
+          {/* Campaign Stats Overview */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="p-4 text-center">
+                <Target className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+                <p className="text-2xl font-bold">{campaignStats.totalCampaigns || 0}</p>
+                <p className="text-sm text-gray-600">Total Campaigns</p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="p-4 text-center">
+                <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                <p className="text-2xl font-bold">{campaigns.filter(c => c.verified).length}</p>
+                <p className="text-sm text-gray-600">Verified Campaigns</p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="p-4 text-center">
+                <Clock className="h-8 w-8 text-yellow-600 mx-auto mb-2" />
+                <p className="text-2xl font-bold">{campaigns.filter(c => !c.verified && c.status === 'active').length}</p>
+                <p className="text-sm text-gray-600">Pending Verification</p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="p-4 text-center">
+                <DollarSign className="h-8 w-8 text-purple-600 mx-auto mb-2" />
+                <p className="text-2xl font-bold">{campaignStats.totalRaised?.toLocaleString() || 0} PLN</p>
+                <p className="text-sm text-gray-600">Total Raised</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Campaign Filters */}
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex-1">
+                  <Label htmlFor="campaignSearch">Search Campaigns</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      id="campaignSearch"
+                      placeholder="Search by title, farmer, farm name, or category..."
+                      value={campaignSearchTerm}
+                      onChange={(e) => setCampaignSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <Label>Status Filter</Label>
+                  <Select value={campaignFilterStatus} onValueChange={setCampaignFilterStatus}>
+                    <SelectTrigger className="w-48">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Campaigns</SelectItem>
+                      <SelectItem value="pending">Pending Verification</SelectItem>
+                      <SelectItem value="verified">Verified</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="funded">Funded</SelectItem>
+                      <SelectItem value="expired">Expired</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Campaigns Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Campaign Management ({filteredCampaigns.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-2">Campaign</th>
+                      <th className="text-left p-2">Farmer</th>
+                      <th className="text-left p-2">Status</th>
+                      <th className="text-left p-2">Progress</th>
+                      <th className="text-left p-2">Created</th>
+                      <th className="text-left p-2">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredCampaigns.map((campaign) => (
+                      <tr key={campaign.id} className="border-b hover:bg-gray-50">
+                        <td className="p-2">
+                          <div>
+                            <p className="font-medium line-clamp-1">{campaign.title}</p>
+                            <p className="text-sm text-gray-500">{campaign.category}</p>
+                            <div className="flex gap-1 mt-1">
+                              {campaign.verified && (
+                                <Badge className="text-xs bg-green-100 text-green-800">
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Verified
+                                </Badge>
+                              )}
+                              {campaign.featured && (
+                                <Badge className="text-xs bg-yellow-100 text-yellow-800">
+                                  <Star className="w-3 h-3 mr-1" />
+                                  Featured
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-2">
+                          <div>
+                            <p className="font-medium">{campaign.farmerName}</p>
+                            <p className="text-sm text-gray-500">{campaign.farmName}</p>
+                          </div>
+                        </td>
+                        <td className="p-2">
+                          <Badge 
+                            className={
+                              campaign.status === 'active' ? 'bg-green-100 text-green-800' :
+                              campaign.status === 'draft' ? 'bg-gray-100 text-gray-800' :
+                              campaign.status === 'funded' ? 'bg-blue-100 text-blue-800' :
+                              'bg-red-100 text-red-800'
+                            }
+                          >
+                            {campaign.status}
+                          </Badge>
+                        </td>
+                        <td className="p-2">
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span>{campaign.currentAmount?.toLocaleString() || 0} PLN</span>
+                              <span>{Math.round(((campaign.currentAmount || 0) / (campaign.goalAmount || 1)) * 100)}%</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-1">
+                              <div
+                                className="bg-green-600 h-1 rounded-full"
+                                style={{ 
+                                  width: `${Math.min(((campaign.currentAmount || 0) / (campaign.goalAmount || 1)) * 100, 100)}%` 
+                                }}
+                              ></div>
+                            </div>
+                            <p className="text-xs text-gray-500">
+                              Goal: {campaign.goalAmount?.toLocaleString()} PLN • {campaign.backerCount || 0} backers
+                            </p>
+                          </div>
+                        </td>
+                        <td className="p-2 text-sm text-gray-600">
+                          {formatDate(campaign.createdAt)}
+                        </td>
+                        <td className="p-2">
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedCampaign(campaign);
+                                setShowCampaignDetails(true);
+                              }}
+                            >
+                              <Eye className="h-3 w-3" />
+                            </Button>
+                            
+                            {!campaign.verified ? (
+                              <Button
+                                size="sm"
+                                onClick={() => handleVerifyCampaign(campaign.id)}
+                                className="bg-green-600 hover:bg-green-700"
+                              >
+                                <CheckCircle className="h-3 w-3" />
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleUnverifyCampaign(campaign.id)}
+                              >
+                                <XCircle className="h-3 w-3" />
+                              </Button>
+                            )}
+                            
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleDeleteCampaign(campaign.id)}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                
+                {filteredCampaigns.length === 0 && (
+                  <div className="text-center py-8">
+                    <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600">No campaigns found</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Pending Verification Queue */}
+          {campaigns.filter(c => !c.verified && c.status === 'active').length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Clock className="h-5 w-5" />
+                  Campaign Verification Queue
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {campaigns
+                    .filter(c => !c.verified && c.status === 'active')
+                    .map((campaign) => (
+                      <div key={campaign.id} className="border rounded-lg p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-lg">{campaign.title}</h3>
+                            <p className="text-gray-600 mt-1">{campaign.description}</p>
+                            
+                            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <Label className="text-xs text-gray-500">Campaign Details</Label>
+                                <div className="space-y-1">
+                                  <p className="text-sm">
+                                    <strong>Category:</strong> {campaign.category}
+                                  </p>
+                                  <p className="text-sm">
+                                    <strong>Goal:</strong> {campaign.goalAmount?.toLocaleString()} PLN
+                                  </p>
+                                  <p className="text-sm">
+                                    <strong>Duration:</strong> {campaign.duration} days
+                                  </p>
+                                  <p className="text-sm">
+                                    <strong>Location:</strong> {campaign.location}
+                                  </p>
+                                </div>
+                              </div>
+                              
+                              <div>
+                                <Label className="text-xs text-gray-500">Farmer Information</Label>
+                                <div className="space-y-1">
+                                  <p className="text-sm">
+                                    <strong>Farmer:</strong> {campaign.farmerName}
+                                  </p>
+                                  <p className="text-sm">
+                                    <strong>Farm:</strong> {campaign.farmName}
+                                  </p>
+                                  <p className="text-sm">
+                                    <strong>Current Progress:</strong> {campaign.currentAmount?.toLocaleString() || 0} PLN ({campaign.backerCount || 0} backers)
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {campaign.environmentalImpact && (
+                              <div className="mt-3">
+                                <Label className="text-xs text-gray-500">Environmental Impact</Label>
+                                <p className="text-sm">{campaign.environmentalImpact}</p>
+                              </div>
+                            )}
+                            
+                            {campaign.tags && campaign.tags.length > 0 && (
+                              <div className="mt-3">
+                                <Label className="text-xs text-gray-500">Tags</Label>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {campaign.tags.map((tag, index) => (
+                                    <Badge key={index} variant="outline" className="text-xs">
+                                      {tag}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="flex gap-2 ml-4">
+                            <Button
+                              onClick={() => handleVerifyCampaign(campaign.id)}
+                              className="bg-green-600 hover:bg-green-700"
+                            >
+                              <CheckCircle className="w-4 h-4 mr-2" />
+                              Verify & Feature
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              onClick={() => handleDeleteCampaign(campaign.id)}
+                            >
+                              <XCircle className="w-4 h-4 mr-2" />
+                              Reject
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
         {/* Analytics Tab */}
         <TabsContent value="analytics" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -642,11 +1106,26 @@ const AdminDashboard = () => {
             
             <Card>
               <CardHeader>
-                <CardTitle>Revenue Analytics</CardTitle>
+                <CardTitle>Campaign Performance</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-64 flex items-center justify-center bg-gray-50 rounded">
-                  <p className="text-gray-500">Revenue chart would go here</p>
+                <div className="space-y-4">
+                  <div className="flex justify-between">
+                    <span>Success Rate:</span>
+                    <span className="font-bold">{campaignStats.successRate || 0}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Average Raised:</span>
+                    <span className="font-bold">{campaignStats.averageRaised?.toLocaleString() || 0} PLN</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Total Backers:</span>
+                    <span className="font-bold">{campaignStats.totalBackers || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Funding Rate:</span>
+                    <span className="font-bold">{campaignStats.fundingRate || 0}%</span>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -764,6 +1243,127 @@ const AdminDashboard = () => {
                   >
                     <Trash2 className="w-4 h-4 mr-2" />
                     Delete User
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Campaign Details Modal */}
+      {showCampaignDetails && selectedCampaign && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <Card className="w-full max-w-4xl max-h-96 overflow-y-auto">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Campaign Details</CardTitle>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowCampaignDetails(false)}
+                >
+                  <XCircle className="w-4 h-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                {/* Campaign Header */}
+                <div>
+                  <h2 className="text-2xl font-bold">{selectedCampaign.title}</h2>
+                  <p className="text-gray-600 mt-1">{selectedCampaign.description}</p>
+                  <div className="flex gap-2 mt-2">
+                    <Badge variant="secondary">{selectedCampaign.category}</Badge>
+                    <Badge className={selectedCampaign.verified ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>
+                      {selectedCampaign.verified ? "Verified" : "Pending"}
+                    </Badge>
+                    {selectedCampaign.featured && (
+                      <Badge className="bg-yellow-100 text-yellow-800">
+                        <Star className="w-3 h-3 mr-1" />
+                        Featured
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                {/* Campaign Progress */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card>
+                    <CardContent className="p-4 text-center">
+                      <DollarSign className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                      <p className="text-2xl font-bold">{selectedCampaign.currentAmount?.toLocaleString() || 0}</p>
+                      <p className="text-sm text-gray-600">PLN Raised</p>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card>
+                    <CardContent className="p-4 text-center">
+                      <Target className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+                      <p className="text-2xl font-bold">{selectedCampaign.goalAmount?.toLocaleString() || 0}</p>
+                      <p className="text-sm text-gray-600">PLN Goal</p>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card>
+                    <CardContent className="p-4 text-center">
+                      <Users className="h-8 w-8 text-purple-600 mx-auto mb-2" />
+                      <p className="text-2xl font-bold">{selectedCampaign.backerCount || 0}</p>
+                      <p className="text-sm text-gray-600">Backers</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Progress Bar */}
+                <div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span>Progress</span>
+                    <span>{Math.round(((selectedCampaign.currentAmount || 0) / (selectedCampaign.goalAmount || 1)) * 100)}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div
+                      className="bg-green-600 h-3 rounded-full"
+                      style={{ 
+                        width: `${Math.min(((selectedCampaign.currentAmount || 0) / (selectedCampaign.goalAmount || 1)) * 100, 100)}%` 
+                      }}
+                    ></div>
+                  </div>
+                </div>
+
+                {/* Admin Actions */}
+                <div className="flex gap-4 pt-4 border-t">
+                  {!selectedCampaign.verified ? (
+                    <Button
+                      onClick={() => {
+                        handleVerifyCampaign(selectedCampaign.id);
+                        setShowCampaignDetails(false);
+                      }}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Verify & Feature Campaign
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        handleUnverifyCampaign(selectedCampaign.id);
+                        setShowCampaignDetails(false);
+                      }}
+                    >
+                      <XCircle className="w-4 h-4 mr-2" />
+                      Remove Verification
+                    </Button>
+                  )}
+                  
+                  <Button
+                    variant="destructive"
+                    onClick={() => {
+                      handleDeleteCampaign(selectedCampaign.id);
+                      setShowCampaignDetails(false);
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete Campaign
                   </Button>
                 </div>
               </div>
