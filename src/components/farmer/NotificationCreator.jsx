@@ -179,23 +179,41 @@ const NotificationCreator = () => {
         getOrdersByRolnik(currentUser.uid)
       ]);
 
+      console.log('Raw farmer data loaded:');
+      console.log('Products:', farmerProducts);
+      console.log('Orders:', orders);
+
       setProducts(farmerProducts || []);
       setRecentOrders(orders || []);
       
-      // Extract unique customers with proper ID handling
+      // Extract unique customers - FIXED: Use clientId instead of customerId
       const uniqueCustomers = {};
-      const validOrders = (orders || []).filter(order => order.customerId); // Only orders with customer IDs
+      const validOrders = (orders || []).filter(order => {
+        console.log('Processing order:', {
+          id: order.id,
+          clientId: order.clientId,        // ← Your orders use clientId
+          customerId: order.customerId,    // ← This doesn't exist
+          customerName: order.customerName,
+          customerEmail: order.customerEmail,
+          hasClientId: !!order.clientId
+        });
+        return order.clientId; // ← FIXED: Check for clientId instead of customerId
+      });
+      
+      console.log('Valid orders with client IDs:', validOrders);
       
       validOrders.forEach(order => {
-        const customerId = order.customerId;
+        const customerId = order.clientId; // ← FIXED: Use clientId as customerId
         if (customerId && !uniqueCustomers[customerId]) {
-          uniqueCustomers[customerId] = {
+          const customerData = {
             id: customerId,
             name: order.customerName || order.customerEmail?.split('@')[0] || 'Unknown Customer',
             email: order.customerEmail || '',
             lastOrderDate: order.createdAt,
             orderCount: 1
           };
+          uniqueCustomers[customerId] = customerData;
+          console.log('Added customer:', customerData);
         } else if (customerId && uniqueCustomers[customerId]) {
           // Update order count
           uniqueCustomers[customerId].orderCount += 1;
@@ -205,15 +223,23 @@ const NotificationCreator = () => {
           if (orderDate > currentDate) {
             uniqueCustomers[customerId].lastOrderDate = order.createdAt;
           }
+          console.log('Updated customer:', customerId, 'order count:', uniqueCustomers[customerId].orderCount);
         }
       });
       
       const customerList = Object.values(uniqueCustomers);
-      console.log('Loaded customers:', customerList); // Debug log
+      console.log('Final customer list:', customerList);
       setCustomers(customerList);
       
-      if (customerList.length === 0) {
-        console.warn('No customers found with valid IDs');
+      if (customerList.length === 0 && orders && orders.length > 0) {
+        console.error('❌ ISSUE: Found orders but no customers!');
+        console.error('Checking if orders have clientId field...');
+        const hasClientIds = orders.some(order => order.clientId);
+        if (hasClientIds) {
+          console.log('✅ Orders have clientId field - extraction should work');
+        } else {
+          console.error('❌ Orders missing clientId field');
+        }
       }
       
     } catch (error) {
@@ -239,10 +265,10 @@ const NotificationCreator = () => {
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
         const recentCustomerIds = new Set();
         recentOrders.forEach(order => {
-          if (order.customerId) {
+          if (order.clientId) { // ← FIXED: Use clientId
             const orderDate = new Date(order.createdAt?.toDate?.() || order.createdAt);
             if (orderDate > thirtyDaysAgo) {
-              recentCustomerIds.add(order.customerId);
+              recentCustomerIds.add(order.clientId); // ← FIXED: Use clientId
             }
           }
         });
@@ -253,8 +279,8 @@ const NotificationCreator = () => {
         if (notificationForm.relatedProduct && notificationForm.relatedProduct !== 'none') {
           const productCustomerIds = new Set();
           recentOrders.forEach(order => {
-            if (order.customerId && order.items?.some(item => item.productId === notificationForm.relatedProduct)) {
-              productCustomerIds.add(order.customerId);
+            if (order.clientId && order.items?.some(item => item.productId === notificationForm.relatedProduct)) { // ← FIXED: Use clientId
+              productCustomerIds.add(order.clientId); // ← FIXED: Use clientId
             }
           });
           reach = productCustomerIds.size;
@@ -379,9 +405,9 @@ const NotificationCreator = () => {
             recentOrders
               .filter(order => {
                 const orderDate = new Date(order.createdAt?.toDate?.() || order.createdAt);
-                return orderDate > thirtyDaysAgo && order.customerId;
+                return orderDate > thirtyDaysAgo && order.clientId; // ← FIXED: Use clientId
               })
-              .map(order => order.customerId)
+              .map(order => order.clientId) // ← FIXED: Use clientId
               .filter(id => id) // Filter out undefined IDs
           )];
           break;
@@ -392,9 +418,9 @@ const NotificationCreator = () => {
               recentOrders
                 .filter(order => {
                   const hasProduct = order.items?.some(item => item.productId === notificationForm.relatedProduct);
-                  return hasProduct && order.customerId;
+                  return hasProduct && order.clientId; // ← FIXED: Use clientId
                 })
-                .map(order => order.customerId)
+                .map(order => order.clientId) // ← FIXED: Use clientId
                 .filter(id => id) // Filter out undefined IDs
             )];
           }
@@ -927,8 +953,28 @@ const NotificationCreator = () => {
                     </div>
                   </div>
                   <div className="mt-2 text-xs text-yellow-700">
-                    {customers.length} total customers • {recentOrders.length} total orders • 
-                    {customers.filter(c => c.id).length} valid customer IDs
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        📊 {customers.length} total customers<br/>
+                        📦 {recentOrders.length} total orders<br/>
+                        ✅ {customers.filter(c => c.id).length} valid customer IDs
+                      </div>
+                      <div>
+                        🔍 {recentOrders.filter(o => o.customerId).length} orders with customer IDs<br/>
+                        {recentOrders.length > 0 && customers.length === 0 && (
+                          <span className="text-red-600 font-medium">
+                            ⚠️ Data mismatch detected!
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {recentOrders.length > 0 && customers.length === 0 && (
+                      <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-red-700">
+                        <strong>Issue Found:</strong> You have {recentOrders.length} order(s) but 0 customers. 
+                        This means your orders are missing the <code>clientId</code> field. 
+                        Check browser console for detailed order structure.
+                      </div>
+                    )}
                   </div>
                 </div>
                 

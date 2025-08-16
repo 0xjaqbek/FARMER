@@ -1,3 +1,4 @@
+// src/pages/chat/ChatDetail.jsx - FIXED version
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
@@ -15,19 +16,30 @@ import ChatInput from '@/components/chat/ChatInput';
 import { ArrowLeft, User, MessagesSquare } from 'lucide-react';
 
 const ChatDetail = () => {
-  const { id } = useParams();
+  // ✅ FIXED: Only extract 'id' once and rename it clearly
   const { id: conversationId } = useParams();
   const { currentUser, userProfile } = useAuth();
   const navigate = useNavigate();
+  
+  // 🔍 DEBUG: Add debugging information
+  console.log('ChatDetail mounted with:', {
+    conversationId,
+    rawParams: useParams(),
+    currentUser: !!currentUser,
+    userProfile: !!userProfile,
+    pathname: window.location.pathname,
+    search: window.location.search
+  });
   
   const [conversation, setConversation] = useState(null);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isLoadingConversation, setIsLoadingConversation] = useState(false);
   
   const messagesEndRef = useRef(null);
   
-  const otherParticipant = conversation?.participantsInfo.find(
+  const otherParticipant = conversation?.participantsInfo?.find(
     p => p.uid !== currentUser?.uid
   );
   
@@ -38,71 +50,160 @@ const ChatDetail = () => {
   
   // Load conversation and subscribe to messages
   useEffect(() => {
-    if (!currentUser || !conversationId) return;
+    console.log('useEffect triggered with:', {
+      currentUser: !!currentUser,
+      conversationId,
+      conversationIdType: typeof conversationId,
+      conversationIdLength: conversationId?.length
+    });
+    
+    if (!currentUser) {
+      console.log('❌ No current user, skipping conversation load');
+      setError('User not authenticated');
+      setLoading(false);
+      return;
+    }
+    
+    if (!conversationId) {
+      console.log('❌ No conversationId provided');
+      setError('No conversation ID provided in URL');
+      setLoading(false);
+      return;
+    }
+    
+    if (conversationId.trim() === '') {
+      console.log('❌ Empty conversationId');
+      setError('Invalid conversation ID');
+      setLoading(false);
+      return;
+    }
+    
+    console.log('✅ All requirements met, loading conversation:', conversationId);
+    
+    let messagesUnsubscribe;
     
     const loadConversation = async () => {
-        try {
-          setLoading(true);
-          const conversation = await getConversationById(id); // may create one
-          setConversation(conversation);
-      
-          // Wait for Firestore to propagate the new conversation if just created
-          await new Promise(resolve => setTimeout(resolve, 500)); // small delay
-      
-          // Now mark it as read
-          await markConversationAsRead(conversation.id, currentUser.uid);
-      
-        } catch (error) {
-          console.error('Error loading conversation:', error);
-          setError(error.message);
-        } finally {
-          setLoading(false);
+      try {
+        setLoading(true);
+        setIsLoadingConversation(true);
+        setError('');
+        
+        console.log('Fetching conversation with ID:', conversationId);
+        
+        // ✅ FIXED: Use conversationId consistently
+        const conversationData = await getConversationById(conversationId);
+        
+        if (!conversationData) {
+          throw new Error('Conversation not found');
         }
-      };
-      
+        
+        console.log('Conversation loaded:', conversationData);
+        setConversation(conversationData);
+        
+        // ✅ FIXED: Only mark as read after conversation is loaded
+        try {
+          await markConversationAsRead(conversationData.id, currentUser.uid);
+          console.log('Conversation marked as read');
+        } catch (markReadError) {
+          console.warn('Failed to mark conversation as read:', markReadError);
+          // Don't fail the whole load for this
+        }
+        
+      } catch (error) {
+        console.error('Error loading conversation:', error);
+        setError(`Failed to load conversation: ${error.message}`);
+      } finally {
+        setIsLoadingConversation(false);
+        setLoading(false);
+      }
+    };
     
-    loadConversation();
-    
-    // Subscribe to messages
-    const unsubscribe = subscribeToMessages(conversationId, (data) => {
-      setMessages(data);
+    // ✅ FIXED: Subscribe to messages separately and only once
+    const subscribeToMessagesOnce = () => {
+      console.log('Subscribing to messages for conversation:', conversationId);
       
-      // Mark conversation as read when new messages arrive
-      if (data.length > 0 && data[data.length - 1].senderId !== currentUser.uid) {
-        markConversationAsRead(conversationId, currentUser.uid).catch(err => {
-          console.error('Error marking conversation as read:', err);
-        });
+      messagesUnsubscribe = subscribeToMessages(conversationId, (messageData) => {
+        console.log('Messages updated:', messageData.length, 'messages');
+        setMessages(messageData);
+        
+        // ✅ FIXED: Only mark as read if there are messages and the last message isn't from current user
+        if (messageData.length > 0) {
+          const lastMessage = messageData[messageData.length - 1];
+          if (lastMessage.senderId !== currentUser.uid) {
+            markConversationAsRead(conversationId, currentUser.uid).catch(err => {
+              console.warn('Error marking conversation as read:', err);
+            });
+          }
+        }
+      });
+    };
+    
+    // Load conversation first, then subscribe to messages
+    loadConversation().then(() => {
+      // Only subscribe to messages if conversation loaded successfully
+      if (!error) {
+        subscribeToMessagesOnce();
       }
     });
     
-    return () => unsubscribe();
-  }, [currentUser, conversationId]);
+    // ✅ FIXED: Proper cleanup
+    return () => {
+      console.log('Cleaning up chat subscriptions');
+      if (messagesUnsubscribe) {
+        messagesUnsubscribe();
+      }
+    };
+  }, [currentUser?.uid, conversationId]); // ✅ FIXED: Only depend on essential values
   
   // Handle sending message
   const handleSendMessage = async (text) => {
-    if (!currentUser || !conversation) return;
+    if (!currentUser || !conversation || !text.trim()) {
+      console.warn('Cannot send message:', { 
+        hasUser: !!currentUser, 
+        hasConversation: !!conversation, 
+        hasText: !!text.trim() 
+      });
+      return;
+    }
     
-    const messageData = {
-      text,
-      senderId: currentUser.uid,
-      senderName: `${userProfile.firstName} ${userProfile.lastName}`,
-      recipientId: otherParticipant.uid
-    };
-    
-    await sendMessage(conversationId, messageData);
+    try {
+      console.log('Sending message:', text);
+      
+      const messageData = {
+        text: text.trim(),
+        senderId: currentUser.uid,
+        senderName: `${userProfile?.firstName || ''} ${userProfile?.lastName || ''}`.trim() || 'Unknown User',
+        recipientId: otherParticipant?.uid
+      };
+      
+      // ✅ FIXED: Use conversation.id consistently
+      await sendMessage(conversation.id, messageData);
+      console.log('Message sent successfully');
+      
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setError(`Failed to send message: ${error.message}`);
+    }
   };
   
   // Get initials for avatar
   const getInitials = (name) => {
+    if (!name) return 'U';
     return name
       .split(' ')
       .map(n => n[0])
       .join('')
-      .toUpperCase();
+      .toUpperCase()
+      .substring(0, 2);
   };
   
   if (loading) {
-    return <div className="text-center py-8">Loading conversation...</div>;
+    return (
+      <div className="text-center py-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-4"></div>
+        <p>Loading conversation...</p>
+      </div>
+    );
   }
   
   if (error) {
@@ -167,7 +268,11 @@ const ChatDetail = () => {
           ) : (
             <>
               {messages.map(message => (
-                <ChatMessage key={message.id} message={message} />
+                <ChatMessage 
+                  key={message.id} 
+                  message={message} 
+                  currentUserId={currentUser.uid}
+                />
               ))}
               <div ref={messagesEndRef} />
             </>
@@ -175,7 +280,10 @@ const ChatDetail = () => {
         </CardContent>
         
         <div className="p-3 border-t">
-          <ChatInput onSendMessage={handleSendMessage} />
+          <ChatInput 
+            onSendMessage={handleSendMessage} 
+            disabled={isLoadingConversation}
+          />
         </div>
       </Card>
     </div>
