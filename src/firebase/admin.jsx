@@ -4,16 +4,38 @@ import {
   getDocs, 
   doc, 
   updateDoc, 
-  addDoc, 
   query, 
   where, 
   orderBy, 
   limit,
   serverTimestamp,
   getDoc,
-  writeBatch
+  writeBatch,
+  addDoc
 } from 'firebase/firestore';
 import { db } from './config';
+
+// Helper function to safely convert dates
+const safeToDate = (timestamp) => {
+  if (!timestamp) return new Date();
+  
+  // If it's already a Date object
+  if (timestamp instanceof Date) return timestamp;
+  
+  // If it's a Firestore Timestamp
+  if (timestamp && typeof timestamp.toDate === 'function') {
+    return timestamp.toDate();
+  }
+  
+  // If it's a string or number, try to convert
+  if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+    const date = new Date(timestamp);
+    return isNaN(date.getTime()) ? new Date() : date;
+  }
+  
+  // Fallback to current date
+  return new Date();
+};
 
 // Get all users with admin privileges
 export const getAllUsers = async () => {
@@ -29,10 +51,11 @@ export const getAllUsers = async () => {
       users.push({
         uid: doc.id,
         ...userData,
-        // Convert Firestore timestamps to Date objects
-        createdAt: userData.createdAt?.toDate() || new Date(),
-        updatedAt: userData.updatedAt?.toDate() || new Date(),
-        lastLoginAt: userData.lastLoginAt?.toDate() || null
+        // Safely convert Firestore timestamps to Date objects
+        createdAt: safeToDate(userData.createdAt),
+        updatedAt: safeToDate(userData.updatedAt),
+        lastLoginAt: safeToDate(userData.lastLoginAt),
+        verificationDate: safeToDate(userData.verificationDate)
       });
     });
     
@@ -60,9 +83,10 @@ export const getUsersByRole = async (role) => {
       users.push({
         uid: doc.id,
         ...userData,
-        createdAt: userData.createdAt?.toDate() || new Date(),
-        updatedAt: userData.updatedAt?.toDate() || new Date(),
-        lastLoginAt: userData.lastLoginAt?.toDate() || null
+        createdAt: safeToDate(userData.createdAt),
+        updatedAt: safeToDate(userData.updatedAt),
+        lastLoginAt: safeToDate(userData.lastLoginAt),
+        verificationDate: safeToDate(userData.verificationDate)
       });
     });
     
@@ -94,8 +118,9 @@ export const getUnverifiedFarmers = async () => {
       farmers.push({
         uid: doc.id,
         ...userData,
-        createdAt: userData.createdAt?.toDate() || new Date(),
-        updatedAt: userData.updatedAt?.toDate() || new Date()
+        createdAt: safeToDate(userData.createdAt),
+        updatedAt: safeToDate(userData.updatedAt),
+        verificationDate: safeToDate(userData.verificationDate)
       });
     });
     
@@ -324,7 +349,7 @@ export const getRecentActivity = async (limitCount = 20) => {
         id: `user_${doc.id}`,
         type: 'user_registration',
         message: `New ${userData.role === 'rolnik' ? 'farmer' : 'customer'} registered: ${userData.firstName} ${userData.lastName}`,
-        timestamp: userData.createdAt?.toDate() || new Date(),
+        timestamp: safeToDate(userData.createdAt),
         userId: doc.id,
         userRole: userData.role
       });
@@ -346,7 +371,7 @@ export const getRecentActivity = async (limitCount = 20) => {
           id: `log_${doc.id}`,
           type: logData.type,
           message: `Farmer verified: ${logData.farmName || logData.farmerName}`,
-          timestamp: logData.timestamp?.toDate() || new Date(),
+          timestamp: safeToDate(logData.timestamp),
           userId: logData.farmerId
         });
       });
