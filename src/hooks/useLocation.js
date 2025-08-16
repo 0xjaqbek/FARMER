@@ -1,132 +1,112 @@
+
+
 // src/hooks/useLocation.js
-// Custom hook for location management
-
 import { useState, useEffect } from 'react';
-import { LocationService } from '../services/locationService';
 
-export function useLocation() {
+export const useLocation = () => {
   const [location, setLocation] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [permission, setPermission] = useState('prompt'); // 'granted', 'denied', 'prompt'
 
-  // Check if geolocation is supported
-  const isSupported = 'geolocation' in navigator;
-
-  // Request location permission and get current location
-  const requestLocation = async () => {
-    if (!isSupported) {
-      setError(new Error('Geolocation is not supported by this browser'));
-      return;
+  // Check if location is already stored
+  useEffect(() => {
+    const storedLocation = localStorage.getItem('userLocation');
+    if (storedLocation) {
+      try {
+        const parsed = JSON.parse(storedLocation);
+        // Check if location is less than 1 hour old
+        if (Date.now() - parsed.timestamp < 3600000) {
+          setLocation(parsed);
+        } else {
+          localStorage.removeItem('userLocation');
+        }
+      } catch  {
+        localStorage.removeItem('userLocation');
+      }
     }
 
-    setLoading(true);
-    setError(null);
-
-    try {
-      const position = await LocationService.getCurrentLocation();
-      setLocation({
-        lat: position.lat,
-        lng: position.lng,
-        accuracy: position.accuracy
+    // Check permission status
+    if (navigator.permissions) {
+      navigator.permissions.query({ name: 'geolocation' }).then(result => {
+        setPermission(result.state);
       });
+    }
+  }, []);
+
+  const requestLocation = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const position = await new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+          reject(new Error('Geolocation is not supported by this browser'));
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: pos.coords.accuracy
+          }),
+          (error) => {
+            let message = 'Failed to get location';
+            switch (error.code) {
+              case error.PERMISSION_DENIED:
+                message = 'Location access denied by user';
+                break;
+              case error.POSITION_UNAVAILABLE:
+                message = 'Location information is unavailable';
+                break;
+              case error.TIMEOUT:
+                message = 'Location request timed out';
+                break;
+            }
+            reject(new Error(message));
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 300000 // 5 minutes
+          }
+        );
+      });
+      
+      // Store location with timestamp
+      const locationData = {
+        ...position,
+        timestamp: Date.now()
+      };
+      
+      setLocation(locationData);
+      localStorage.setItem('userLocation', JSON.stringify(locationData));
       setPermission('granted');
+      
+      return locationData;
     } catch (error) {
-      setError(error);
-      if (error.message.includes('denied')) {
-        setPermission('denied');
-      }
+      setError(error.message);
+      setPermission('denied');
+      throw error;
     } finally {
       setLoading(false);
     }
   };
 
-  // Get location from stored user profile
-  const getStoredLocation = () => {
-    const storedLocation = localStorage.getItem('userLocation');
-    if (storedLocation) {
-      try {
-        const parsed = JSON.parse(storedLocation);
-        setLocation(parsed);
-        return parsed;
-      } catch (error) {
-        console.error('Error parsing stored location:', error);
-      }
-    }
-    return null;
+  const clearLocation = () => {
+    setLocation(null);
+    localStorage.removeItem('userLocation');
   };
-
-  // Store location for future use
-  const storeLocation = (locationData) => {
-    try {
-      localStorage.setItem('userLocation', JSON.stringify(locationData));
-    } catch (error) {
-      console.error('Error storing location:', error);
-    }
-  };
-
-  // Update location with new coordinates
-  const updateLocation = (newLocation) => {
-    setLocation(newLocation);
-    storeLocation(newLocation);
-  };
-
-  // Calculate distance to another location
-  const calculateDistanceTo = (targetLocation) => {
-    if (!location || !targetLocation) return null;
-    
-    return LocationService.calculateDistance(
-      location.lat,
-      location.lng,
-      targetLocation.lat,
-      targetLocation.lng
-    );
-  };
-
-  // Get nearby farmers
-  const getNearbyFarmers = async (maxDistance = 50) => {
-    if (!location) return [];
-    
-    try {
-      return await LocationService.findNearbyFarmers(location, maxDistance);
-    } catch (error) {
-      console.error('Error getting nearby farmers:', error);
-      return [];
-    }
-  };
-
-  // Check permission status on mount
-  useEffect(() => {
-    if (isSupported && navigator.permissions) {
-      navigator.permissions.query({ name: 'geolocation' })
-        .then((result) => {
-          setPermission(result.state);
-          
-          // If permission is granted, try to get stored location
-          if (result.state === 'granted') {
-            getStoredLocation();
-          }
-        })
-        .catch((error) => {
-          console.error('Error checking geolocation permission:', error);
-        });
-    } else {
-      // Fallback: try to get stored location
-      getStoredLocation();
-    }
-  }, [isSupported]);
 
   return {
     location,
     loading,
     error,
     permission,
-    isSupported,
     requestLocation,
-    updateLocation,
-    calculateDistanceTo,
-    getNearbyFarmers,
-    getStoredLocation,
-    storeLocation
+    clearLocation,
+    hasLocation: !!location
   };
-}
+};
+

@@ -1,4 +1,4 @@
-// src/components/layout/MainLayout.jsx - Enhanced with better navigation and notifications
+// src/components/layout/MainLayout.jsx - Fixed with proper search navigation
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -19,6 +19,7 @@ import {
   Home, 
   Search, 
   ShoppingCart, 
+  ShoppingBag,
   Package, 
   MessageSquare, 
   User, 
@@ -31,7 +32,8 @@ import {
   Bell,
   ChevronDown,
   Target,
-  Heart
+  Heart,
+  MapPin
 } from 'lucide-react';
 
 // Import NotificationBell component
@@ -80,6 +82,7 @@ const MainLayout = ({ children }) => {
     }
   };
 
+  // FIXED: Clean navigation items without duplicates
   const navigationItems = [
     {
       name: 'Dashboard',
@@ -88,13 +91,23 @@ const MainLayout = ({ children }) => {
       show: isAuthenticated,
       description: 'Overview and quick actions'
     },
+    // SEARCH: Show for customers and admins
+    {
+      name: 'Search Products',
+      href: '/search',
+      icon: Search,
+      show: isKlient || isAdmin,
+      description: 'Find local farm products with location-based search'
+    },
+    // BROWSE: Show for customers and admins
     {
       name: 'Browse Products',
       href: '/browse',
-      icon: Search,
+      icon: ShoppingBag,
       show: isKlient || isAdmin,
-      description: 'Discover fresh products'
+      description: 'Browse all available products'
     },
+    // FARMER: Product management
     {
       name: 'My Products',
       href: '/products/manage',
@@ -109,6 +122,7 @@ const MainLayout = ({ children }) => {
       show: isRolnik,
       description: 'List a new product'
     },
+    // ORDERS: Show for everyone
     {
       name: 'Orders',
       href: '/orders',
@@ -116,6 +130,22 @@ const MainLayout = ({ children }) => {
       show: isAuthenticated,
       description: 'View your orders'
     },
+    // CAMPAIGNS: Crowdfunding features
+    {
+      name: 'My Campaigns',
+      href: '/campaigns/manage',
+      icon: Target,
+      show: isRolnik,
+      description: 'Manage your crowdfunding campaigns'
+    },
+    {
+      name: 'Browse Campaigns',
+      href: '/campaigns',
+      icon: Heart,
+      show: isKlient || isAdmin,
+      description: 'Support farming projects'
+    },
+    // CHAT: Show for everyone
     {
       name: 'Messages',
       href: '/chat',
@@ -123,31 +153,15 @@ const MainLayout = ({ children }) => {
       show: isAuthenticated,
       description: 'Chat with customers/farmers'
     },
+    // ADMIN: Admin only
     {
       name: 'Admin Panel',
       href: '/admin',
-      icon: Shield, // Import Shield from lucide-react
+      icon: Shield,
       show: isAdmin,
       description: 'Admin dashboard and user management'
-    },
-    {
-      name: 'My Campaigns',
-      href: '/campaigns/manage',
-      icon: Target, // Import Target from lucide-react
-      show: isRolnik,
-      description: 'Manage your crowdfunding campaigns'
-    },
-    {
-      name: 'Browse Campaigns',
-      href: '/campaigns',
-      icon: Heart, // Import Heart from lucide-react
-      show: isKlient || isAdmin,
-      description: 'Support farming projects'
-    },
-
+    }
   ];
-
-  
 
   const visibleNavItems = navigationItems.filter(item => item.show);
 
@@ -229,6 +243,17 @@ const MainLayout = ({ children }) => {
 
             {/* Right side navigation */}
             <div className="hidden sm:ml-6 sm:flex sm:items-center space-x-3">
+              
+              {/* Quick Search Button (for customers) */}
+              {isKlient && (
+                <Link 
+                  to="/search" 
+                  className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-md hover:bg-gray-100"
+                  title="Quick Search"
+                >
+                  <Search className="h-5 w-5" />
+                </Link>
+              )}
               
               {/* Notification Bell */}
               <NotificationBell />
@@ -327,6 +352,16 @@ const MainLayout = ({ children }) => {
                           <div>
                             <p className="font-medium">Send Notifications</p>
                             <p className="text-xs text-gray-500">Notify your customers</p>
+                          </div>
+                        </Link>
+                      </DropdownMenuItem>
+                      
+                      <DropdownMenuItem asChild>
+                        <Link to="/farmer/location" className="cursor-pointer">
+                          <MapPin className="mr-3 h-4 w-4" />
+                          <div>
+                            <p className="font-medium">Set Farm Location</p>
+                            <p className="text-xs text-gray-500">Update your farm address</p>
                           </div>
                         </Link>
                       </DropdownMenuItem>
@@ -445,21 +480,39 @@ const MainLayout = ({ children }) => {
 
               {/* Farmer-specific mobile menu items */}
               {(isRolnik || isAdmin) && (
-                <Link
-                  to="/notifications/create"
-                  className={`flex items-center pl-3 pr-4 py-3 border-l-4 text-base font-medium transition-colors ${
-                    location.pathname === '/notifications/create'
-                      ? 'bg-green-50 border-green-500 text-green-700'
-                      : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
-                  }`}
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  <MessageSquare className="w-5 h-5 mr-3" />
-                  <div>
-                    <p className="font-medium">Send Notifications</p>
-                    <p className="text-xs text-gray-500">Notify your customers</p>
-                  </div>
-                </Link>
+                <>
+                  <Link
+                    to="/notifications/create"
+                    className={`flex items-center pl-3 pr-4 py-3 border-l-4 text-base font-medium transition-colors ${
+                      location.pathname === '/notifications/create'
+                        ? 'bg-green-50 border-green-500 text-green-700'
+                        : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
+                    }`}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <MessageSquare className="w-5 h-5 mr-3" />
+                    <div>
+                      <p className="font-medium">Send Notifications</p>
+                      <p className="text-xs text-gray-500">Notify your customers</p>
+                    </div>
+                  </Link>
+                  
+                  <Link
+                    to="/farmer/location"
+                    className={`flex items-center pl-3 pr-4 py-3 border-l-4 text-base font-medium transition-colors ${
+                      location.pathname === '/farmer/location'
+                        ? 'bg-green-50 border-green-500 text-green-700'
+                        : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
+                    }`}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <MapPin className="w-5 h-5 mr-3" />
+                    <div>
+                      <p className="font-medium">Set Farm Location</p>
+                      <p className="text-xs text-gray-500">Update your farm address</p>
+                    </div>
+                  </Link>
+                </>
               )}
             </div>
             

@@ -1,4 +1,4 @@
-// src/App.jsx - Enhanced with notification creator and better structure
+// src/App.jsx - Fixed version with no duplicates or errors
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from '@/components/ui/use-toast';
@@ -11,6 +11,10 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import CampaignCreator from './pages/campaigns/CampaignCreator';
 import CampaignViewer from './pages/campaigns/CampaignViewer';
 import CampaignManager from './pages/campaigns/CampaignManager';
+
+// FIXED: Correct import paths for search components
+import SearchWithMap from './components/search/SearchWithMap';
+import EnhancedLocationPicker from './components/location/EnhancedLocationPicker';
 
 // Existing imports
 import Login from './pages/Login';
@@ -109,6 +113,7 @@ const AppRoutes = () => {
           </ProtectedRoute>
         } />
 
+        {/* Campaign Routes */}
         <Route path="/campaigns" element={
          <ProtectedRoute>
             <MainLayout>
@@ -133,6 +138,27 @@ const AppRoutes = () => {
           </ProtectedRoute>
         } />
         
+        {/* SEARCH ROUTES - FIXED: Single route, correct component name */}
+        <Route path="/search" element={
+          <ProtectedRoute allowedRoles={['customer', 'client', 'klient']}>
+            <MainLayout>
+              <SearchWithMap />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+
+        {/* Farmer Location Setup Route */}
+        <Route path="/farmer/location" element={
+          <ProtectedRoute allowedRoles={['farmer', 'rolnik']}>
+            <MainLayout>
+              <EnhancedLocationPicker onLocationSet={(location) => {
+                // Handle location update
+                console.log('Location set:', location);
+              }} />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+
         {/* Product Routes */}
         <Route path="/browse" element={
           <ProtectedRoute allowedRoles={['klient', 'customer', 'admin']}>
@@ -257,7 +283,7 @@ const AppRoutes = () => {
           </ProtectedRoute>
         } />
         
-        {/* Admin Routes (if you have admin functionality) */}
+        {/* Admin Routes */}
         <Route path="/admin" element={
           <ProtectedRoute allowedRoles={['admin']}>
             <MainLayout>
