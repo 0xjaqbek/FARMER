@@ -138,16 +138,49 @@ const FarmersMap = ({
     farmers.forEach((farmer, index) => {
       console.log(`📍 Processing farmer ${index + 1}:`, farmer);
 
-      const coords = farmer.location?.coordinates;
+      // FIXED: Handle both coordinate formats
+      let coords = null;
+      
+      // Check for nested coordinates first (schema format)
+      if (farmer.location?.coordinates?.lat && farmer.location?.coordinates?.lng) {
+        coords = farmer.location.coordinates;
+        console.log(`📍 Found nested coordinates:`, coords);
+      }
+      // Check for direct lat/lng in location (current data format)
+      else if (farmer.location?.lat && farmer.location?.lng) {
+        coords = {
+          lat: farmer.location.lat,
+          lng: farmer.location.lng
+        };
+        console.log(`📍 Found direct coordinates:`, coords);
+      }
+      
       if (!coords) {
-        console.warn(`⚠️ No coordinates for farmer:`, farmer);
+        console.warn(`⚠️ No coordinates for farmer:`, {
+          id: farmer.id,
+          name: farmer.farmName || farmer.farmerName,
+          location: farmer.location
+        });
         return;
       }
 
+      // Extract lat/lng values (handle both formats)
       const position = {
         lat: coords.lat || coords.latitude,
         lng: coords.lng || coords.longitude
       };
+
+      // Validate coordinates are valid numbers
+      if (typeof position.lat !== 'number' || typeof position.lng !== 'number' ||
+          position.lat < -90 || position.lat > 90 || 
+          position.lng < -180 || position.lng > 180) {
+        console.warn(`⚠️ Invalid coordinates for farmer:`, {
+          id: farmer.id,
+          name: farmer.farmName || farmer.farmerName,
+          position
+        });
+        return;
+      }
 
       console.log(`📍 Creating marker at:`, position);
 
@@ -199,12 +232,30 @@ const FarmersMap = ({
       }
       
       farmers.forEach(farmer => {
-        const coords = farmer.location?.coordinates;
+        // Use the same coordinate extraction logic as above
+        let coords = null;
+        
+        if (farmer.location?.coordinates?.lat && farmer.location?.coordinates?.lng) {
+          coords = farmer.location.coordinates;
+        } else if (farmer.location?.lat && farmer.location?.lng) {
+          coords = {
+            lat: farmer.location.lat,
+            lng: farmer.location.lng
+          };
+        }
+        
         if (coords) {
-          bounds.extend({
+          const position = {
             lat: coords.lat || coords.latitude,
             lng: coords.lng || coords.longitude
-          });
+          };
+          
+          // Validate before extending bounds
+          if (typeof position.lat === 'number' && typeof position.lng === 'number' &&
+              position.lat >= -90 && position.lat <= 90 && 
+              position.lng >= -180 && position.lng <= 180) {
+            bounds.extend(position);
+          }
         }
       });
       
