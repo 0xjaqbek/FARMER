@@ -484,10 +484,10 @@ const MainLayout = ({ children }) => {
             </div>
           </div>
         </div>
-
+        
         {/* Mobile navigation menu */}
         {mobileMenuOpen && (
-          <div className="sm:hidden bg-white border-t">
+          <div className="sm:hidden bg-white border-t max-h-[calc(100vh-4rem)] overflow-y-auto">
             <div className="pt-2 pb-3 space-y-1">
               {visibleNavItems.map((item) => {
                 const Icon = item.icon;
@@ -569,21 +569,21 @@ const MainLayout = ({ children }) => {
               )}
             </div>
             
-            {/* Mobile user section */}
-            <div className="pt-4 pb-3 border-t border-gray-200">
+            {/* Mobile user section - STICKY AT BOTTOM */}
+            <div className="pt-4 pb-3 border-t border-gray-200 bg-gray-50 sticky bottom-0">
               <div className="flex items-center px-4 mb-3">
                 <div className="flex-shrink-0">
-                  <Avatar className="h-12 w-12">
+                  <Avatar className="h-10 w-10">
                     <AvatarFallback className="bg-green-600 text-white">
                       {getInitials()}
                     </AvatarFallback>
                   </Avatar>
                 </div>
                 <div className="ml-3 flex-1">
-                  <div className="text-base font-medium text-gray-800">
+                  <div className="text-sm font-medium text-gray-800">
                     {userProfile?.firstName} {userProfile?.lastName}
                   </div>
-                  <div className="text-sm font-medium text-gray-500">
+                  <div className="text-xs font-medium text-gray-500">
                     {userProfile?.email}
                   </div>
                   <Badge variant="secondary" className="text-xs mt-1">
@@ -595,43 +595,20 @@ const MainLayout = ({ children }) => {
               <div className="space-y-1">
                 <Link
                   to="/profile"
-                  className="flex items-center px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+                  className="flex items-center px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
                   onClick={() => setMobileMenuOpen(false)}
                 >
-                  <User className="mr-3 h-5 w-5" />
+                  <User className="mr-3 h-4 w-4" />
                   Profile Settings
                 </Link>
-                
-                {/* NEW: Mobile customer menu items */}
-                {(isKlient || isAdmin) && (
-                  <>
-                    <Link
-                      to="/farmers"
-                      className="flex items-center px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      <Users className="mr-3 h-5 w-5" />
-                      Find Farmers
-                    </Link>
-                    
-                    <Link
-                      to="/search"
-                      className="flex items-center px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      <Search className="mr-3 h-5 w-5" />
-                      Search & Map
-                    </Link>
-                  </>
-                )}
                 
                 {isAdmin && (
                   <Link
                     to="/admin"
-                    className="flex items-center px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+                    className="flex items-center px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    <Shield className="mr-3 h-5 w-5" />
+                    <Shield className="mr-3 h-4 w-4" />
                     Admin Panel
                   </Link>
                 )}
@@ -641,9 +618,9 @@ const MainLayout = ({ children }) => {
                     handleLogout();
                     setMobileMenuOpen(false);
                   }}
-                  className="flex items-center w-full px-4 py-2 text-base font-medium text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors"
+                  className="flex items-center w-full px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors"
                 >
-                  <LogOut className="mr-3 h-5 w-5" />
+                  <LogOut className="mr-3 h-4 w-4" />
                   Sign Out
                 </button>
               </div>
