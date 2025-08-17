@@ -499,28 +499,42 @@ const FarmersMap = ({
   // Render enhanced map
   return (
     <Card className={`${className} ${isFullscreen ? 'farmers-map-fullscreen' : ''}`}>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
+        <CardHeader>
+        <div className="flex items-center justify-between sm:flex-row flex-col sm:gap-0 gap-3">
+            <CardTitle className="flex items-center gap-2">
             <MapPin className="h-5 w-5" />
             Interactive Farmers Map
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline">
-              {farmers.length} farmer{farmers.length !== 1 ? 's' : ''} nearby
+            </CardTitle>
+            
+            {/* Responsive container for badge and button */}
+            <div className="flex items-center gap-2 sm:flex-row flex-col sm:gap-2 gap-2 w-full sm:w-auto">
+            <Badge variant="outline" className="sm:order-1 order-2 whitespace-nowrap">
+                {farmers.length} farmer{farmers.length !== 1 ? 's' : ''} nearby
             </Badge>
+            
             {showControls && (
-              <Button
+                <Button
                 size="sm"
                 variant="outline"
                 onClick={() => setIsFullscreen(!isFullscreen)}
-              >
-                {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-              </Button>
+                className="sm:order-2 order-1 flex items-center gap-2 w-full sm:w-auto justify-center"
+                >
+                {isFullscreen ? (
+                    <>
+                    <Minimize2 className="h-4 w-4" />
+                    <span className="sm:hidden">Exit Fullscreen</span>
+                    </>
+                ) : (
+                    <>
+                    <Maximize2 className="h-4 w-4" />
+                    <span className="sm:hidden">Fullscreen</span>
+                    </>
+                )}
+                </Button>
             )}
-          </div>
+            </div>
         </div>
-      </CardHeader>
+        </CardHeader>
       <CardContent className="relative p-0">
         <div 
           ref={mapRef}
