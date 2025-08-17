@@ -446,7 +446,7 @@ const MainLayout = ({ children }) => {
                   <Link to="/farmers" className="p-2 text-gray-400" title="Find Farmers">
                     <Users className="h-5 w-5" />
                   </Link>
-                  <Link to="/search" className="p-2 text-gray-400" title="Search">
+                  <Link to="/search" className="p-2 text-gray-400" title="Search Products">
                     <Search className="h-5 w-5" />
                   </Link>
                 </>
@@ -484,8 +484,8 @@ const MainLayout = ({ children }) => {
             </div>
           </div>
         </div>
-        
-        {/* Mobile navigation menu */}
+
+{/* Mobile navigation menu - OPTION 1: SINGLE SCROLLABLE ELEMENT */}
         {mobileMenuOpen && (
           <div className="sm:hidden bg-white border-t max-h-[calc(100vh-4rem)] overflow-y-auto">
             <div className="pt-2 pb-3 space-y-1">
@@ -567,63 +567,75 @@ const MainLayout = ({ children }) => {
                   </Link>
                 </>
               )}
-            </div>
-            
-            {/* Mobile user section - STICKY AT BOTTOM */}
-            <div className="pt-4 pb-3 border-t border-gray-200 bg-gray-50 sticky bottom-0">
-              <div className="flex items-center px-4 mb-3">
-                <div className="flex-shrink-0">
-                  <Avatar className="h-10 w-10">
-                    <AvatarFallback className="bg-green-600 text-white">
-                      {getInitials()}
-                    </AvatarFallback>
-                  </Avatar>
-                </div>
-                <div className="ml-3 flex-1">
-                  <div className="text-sm font-medium text-gray-800">
-                    {userProfile?.firstName} {userProfile?.lastName}
+
+              {/* Divider before user section */}
+              <div className="border-t border-gray-200 my-3"></div>
+              
+              {/* Mobile user section - NOW PART OF SCROLLABLE CONTENT */}
+              <div className="px-3 py-3 bg-gray-50 mx-3 rounded-lg">
+                <div className="flex items-center mb-3">
+                  <div className="flex-shrink-0">
+                    <Avatar className="h-10 w-10">
+                      <AvatarFallback className="bg-green-600 text-white">
+                        {getInitials()}
+                      </AvatarFallback>
+                    </Avatar>
                   </div>
-                  <div className="text-xs font-medium text-gray-500">
-                    {userProfile?.email}
+                  <div className="ml-3 flex-1">
+                    <div className="text-sm font-medium text-gray-800">
+                      {userProfile?.firstName} {userProfile?.lastName}
+                    </div>
+                    <div className="text-xs font-medium text-gray-500">
+                      {userProfile?.email}
+                    </div>
+                    <Badge variant="secondary" className="text-xs mt-1">
+                      {getRoleDisplayName()}
+                    </Badge>
                   </div>
-                  <Badge variant="secondary" className="text-xs mt-1">
-                    {getRoleDisplayName()}
-                  </Badge>
                 </div>
               </div>
+
+              {/* User actions as regular menu items */}
+              <Link
+                to="/profile"
+                className="flex items-center pl-3 pr-4 py-3 border-l-4 border-transparent text-base font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800 transition-colors"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <User className="w-5 h-5 mr-3" />
+                <div>
+                  <p className="font-medium">Profile Settings</p>
+                  <p className="text-xs text-gray-500">Manage your account</p>
+                </div>
+              </Link>
               
-              <div className="space-y-1">
+              {isAdmin && (
                 <Link
-                  to="/profile"
-                  className="flex items-center px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+                  to="/admin"
+                  className="flex items-center pl-3 pr-4 py-3 border-l-4 border-transparent text-base font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800 transition-colors"
                   onClick={() => setMobileMenuOpen(false)}
                 >
-                  <User className="mr-3 h-4 w-4" />
-                  Profile Settings
+                  <Shield className="w-5 h-5 mr-3" />
+                  <div>
+                    <p className="font-medium">Admin Panel</p>
+                    <p className="text-xs text-gray-500">System administration</p>
+                  </div>
                 </Link>
-                
-                {isAdmin && (
-                  <Link
-                    to="/admin"
-                    className="flex items-center px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <Shield className="mr-3 h-4 w-4" />
-                    Admin Panel
-                  </Link>
-                )}
-                
-                <button
-                  onClick={() => {
-                    handleLogout();
-                    setMobileMenuOpen(false);
-                  }}
-                  className="flex items-center w-full px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors"
-                >
-                  <LogOut className="mr-3 h-4 w-4" />
-                  Sign Out
-                </button>
-              </div>
+              )}
+              
+              {/* Sign Out button as menu item */}
+              <button
+                onClick={() => {
+                  handleLogout();
+                  setMobileMenuOpen(false);
+                }}
+                className="flex items-center w-full pl-3 pr-4 py-3 border-l-4 border-transparent text-base font-medium text-red-600 hover:text-red-700 hover:bg-red-50 hover:border-red-300 transition-colors"
+              >
+                <LogOut className="w-5 h-5 mr-3" />
+                <div>
+                  <p className="font-medium">Sign Out</p>
+                  <p className="text-xs text-gray-500">Sign out of your account</p>
+                </div>
+              </button>
             </div>
           </div>
         )}
