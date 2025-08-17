@@ -183,9 +183,6 @@ const MainLayout = ({ children }) => {
             <div className="flex justify-between h-16">
               <div className="flex items-center">
                 <Link to="/" className="flex items-center space-x-2">
-                  <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
-                    <span className="text-white font-bold text-lg">F</span>
-                  </div>
                   <span className="text-xl font-bold text-green-600">Farm Direct</span>
                 </Link>
               </div>
@@ -218,9 +215,6 @@ const MainLayout = ({ children }) => {
             {/* Logo and main navigation */}
             <div className="flex items-center">
               <Link to="/dashboard" className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">F</span>
-                </div>
                 <span className="text-xl font-bold text-green-600">Farm Direct</span>
               </Link>
               
