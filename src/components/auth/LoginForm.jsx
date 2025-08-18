@@ -1,45 +1,59 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { loginUser } from '../../firebase/auth.jsx';
-import { useAuth } from '../../context/AuthContext'; // Use the updated AuthContext
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Separator } from '@/components/ui/separator';
+// src/components/auth/LoginForm.jsx - FINAL FIX FOR REDIRECT LOOP
+import React, { useState } from 'react';
+import { useLocation, Navigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import { useCivicAuth } from '../../hooks/useCivicAuth';
 
 const LoginForm = () => {
+  const location = useLocation();
+  const { loginUser, isAuthenticated, loading, authProvider: currentAuthProvider, enableCivicAuth } = useAuth();
+  const civicAuthHook = useCivicAuth();
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [authProvider, setAuthProvider] = useState(null);
-  const navigate = useNavigate();
-  
-  const { isAuthenticated, civicAuth, authProvider: currentAuthProvider, enableCivicAuth } = useAuth();
 
-  // Check if user is already authenticated and redirect
-  useEffect(() => {
-    const checkAuth = () => {
-      const authenticated = isAuthenticated();
-      console.log('🔍 LoginForm auth check:', { 
-        authenticated, 
-        loading, 
-        authProvider: currentAuthProvider,
-        user: !!civicAuth?.user 
-      });
-      
-      if (authenticated && !loading) {
-        console.log('✅ User is authenticated, redirecting to dashboard...');
-        navigate('/dashboard');
-      }
-    };
+  // Debug logs - simplified
+  console.log('🔍 LoginForm state:', {
+    authenticated: isAuthenticated(),
+    loading,
+    authProvider: currentAuthProvider,
+    user: !!civicAuthHook?.user,
+    pathname: location.pathname
+  });
 
-    // Add a small delay to ensure auth state has settled
-    const timer = setTimeout(checkAuth, 100);
-    return () => clearTimeout(timer);
-  }, [isAuthenticated, loading, navigate, currentAuthProvider, civicAuth?.user]);
+  // CRITICAL FIX: Use Navigate component instead of useEffect with navigate()
+  // This prevents the infinite re-render loop
+  if (isAuthenticated() && !loading && location.pathname === '/login') {
+    console.log('🔄 User authenticated, using Navigate component to redirect...');
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  // Show loading if auth state is still being determined
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p>Loading authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render login form if we're in the middle of auth callback
+  if (location.pathname.includes('/callback')) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p>Processing authentication...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Handle Firebase email/password login
   const handleFirebaseLogin = async (e) => {
@@ -51,15 +65,15 @@ const LoginForm = () => {
     }
     
     try {
-      setLoading(true);
+      setIsLoading(true);
       setError('');
       setAuthProvider('firebase');
       console.log('Firebase login form submitted with:', { email });
       
       // Try to sign out from Civic first if authenticated there
       try {
-        if (civicAuth.user) {
-          await civicAuth.signOut();
+        if (civicAuthHook.user) {
+          await civicAuthHook.signOut();
           console.log('Signed out from Civic before Firebase login');
         }
       } catch {
@@ -70,7 +84,7 @@ const LoginForm = () => {
       const user = await loginUser(email, password);
       console.log('Firebase login successful, user:', user.uid);
       
-      // Navigation will be handled by useEffect when isAuthenticated becomes true
+      // Don't manually redirect - the component will re-render and Navigate will handle it
       
     } catch (error) {
       console.error('Firebase login error:', error);
@@ -90,244 +104,169 @@ const LoginForm = () => {
         setError(`Login failed: ${error.message}`);
       }
     } finally {
-      setLoading(false);
+      setIsLoading(false);
       setAuthProvider(null);
     }
   };
 
   // Handle Civic login
   const handleCivicLogin = async () => {
+    // Prevent multiple login attempts
+    if (isLoading) {
+      console.log('🚫 Login already in progress, skipping...');
+      return;
+    }
+
     try {
-      setLoading(true);
+      setIsLoading(true);
       setError('');
       setAuthProvider('civic');
       console.log('🔘 User clicked Civic login - enabling Civic auth');
 
       // Check if Civic Auth is available and ready
-      if (!civicAuth || civicAuth.isLoading) {
+      if (!civicAuthHook || civicAuthHook.isLoading) {
         setError('Civic Auth is still loading. Please wait a moment and try again.');
         return;
       }
 
-      if (!civicAuth.signIn) {
+      if (!civicAuthHook.signIn) {
         setError('Civic Auth is not properly initialized. Please refresh the page and try again.');
         return;
       }
 
-      // Try to sign out from Firebase first if authenticated there
-      try {
-        const { signOut } = await import('firebase/auth');
-        const { auth } = await import('../../firebase/config');
-        if (auth.currentUser) {
-          await signOut(auth);
-          console.log('Signed out from Firebase before Civic login');
-        }
-      } catch  {
-        console.log('No Firebase session to sign out from');
-      }
-
-      // Enable Civic auth first
+      // Enable Civic auth before starting authentication
+      console.log('🔘 Enabling Civic auth...');
       enableCivicAuth();
 
-      // Start Civic authentication
-      console.log('🔐 Starting Civic signIn...');
-      await civicAuth.signIn();
+      // Brief pause to let state settle
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      console.log('🔄 Starting Civic authentication...');
       
-      // The AuthContext will handle setting the user and navigation will happen via useEffect
-      console.log('✅ Civic login initiated successfully');
+      // Start Civic authentication
+      const result = await civicAuthHook.signIn();
+      
+      if (result && result.user) {
+        console.log('✅ Civic login initiated successfully');
+        // Don't manually redirect - the component will re-render and Navigate will handle it
+      } else {
+        throw new Error('Civic authentication failed - no user data received');
+      }
       
     } catch (error) {
-      console.error('Civic login error:', error);
+      console.error('❌ Civic login error:', error);
       
       // Handle Civic-specific errors
-      if (error.message?.includes('Auth not initialized')) {
-        setError('Civic Auth is not ready. Please refresh the page and try again.');
-      } else if (error.message?.includes('User cancelled')) {
-        setError('Login was cancelled');
-      } else if (error.message?.includes('Network')) {
-        setError('Network error. Please check your connection.');
-      } else if (error.message?.includes('Invalid client')) {
-        setError('Authentication service configuration error. Please contact support.');
+      if (error.message?.includes('cancelled')) {
+        setError('Login was cancelled. Please try again.');
+      } else if (error.message?.includes('configuration')) {
+        setError('Civic authentication is not properly configured. Please contact support.');
+      } else if (error.message?.includes('network')) {
+        setError('Network error during authentication. Please check your connection and try again.');
       } else {
-        setError('Civic login failed. Please try again.');
+        setError(`Civic login failed: ${error.message}`);
       }
     } finally {
-      setLoading(false);
+      setIsLoading(false);
       setAuthProvider(null);
     }
   };
-  
+
   return (
-    <Card className="w-full max-w-md mx-auto">
-      <CardHeader>
-        <CardTitle className="text-2xl font-bold text-center">Login</CardTitle>
-        <p className="text-sm text-gray-600 text-center">
-          Choose your preferred sign-in method
-        </p>
-      </CardHeader>
-      <CardContent>
-        {error && (
-          <Alert variant="destructive" className="mb-4">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {/* Civic Auth Login Button */}
-        <div className="mb-6">
-          <Button 
-            onClick={handleCivicLogin}
-            variant="outline"
-            className="w-full h-12"
-            disabled={loading || civicAuth?.isLoading || !civicAuth?.signIn}
-          >
-            {loading && authProvider === 'civic' ? (
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
-                Authenticating with Civic...
-              </div>
-            ) : civicAuth?.isLoading ? (
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
-                Loading Civic Auth...
-              </div>
-            ) : !civicAuth?.signIn ? (
-              <div className="flex items-center gap-2">
-                <svg 
-                  className="w-5 h-5 opacity-50" 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path 
-                    d="M12 2L2 7V12C2 16.55 4.84 20.74 9 21.8C10.63 22.27 13.37 22.27 15 21.8C19.16 20.74 22 16.55 22 12V7L12 2Z" 
-                    stroke="currentColor" 
-                    strokeWidth="2" 
-                    strokeLinecap="round" 
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                Civic Auth Not Ready
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <svg 
-                  className="w-5 h-5" 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path 
-                    d="M12 2L2 7V12C2 16.55 4.84 20.74 9 21.8C10.63 22.27 13.37 22.27 15 21.8C19.16 20.74 22 16.55 22 12V7L12 2Z" 
-                    stroke="currentColor" 
-                    strokeWidth="2" 
-                    strokeLinecap="round" 
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                Login with Civic
-              </div>
-            )}
-          </Button>
-          <p className="text-xs text-gray-500 text-center mt-2">
-            {civicAuth?.isLoading ? 
-              'Initializing secure authentication...' : 
-              !civicAuth?.signIn ? 
-                'Civic Auth is loading...' :
-                'Fast, secure authentication with identity verification'
-            }
-          </p>
-        </div>
-
-        {/* Separator */}
-        <div className="relative my-6">
-          <Separator />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="bg-white px-2 text-sm text-gray-500">OR</span>
-          </div>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8">
+        <div>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+            Sign in to your account
+          </h2>
         </div>
         
-        {/* Firebase Email/Password Login Form */}
-        <form onSubmit={handleFirebaseLogin} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input 
-              id="email" 
-              type="email" 
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email"
-              disabled={loading}
-              required 
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input 
-              id="password" 
-              type="password" 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
-              disabled={loading}
-              required 
-            />
-          </div>
-          
-          <Button 
-            type="submit" 
-            className="w-full" 
-            disabled={loading}
-          >
-            {loading && authProvider === 'firebase' 
-              ? 'Logging in...' 
-              : 'Login with Email'
-            }
-          </Button>
-        </form>
-
-        {/* Additional Login Options */}
-        <div className="mt-6 space-y-3">
-          <div className="text-center">
-            <a 
-              href="/forgot-password" 
-              className="text-sm text-blue-600 hover:underline"
-            >
-              Forgot your password?
-            </a>
-          </div>
-          
-          <div className="text-center">
-            <p className="text-sm text-gray-600">
-              Don't have an account?{' '}
-              <a href="/register" className="text-blue-600 hover:underline">
-                Register here
-              </a>
-            </p>
-          </div>
-        </div>
-
-        {/* Security Notice */}
-        <div className="mt-6 p-3 bg-gray-50 rounded-lg">
-          <p className="text-xs text-gray-600 text-center">
-            🔒 Your data is protected with enterprise-grade security. 
-            Both authentication methods use industry-standard encryption.
-          </p>
-        </div>
-
-        {/* Debug info for development */}
-        {import.meta.env.DEV && (
-          <div className="mt-4 p-2 bg-gray-100 rounded text-xs">
-            <p>Debug - Auth Provider: {currentAuthProvider || 'none'}</p>
-            <p>Debug - Is Authenticated: {isAuthenticated() ? 'Yes' : 'No'}</p>
-            <p>Debug - Civic User: {civicAuth?.user ? 'Yes' : 'No'}</p>
-            <p>Debug - Civic Loading: {civicAuth?.isLoading ? 'Yes' : 'No'}</p>
-            <p>Debug - Civic SignIn Available: {civicAuth?.signIn ? 'Yes' : 'No'}</p>
-            <p>Debug - Civic Error: {civicAuth?.error?.message || 'None'}</p>
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-md p-4">
+            <div className="text-red-700 text-sm">{error}</div>
           </div>
         )}
-      </CardContent>
-    </Card>
+
+        <form className="mt-8 space-y-6" onSubmit={handleFirebaseLogin}>
+          <div className="rounded-md shadow-sm -space-y-px">
+            <div>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                placeholder="Email address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
+            <div>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
+          </div>
+
+          <div>
+            <button
+              type="submit"
+              disabled={isLoading || authProvider === 'firebase'}
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading && authProvider === 'firebase' ? (
+                <span className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Signing in...
+                </span>
+              ) : (
+                'Sign in with Email'
+              )}
+            </button>
+          </div>
+
+          <div className="text-center">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-gray-50 text-gray-500">Or</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <button
+              type="button"
+              onClick={handleCivicLogin}
+              disabled={isLoading || authProvider === 'civic'}
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading && authProvider === 'civic' ? (
+                <span className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Connecting to Civic...
+                </span>
+              ) : (
+                'Sign in with Civic'
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 };
 

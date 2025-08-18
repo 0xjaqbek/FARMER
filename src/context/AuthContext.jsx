@@ -1,4 +1,4 @@
-// src/context/AuthContext.jsx - Updated to work with Civic Auth
+// src/context/AuthContext.jsx - FIXED VERSION - Prevents redirect loops
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -20,7 +20,8 @@ export const AuthProvider = ({ children }) => {
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authProvider, setAuthProvider] = useState(null); // 'firebase' or 'civic'
-  const [civicAuthEnabled, setCivicAuthEnabled] = useState(false); // Control when to use Civic auth
+  const [civicAuthEnabled, setCivicAuthEnabled] = useState(false);
+  const [authStateSettled, setAuthStateSettled] = useState(false); // NEW: Prevent premature decisions
 
   // Civic Auth hook
   const civicAuth = useUser();
@@ -38,7 +39,6 @@ export const AuthProvider = ({ children }) => {
         return {
           uid: userDoc.id,
           ...data,
-          // Convert Firestore timestamps to Date objects
           createdAt: data.createdAt?.toDate() || new Date(),
           updatedAt: data.updatedAt?.toDate() || new Date(),
           lastLoginAt: data.lastLoginAt?.toDate() || new Date(),
@@ -53,38 +53,57 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Handle Firebase auth state changes
+  // FIXED: Firebase auth state listener with better coordination
   useEffect(() => {
     console.log('Setting up Firebase auth state listener...');
     
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      console.log('🔥 Firebase auth state changed:', firebaseUser ? firebaseUser.email : 'signed out');
+      console.log('🔥 Firebase auth state changed:', firebaseUser ? 
+        firebaseUser.email : 'signed out');
       
+      // Wait briefly for Civic auth to settle if it's loading
+      if (civicAuth.isLoading) {
+        console.log('⏳ Waiting for Civic auth to settle before processing Firebase state...');
+        return;
+      }
+
+      // PRIORITY: If both Firebase and Civic are authenticated, Civic takes precedence
+      if (firebaseUser && civicAuth.user && civicAuthEnabled) {
+        console.log('🚫 Both Firebase and Civic users present - Civic takes precedence');
+        return; // Let Civic handle the auth state
+      }
+
+      // Process Firebase user ONLY if no Civic user is active
       if (firebaseUser && !civicAuth.user) {
-        // Firebase user is authenticated and no Civic user
+        console.log('✅ Processing Firebase user authentication');
         setUser(firebaseUser);
         setAuthProvider('firebase');
         
-        // Get user profile from Firestore
         const profile = await getUserProfile(firebaseUser.uid);
         setUserProfile(profile);
         
         console.log('Firebase user authenticated:', firebaseUser.email);
       } else if (!firebaseUser && !civicAuth.user) {
-        // No user authenticated in either system
+        // Clear everything if no users in either system
+        console.log('🔄 Clearing auth state - no users in either system');
         setUser(null);
         setUserProfile(null);
         setAuthProvider(null);
         console.log('No user authenticated');
       }
       
+      // Mark auth state as settled
+      if (!authStateSettled) {
+        setAuthStateSettled(true);
+      }
+      
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [civicAuth.user]);
+  }, [civicAuth.user, civicAuth.isLoading, civicAuthEnabled, authStateSettled]);
 
-  // Handle Civic auth state changes
+  // FIXED: Civic auth state handler with conflict resolution
   useEffect(() => {
     const handleCivicAuth = async () => {
       console.log('🔄 Civic auth state changed:', { 
@@ -96,13 +115,30 @@ export const AuthProvider = ({ children }) => {
 
       if (civicAuth.isLoading) {
         console.log('⏳ Civic is still loading...');
-        return; // Don't do anything while loading
+        return;
       }
 
-      // Only process Civic auth if it's been explicitly enabled
-      if (civicAuth.user && civicAuthEnabled) {
+      // FIXED: Auto-enable civic auth when user appears (common case for login)
+      if (civicAuth.user && !civicAuthEnabled) {
+        console.log('🔘 Auto-enabling Civic auth due to user presence');
+        setCivicAuthEnabled(true);
+      }
+
+      // Process Civic auth if user exists (either enabled or auto-enabled)
+      if (civicAuth.user) {
         console.log('👤 Civic user authenticated:', civicAuth.user.email);
         
+        // Sign out Firebase user if present to avoid conflicts
+        if (auth.currentUser) {
+          console.log('🚫 Signing out Firebase user to prevent conflicts');
+          try {
+            const { signOut } = await import('firebase/auth');
+            await signOut(auth);
+          } catch (error) {
+            console.warn('Warning signing out Firebase user:', error);
+          }
+        }
+
         // Set Civic user as the main user
         const civicUserId = `civic_${civicAuth.user.id}`;
         const civicUser = {
@@ -125,87 +161,94 @@ export const AuthProvider = ({ children }) => {
             setUserProfile(profile);
             console.log('✅ Civic user profile loaded:', profile.role);
           } else {
-            console.log('⚠️ No profile found for Civic user, creating basic profile');
+            console.log('⚠️ No profile found for Civic user');
             setUserProfile({
               uid: civicUserId,
               email: civicAuth.user.email,
-              displayName: civicAuth.user.name,
-              role: 'customer', // Default role
-              provider: 'civic'
+              displayName: civicAuth.user.name || civicAuth.user.email,
+              role: 'customer',
+              provider: 'civic',
+              profileComplete: false
             });
           }
         } catch (error) {
-          console.error('❌ Error loading Civic user profile:', error);
-          // Still set a basic profile so user isn't stuck
-          setUserProfile({
-            uid: civicUserId,
-            email: civicAuth.user.email,
-            displayName: civicAuth.user.name,
-            role: 'customer',
-            provider: 'civic'
-          });
+          console.error('Error loading Civic user profile:', error);
+        }
+
+        // Mark auth state as settled
+        if (!authStateSettled) {
+          setAuthStateSettled(true);
         }
         
         setLoading(false);
-      } else if (!auth.currentUser && !civicAuth.isLoading && !civicAuth.user) {
-        // No Civic user, no Firebase user, and not loading
-        console.log('🚫 No user authenticated');
+      } else if (!civicAuth.user && authProvider === 'civic') {
+        // Civic user signed out
+        console.log('👤 Civic user signed out');
         setUser(null);
         setUserProfile(null);
         setAuthProvider(null);
-        setLoading(false);
-      } else if (!civicAuthEnabled && !auth.currentUser) {
-        // Civic auth is disabled and no Firebase user
+        setCivicAuthEnabled(false);
         setLoading(false);
       }
     };
 
-    handleCivicAuth();
-  }, [civicAuth.user, civicAuth.isLoading, civicAuthEnabled]);
+    // Add a small delay to prevent race conditions, but trigger immediately on user change
+    const timer = setTimeout(handleCivicAuth, civicAuth.user ? 50 : 100);
+    return () => clearTimeout(timer);
+  }, [civicAuth.user, civicAuth.isLoading, civicAuthEnabled, authProvider, authStateSettled]);
 
-  // Function to check if user is authenticated
-  const isAuthenticated = () => {
-    const hasUser = user !== null;
-    const hasProfile = userProfile !== null;
-    console.log('🔍 Auth check:', { hasUser, hasProfile, loading, authProvider });
-    return hasUser; // User is authenticated if we have a user object
+  // Enable Civic auth (called from login form)
+  const enableCivicAuth = () => {
+    console.log('🔘 Enabling Civic auth...');
+    setCivicAuthEnabled(true);
   };
 
-  // Function to get current user
+  // Check if user is authenticated
+  const isAuthenticated = () => {
+    const hasUser = !!user;
+    const hasProfile = !!userProfile;
+    const notLoading = !loading;
+    const stateSettled = authStateSettled;
+    
+    return hasUser && hasProfile && notLoading && stateSettled;
+  };
+
+  // Get current user regardless of provider
   const getCurrentUser = () => {
     return user;
   };
 
-  // Function to enable Civic auth (called when user clicks Civic login)
-  const enableCivicAuth = () => {
-    console.log('🔓 Enabling Civic authentication');
-    setCivicAuthEnabled(true);
-  };
-
-  // Function to sign out
+  // Sign out function
   const signOut = async () => {
     try {
-      console.log('🔄 Signing out from current provider:', authProvider);
+      setLoading(true);
       
       if (authProvider === 'firebase') {
         const { signOut: firebaseSignOut } = await import('firebase/auth');
         await firebaseSignOut(auth);
+        console.log('Firebase user signed out');
       } else if (authProvider === 'civic') {
-        await civicAuth.signOut();
-        setCivicAuthEnabled(false); // Disable Civic auth after sign out
+        if (civicAuth && civicAuth.signOut) {
+          await civicAuth.signOut();
+          console.log('Civic user signed out');
+        }
       }
       
+      // Clear all state
       setUser(null);
       setUserProfile(null);
       setAuthProvider(null);
+      setCivicAuthEnabled(false);
+      setAuthStateSettled(false);
       
-      console.log('✅ Sign out successful');
     } catch (error) {
-      console.error('❌ Sign out error:', error);
+      console.error('Error signing out:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Debug function
+  // Debug function to inspect current auth state
   const getDebugInfo = () => {
     return {
       user: user ? { uid: user.uid, email: user.email, provider: user.provider } : null,
@@ -213,8 +256,10 @@ export const AuthProvider = ({ children }) => {
       authProvider,
       civicUser: civicAuth.user ? { id: civicAuth.user.id, email: civicAuth.user.email } : null,
       civicLoading: civicAuth.isLoading,
+      civicAuthEnabled,
       firebaseUser: auth.currentUser ? { uid: auth.currentUser.uid, email: auth.currentUser.email } : null,
       loading,
+      authStateSettled,
       isAuthenticated: isAuthenticated()
     };
   };
@@ -228,11 +273,12 @@ export const AuthProvider = ({ children }) => {
     
     // Authentication status
     isAuthenticated,
+    authStateSettled, // NEW: Expose this for components to check
     
     // Functions
     getCurrentUser,
     signOut,
-    enableCivicAuth, // New function to enable Civic auth
+    enableCivicAuth,
     
     // Civic specific
     civicUser: civicAuth.user,
