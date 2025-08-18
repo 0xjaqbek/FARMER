@@ -1,5 +1,5 @@
 // src/components/auth/EnhancedRegisterForm.jsx
-// Complete multi-step registration with all required data collection
+// Complete multi-step registration with Civic Auth integration
 
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,6 +14,7 @@ import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/components/ui/use-toast';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { 
   User, 
   Mail, 
@@ -24,15 +25,21 @@ import {
   ArrowRight, 
   ArrowLeft,
   Check,
-  AlertTriangle
+  AlertTriangle,
+  Shield
 } from 'lucide-react';
 import { registerUser } from '../../firebase/auth';
+import { useUser } from "@civic/auth/react";
 
 const RegisterForm = () => {
   const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [authMethod, setAuthMethod] = useState(null); // 'civic' or 'traditional'
+
+  // Civic Auth hook
+  const civicAuth = useUser();
 
   const [formData, setFormData] = useState({
     // Step 1: Basic Account Info
@@ -139,27 +146,34 @@ const RegisterForm = () => {
   const steps = [
     { 
       id: 1, 
-      title: 'Account Info', 
-      description: 'Basic account details',
-      icon: User,
-      fields: ['email', 'password', 'firstName', 'lastName', 'role']
+      title: 'Authentication', 
+      description: 'Choose your signup method',
+      icon: Shield,
+      fields: ['authMethod']
     },
     { 
       id: 2, 
+      title: 'Personal Info', 
+      description: 'Your details & role',
+      icon: User,
+      fields: ['firstName', 'lastName', 'role', 'email', 'password']
+    },
+    { 
+      id: 3, 
       title: 'Contact & Location', 
       description: 'How to reach you',
       icon: MapPin,
       fields: ['phone', 'address', 'bio']
     },
     { 
-      id: 3, 
+      id: 4, 
       title: 'Professional Info', 
       description: 'Role-specific details',
       icon: Briefcase,
       fields: ['farmInfo', 'customerInfo']
     },
     { 
-      id: 4, 
+      id: 5, 
       title: 'Preferences', 
       description: 'Settings and agreements',
       icon: Check,
@@ -186,6 +200,22 @@ const RegisterForm = () => {
     'USDA Organic', 'EU Organic', 'Rainforest Alliance', 
     'Fair Trade', 'Non-GMO', 'Biodynamic', 'Local Certified'
   ];
+
+  // Handle Civic authentication completion
+  React.useEffect(() => {
+    if (civicAuth.user && authMethod === 'civic') {
+      // Pre-fill form data from Civic user info
+      setFormData(prev => ({
+        ...prev,
+        email: civicAuth.user.email || '',
+        firstName: civicAuth.user.given_name || '',
+        lastName: civicAuth.user.family_name || '',
+      }));
+      
+      // Skip to step 2 (Personal Info) since authentication is done
+      setCurrentStep(2);
+    }
+  }, [civicAuth.user, authMethod]);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
@@ -229,36 +259,62 @@ const RegisterForm = () => {
     });
   };
 
+  const handleCivicSignup = async () => {
+    try {
+      setLoading(true);
+      setAuthMethod('civic');
+      await civicAuth.signIn();
+    } catch (error) {
+      console.error('Civic signup error:', error);
+      toast({
+        title: "Civic Authentication Failed",
+        description: error.message || "Please try again or use traditional signup.",
+        variant: "destructive",
+      });
+      setAuthMethod(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const validateStep = (step) => {
     const newErrors = {};
 
     switch (step) {
       case 1:
-        if (!formData.email) newErrors.email = 'Email is required';
-        if (!formData.password) newErrors.password = 'Password is required';
-        if (formData.password.length < 6) newErrors.password = 'Password must be at least 6 characters';
-        if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = 'Passwords do not match';
-        if (!formData.firstName) newErrors.firstName = 'First name is required';
-        if (!formData.lastName) newErrors.lastName = 'Last name is required';
-        if (!formData.role) newErrors.role = 'Please select your role';
+        if (!authMethod) newErrors.authMethod = 'Please choose a signup method';
         break;
 
       case 2:
+        if (!formData.firstName) newErrors.firstName = 'First name is required';
+        if (!formData.lastName) newErrors.lastName = 'Last name is required';
+        if (!formData.role) newErrors.role = 'Please select your role';
+        if (!formData.email) newErrors.email = 'Email is required';
+        
+        // Only validate password for traditional signup
+        if (authMethod === 'traditional') {
+          if (!formData.password) newErrors.password = 'Password is required';
+          if (formData.password.length < 6) newErrors.password = 'Password must be at least 6 characters';
+          if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = 'Passwords do not match';
+        }
+        break;
+
+      case 3:
         if (!formData.phone) newErrors.phone = 'Phone number is required';
         if (!formData.address.street) newErrors['address.street'] = 'Street address is required';
         if (!formData.address.city) newErrors['address.city'] = 'City is required';
         if (!formData.address.postalCode) newErrors['address.postalCode'] = 'Postal code is required';
         break;
 
-      case 3:
-        if (formData.role === 'rolnik') {
+      case 4:
+        if (formData.role === 'farmer') {
           if (!formData.farmInfo.farmName) newErrors['farmInfo.farmName'] = 'Farm name is required';
           if (!formData.farmInfo.description) newErrors['farmInfo.description'] = 'Farm description is required';
           if (formData.farmInfo.specialties.length === 0) newErrors['farmInfo.specialties'] = 'Please select at least one specialty';
         }
         break;
 
-      case 4:
+      case 5:
         if (!formData.agreements.termsOfService) newErrors['agreements.termsOfService'] = 'You must agree to the terms of service';
         if (!formData.agreements.privacyPolicy) newErrors['agreements.privacyPolicy'] = 'You must agree to the privacy policy';
         break;
@@ -270,7 +326,7 @@ const RegisterForm = () => {
 
   const nextStep = () => {
     if (validateStep(currentStep)) {
-      setCurrentStep(prev => Math.min(prev + 1, 4));
+      setCurrentStep(prev => Math.min(prev + 1, 5));
     }
   };
 
@@ -279,7 +335,7 @@ const RegisterForm = () => {
   };
 
   const handleSubmit = async () => {
-    if (!validateStep(4)) return;
+    if (!validateStep(5)) return;
 
     setLoading(true);
     try {
@@ -297,7 +353,7 @@ const RegisterForm = () => {
         bio: formData.bio,
         
         // Role-specific info
-        ...(formData.role === 'rolnik' ? {
+        ...(formData.role === 'farmer' ? {
           farmInfo: formData.farmInfo
         } : {
           customerInfo: formData.customerInfo
@@ -307,6 +363,10 @@ const RegisterForm = () => {
         notificationPreferences: formData.notificationPreferences,
         privacy: formData.privacy,
         
+        // Authentication method tracking
+        authenticationMethod: authMethod,
+        civicId: civicAuth.user?.id || null,
+        
         // Additional fields
         profileComplete: true,
         registrationStep: 'completed'
@@ -314,15 +374,38 @@ const RegisterForm = () => {
 
       console.log('Submitting complete registration:', userData);
 
-      await registerUser(formData.email, formData.password, userData);
+      if (authMethod === 'civic') {
+        // For Civic users, sync data to Firebase without creating auth account
+        const { db } = await import('../../firebase/config');
+        const { doc, setDoc, serverTimestamp } = await import('firebase/firestore');
+        
+        const userRef = doc(db, 'users', `civic_${civicAuth.user.id}`);
+        await setDoc(userRef, {
+          uid: `civic_${civicAuth.user.id}`,
+          email: civicAuth.user.email,
+          provider: 'civic',
+          createdAt: serverTimestamp(),
+          lastLoginAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          ...userData
+        }, { merge: true });
 
-      toast({
-        title: "Registration Complete!",
-        description: "Your account has been created successfully. Please check your email for verification.",
-      });
+        toast({
+          title: "Registration Complete!",
+          description: "Your Civic account has been set up successfully.",
+        });
+      } else {
+        // Traditional Firebase registration
+        await registerUser(formData.email, formData.password, userData);
 
-      // Redirect to login or dashboard
-      window.location.href = '/login';
+        toast({
+          title: "Registration Complete!",
+          description: "Your account has been created successfully. Please check your email for verification.",
+        });
+      }
+
+      // Redirect to dashboard
+      window.location.href = '/dashboard';
 
     } catch (error) {
       console.error('Registration error:', error);
@@ -340,8 +423,119 @@ const RegisterForm = () => {
     return (currentStep / steps.length) * 100;
   };
 
+  // Step 1: Authentication Method Selection
   const renderStep1 = () => (
+    <div className="space-y-6">
+      <div className="text-center mb-6">
+        <h3 className="text-lg font-semibold mb-2">Choose Your Signup Method</h3>
+        <p className="text-gray-600">Select how you'd like to create your account</p>
+      </div>
+
+      <div className="grid gap-4">
+        {/* Civic Auth Option */}
+        <Card 
+          className={`cursor-pointer transition-all ${authMethod === 'civic' ? 'ring-2 ring-blue-500 bg-blue-50' : 'hover:shadow-md'}`}
+          onClick={() => setAuthMethod('civic')}
+        >
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <Shield className="w-6 h-6 text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <h4 className="font-semibold text-lg">Quick Signup with Civic</h4>
+                <p className="text-gray-600 text-sm">Secure identity verification with minimal setup</p>
+                <div className="flex gap-2 mt-2">
+                  <Badge variant="secondary">Fast</Badge>
+                  <Badge variant="secondary">Secure</Badge>
+                  <Badge variant="secondary">Verified</Badge>
+                </div>
+              </div>
+              <div className="w-6 h-6 border-2 border-gray-300 rounded-full flex items-center justify-center">
+                {authMethod === 'civic' && <div className="w-3 h-3 bg-blue-500 rounded-full"></div>}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Traditional Email/Password Option */}
+        <Card 
+          className={`cursor-pointer transition-all ${authMethod === 'traditional' ? 'ring-2 ring-green-500 bg-green-50' : 'hover:shadow-md'}`}
+          onClick={() => setAuthMethod('traditional')}
+        >
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <Mail className="w-6 h-6 text-green-600" />
+              </div>
+              <div className="flex-1">
+                <h4 className="font-semibold text-lg">Traditional Email Signup</h4>
+                <p className="text-gray-600 text-sm">Create account with email and password</p>
+                <div className="flex gap-2 mt-2">
+                  <Badge variant="secondary">Familiar</Badge>
+                  <Badge variant="secondary">Complete Control</Badge>
+                </div>
+              </div>
+              <div className="w-6 h-6 border-2 border-gray-300 rounded-full flex items-center justify-center">
+                {authMethod === 'traditional' && <div className="w-3 h-3 bg-green-500 rounded-full"></div>}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {errors.authMethod && <p className="text-red-500 text-sm text-center">{errors.authMethod}</p>}
+
+      {/* Civic Authentication Button */}
+      {authMethod === 'civic' && (
+        <div className="text-center">
+          <Button 
+            onClick={handleCivicSignup}
+            disabled={loading || civicAuth.isLoading}
+            className="w-full max-w-md"
+            size="lg"
+          >
+            {loading || civicAuth.isLoading ? (
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Authenticating with Civic...
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Shield className="w-5 h-5" />
+                Continue with Civic
+              </div>
+            )}
+          </Button>
+          <p className="text-xs text-gray-500 mt-2">
+            You'll be redirected to Civic for secure identity verification
+          </p>
+        </div>
+      )}
+
+      {civicAuth.error && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            {civicAuth.error.message || 'Civic authentication failed. Please try again.'}
+          </AlertDescription>
+        </Alert>
+      )}
+    </div>
+  );
+
+  // Step 2: Personal Information
+  const renderStep2 = () => (
     <div className="space-y-4">
+      {authMethod === 'civic' && civicAuth.user && (
+        <Alert className="bg-blue-50 border-blue-200">
+          <Shield className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-blue-800">
+            Great! Your identity has been verified with Civic. Please complete your profile information.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="grid grid-cols-2 gap-4">
         <div>
           <Label htmlFor="firstName">First Name *</Label>
@@ -350,6 +544,7 @@ const RegisterForm = () => {
             value={formData.firstName}
             onChange={(e) => handleInputChange('firstName', e.target.value)}
             className={errors.firstName ? 'border-red-500' : ''}
+            disabled={authMethod === 'civic' && civicAuth.user?.given_name}
           />
           {errors.firstName && <p className="text-red-500 text-sm mt-1">{errors.firstName}</p>}
         </div>
@@ -361,6 +556,7 @@ const RegisterForm = () => {
             value={formData.lastName}
             onChange={(e) => handleInputChange('lastName', e.target.value)}
             className={errors.lastName ? 'border-red-500' : ''}
+            disabled={authMethod === 'civic' && civicAuth.user?.family_name}
           />
           {errors.lastName && <p className="text-red-500 text-sm mt-1">{errors.lastName}</p>}
         </div>
@@ -374,35 +570,39 @@ const RegisterForm = () => {
           value={formData.email}
           onChange={(e) => handleInputChange('email', e.target.value)}
           className={errors.email ? 'border-red-500' : ''}
+          disabled={authMethod === 'civic' && civicAuth.user?.email}
         />
         {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="password">Password *</Label>
-          <Input
-            id="password"
-            type="password"
-            value={formData.password}
-            onChange={(e) => handleInputChange('password', e.target.value)}
-            className={errors.password ? 'border-red-500' : ''}
-          />
-          {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
+      {/* Only show password fields for traditional signup */}
+      {authMethod === 'traditional' && (
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="password">Password *</Label>
+            <Input
+              id="password"
+              type="password"
+              value={formData.password}
+              onChange={(e) => handleInputChange('password', e.target.value)}
+              className={errors.password ? 'border-red-500' : ''}
+            />
+            {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
+          </div>
+          
+          <div>
+            <Label htmlFor="confirmPassword">Confirm Password *</Label>
+            <Input
+              id="confirmPassword"
+              type="password"
+              value={formData.confirmPassword}
+              onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+              className={errors.confirmPassword ? 'border-red-500' : ''}
+            />
+            {errors.confirmPassword && <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>}
+          </div>
         </div>
-        
-        <div>
-          <Label htmlFor="confirmPassword">Confirm Password *</Label>
-          <Input
-            id="confirmPassword"
-            type="password"
-            value={formData.confirmPassword}
-            onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
-            className={errors.confirmPassword ? 'border-red-500' : ''}
-          />
-          {errors.confirmPassword && <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>}
-        </div>
-      </div>
+      )}
 
       <div>
         <Label htmlFor="role">I am a *</Label>
@@ -411,8 +611,8 @@ const RegisterForm = () => {
             <SelectValue placeholder="Select your role" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="klient">Customer - I want to buy fresh products</SelectItem>
-            <SelectItem value="rolnik">Farmer - I want to sell my products</SelectItem>
+            <SelectItem value="customer">Customer - I want to buy fresh products</SelectItem>
+            <SelectItem value="farmer">Farmer - I want to sell my products</SelectItem>
           </SelectContent>
         </Select>
         {errors.role && <p className="text-red-500 text-sm mt-1">{errors.role}</p>}
@@ -420,7 +620,8 @@ const RegisterForm = () => {
     </div>
   );
 
-  const renderStep2 = () => (
+  // Step 3: Contact & Location
+  const renderStep3 = () => (
     <div className="space-y-4">
       <div>
         <Label htmlFor="phone">Phone Number *</Label>
@@ -492,8 +693,9 @@ const RegisterForm = () => {
     </div>
   );
 
-  const renderStep3 = () => {
-    if (formData.role === 'rolnik') {
+  // Step 4: Role-specific information
+  const renderStep4 = () => {
+    if (formData.role === 'farmer') {
       return (
         <div className="space-y-6">
           <div>
@@ -515,112 +717,7 @@ const RegisterForm = () => {
               onChange={(e) => handleNestedChange('farmInfo', 'description', e.target.value)}
               placeholder="Describe your farm, what you grow, your farming practices..."
               rows={4}
-              className={errors['farmInfo.description'] ? 'border-red-500' : ''}
-            />
-            {errors['farmInfo.description'] && <p className="text-red-500 text-sm mt-1">{errors['farmInfo.description']}</p>}
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="established">Farm Established</Label>
-              <Input
-                id="established"
-                type="number"
-                value={formData.farmInfo.established}
-                onChange={(e) => handleNestedChange('farmInfo', 'established', e.target.value)}
-                placeholder="Year"
-              />
-            </div>
-            
-            <div>
-              <Label htmlFor="farmSize">Farm Size</Label>
-              <Input
-                id="farmSize"
-                value={formData.farmInfo.farmSize}
-                onChange={(e) => handleNestedChange('farmInfo', 'farmSize', e.target.value)}
-                placeholder="e.g., 5 acres, 2 hectares"
-              />
-            </div>
-          </div>
-
-          <div>
-            <Label className="text-base font-medium">Farming Methods</Label>
-            <div className="grid grid-cols-2 gap-2 mt-2">
-              {farmingMethods.map(method => (
-                <div key={method} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={method}
-                    checked={formData.farmInfo.farmingMethods.includes(method)}
-                    onCheckedChange={() => handleArrayToggle('farmInfo', 'farmingMethods', method)}
-                  />
-                  <Label htmlFor={method} className="text-sm">{method}</Label>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <Label className="text-base font-medium">What do you grow? *</Label>
-            <div className="grid grid-cols-2 gap-2 mt-2">
-              {productCategories.map(category => (
-                <div key={category} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={category}
-                    checked={formData.farmInfo.specialties.includes(category)}
-                    onCheckedChange={() => handleArrayToggle('farmInfo', 'specialties', category)}
-                  />
-                  <Label htmlFor={category} className="text-sm">{category}</Label>
-                </div>
-              ))}
-            </div>
-            {errors['farmInfo.specialties'] && <p className="text-red-500 text-sm mt-1">{errors['farmInfo.specialties']}</p>}
-          </div>
-
-          <div>
-            <Label className="text-base font-medium">Certifications</Label>
-            <div className="grid grid-cols-2 gap-2 mt-2">
-              {certifications.map(cert => (
-                <div key={cert} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={cert}
-                    checked={formData.farmInfo.certifications.includes(cert)}
-                    onCheckedChange={() => handleArrayToggle('farmInfo', 'certifications', cert)}
-                  />
-                  <Label htmlFor={cert} className="text-sm">{cert}</Label>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      );
-    } else {
-      return (
-        <div className="space-y-6">
-          <div>
-            <Label className="text-base font-medium">Dietary Preferences</Label>
-            <div className="grid grid-cols-2 gap-2 mt-2">
-              {dietaryOptions.map(option => (
-                <div key={option} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={option}
-                    checked={formData.customerInfo.dietaryRestrictions.includes(option)}
-                    onCheckedChange={() => handleArrayToggle('customerInfo', 'dietaryRestrictions', option)}
-                  />
-                  <Label htmlFor={option} className="text-sm">{option}</Label>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <Label htmlFor="allergies">Allergies & Special Requirements</Label>
-            <Textarea
-              id="allergies"
-              value={formData.customerInfo.allergies}
-              onChange={(e) => handleNestedChange('customerInfo', 'allergies', e.target.value)}
-              placeholder="Please list any food allergies or special dietary requirements..."
-              rows={3}
-            />
+              className={errors['farmInfo.description'] ? 'border-red-500' : ''} />
           </div>
 
           <div>
@@ -683,7 +780,8 @@ const RegisterForm = () => {
     }
   };
 
-  const renderStep4 = () => (
+  // Step 5: Preferences & Settings
+  const renderStep5 = () => (
     <div className="space-y-6">
       <div>
         <Label className="text-base font-medium mb-3 block">Email Notifications</Label>
@@ -778,11 +876,20 @@ const RegisterForm = () => {
         </div>
       </div>
 
-      {formData.role === 'rolnik' && (
+      {formData.role === 'farmer' && (
         <Alert>
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
             As a farmer, your account will be reviewed before activation. This process typically takes 1-2 business days.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {authMethod === 'civic' && (
+        <Alert className="bg-blue-50 border-blue-200">
+          <Shield className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-blue-800">
+            Your account will be secured with Civic's verified identity. No password required!
           </AlertDescription>
         </Alert>
       )}
@@ -795,6 +902,7 @@ const RegisterForm = () => {
       case 2: return renderStep2();
       case 3: return renderStep3();
       case 4: return renderStep4();
+      case 5: return renderStep5();
       default: return null;
     }
   };
@@ -859,9 +967,28 @@ const RegisterForm = () => {
               <span className="text-sm text-gray-500">
                 Step {currentStep} of {steps.length}
               </span>
+              {authMethod === 'civic' && civicAuth.user && (
+                <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                  <Shield className="w-3 h-3 mr-1" />
+                  Civic Verified
+                </Badge>
+              )}
             </div>
             
-            {currentStep < 4 ? (
+            {/* Step 1 special handling */}
+            {currentStep === 1 && authMethod === 'traditional' ? (
+              <Button
+                onClick={nextStep}
+                className="flex items-center gap-2"
+              >
+                Next
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            ) : currentStep === 1 && authMethod === 'civic' && !civicAuth.user ? (
+              <Button disabled className="flex items-center gap-2 opacity-50">
+                Complete Civic Auth First
+              </Button>
+            ) : currentStep < 5 ? (
               <Button
                 onClick={nextStep}
                 className="flex items-center gap-2"

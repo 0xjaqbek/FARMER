@@ -43,6 +43,10 @@ import ChatDetail from './pages/chat/ChatDetail';
 
 import { FirebaseDebug } from './utils/firebaseDebug';
 
+import { UnifiedAuthProvider } from './context/UnifiedAuthContext';
+import { CivicCallback } from './pages/auth/CivicCallback';
+import { CivicAuthProvider } from "@civic/auth/react";
+
 // Protected route component - MUST be inside AuthProvider
 const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   const { currentUser, userProfile, loading } = useAuth();
@@ -77,8 +81,12 @@ const AppRoutes = () => {
   }, []);
 
   return (
+    <CivicAuthProvider clientId={import.meta.env.VITE_CIVIC_CLIENT_ID}>
+      <AuthProvider>
     <Router>
       <Routes>
+
+        <Route path="/auth/civic/callback" element={<CivicCallback />} />
         {/* Auth Routes - No layout needed */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
@@ -336,6 +344,8 @@ const AppRoutes = () => {
       {/* Toast notifications */}
       <Toaster />
     </Router>
+    </AuthProvider>
+   </CivicAuthProvider>
   );
 };
 
