@@ -204,47 +204,49 @@ const CampaignCreator = () => {
     setCurrentStep(prev => Math.max(prev - 1, 1));
   };
 
-  const handleSubmit = async () => {
-    if (!validateStep(currentStep)) return;
+const handleSubmit = async () => {
+  if (!validateStep(currentStep)) return;
 
-    setSaving(true);
-    try {
-      // TODO: Add Firebase function to create campaign
-      const campaignData = {
-        ...formData,
-        farmerId: userProfile.uid,
-        farmerName: `${userProfile.firstName} ${userProfile.lastName}`,
-        farmName: userProfile.farmInfo?.farmName || userProfile.farmName,
-        status: 'draft',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        currentAmount: 0,
-        backerCount: 0
-      };
+  setSaving(true);
+  try {
+    // First import the createCampaign function at the top of your file
+    const { createCampaign } = await import('../../firebase/crowdfunding');
+    
+    const campaignData = {
+      ...formData,
+      farmerId: userProfile.uid,
+      farmerName: `${userProfile.firstName} ${userProfile.lastName}`,
+      farmName: userProfile.farmInfo?.farmName || userProfile.farmName,
+      status: 'draft',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      currentAmount: 0,
+      backerCount: 0
+    };
 
-      console.log('Creating campaign:', campaignData);
-      
-      // Mock save - replace with actual Firebase call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      toast({
-        title: "Success!",
-        description: "Campaign created successfully"
-      });
-      
-      window.location.href = '/campaigns/manage';
-      
-    } catch (error) {
-      console.error('Error creating campaign:', error);
-      toast({
-        title: "Error",
-        description: "Failed to create campaign",
-        variant: "destructive"
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
+    console.log('Creating campaign:', campaignData);
+    
+    // Replace the mock save with actual Firebase call
+    await createCampaign(campaignData);
+    
+    toast({
+      title: "Success!",
+      description: "Campaign created successfully"
+    });
+    
+    window.location.href = '/campaigns/manage';
+    
+  } catch (error) {
+    console.error('Error creating campaign:', error);
+    toast({
+      title: "Error",
+      description: "Failed to create campaign",
+      variant: "destructive"
+    });
+  } finally {
+    setSaving(false);
+  }
+};
 
   const renderStepIndicator = () => (
     <div className="flex items-center justify-center space-x-4 mb-8">
