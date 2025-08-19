@@ -12,6 +12,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/components/ui/use-toast';
 import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { 
   Users, 
   Shield, 
   CheckCircle, 
@@ -42,7 +48,9 @@ import {
   Star,
   DollarSign,
   Target,
-  Leaf
+  Leaf,
+  Menu,
+  ChevronDown
 } from 'lucide-react';
 
 // Import real Firebase admin functions
@@ -58,11 +66,167 @@ import {
 
 // Import crowdfunding functions
 import {
-  getActiveCampaigns,
+  getAllCampaignsForAdmin,
   updateCampaign,
   deleteCampaign,
   getCampaignStats
 } from '../../firebase/crowdfunding';
+
+// Responsive Tab Navigation Component
+const ResponsiveAdminTabs = ({ activeTab, setActiveTab, systemStats = {}, campaignStats = {} }) => {
+  const tabs = [
+    {
+      id: 'overview',
+      label: 'Overview',
+      icon: BarChart3,
+      description: 'Dashboard overview'
+    },
+    {
+      id: 'users',
+      label: 'Users',
+      icon: Users,
+      description: 'User management',
+      badge: systemStats.totalUsers
+    },
+    {
+      id: 'verifications',
+      label: 'Verifications',
+      icon: Shield,
+      description: 'Pending approvals',
+      badge: systemStats.pendingVerifications,
+      badgeVariant: systemStats.pendingVerifications > 0 ? 'destructive' : 'secondary'
+    },
+    {
+      id: 'campaigns',
+      label: 'Campaigns',
+      icon: Target,
+      description: 'Crowdfunding campaigns',
+      badge: campaignStats.totalCampaigns
+    },
+    {
+      id: 'analytics',
+      label: 'Analytics',
+      icon: TrendingUp,
+      description: 'System analytics'
+    },
+    {
+      id: 'settings',
+      label: 'Settings',
+      icon: Settings,
+      description: 'System settings'
+    }
+  ];
+
+  const currentTab = tabs.find(tab => tab.id === activeTab);
+
+  return (
+    <>
+      {/* Desktop Tab Navigation - Hidden on mobile */}
+      <div className="hidden lg:block">
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8 overflow-x-auto scrollbar-hide">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-colors ${
+                    isActive
+                      ? 'border-green-500 text-green-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <Icon className={`w-5 h-5 mr-2 ${isActive ? 'text-green-500' : 'text-gray-400 group-hover:text-gray-500'}`} />
+                  {tab.label}
+                  {tab.badge !== undefined && tab.badge > 0 && (
+                    <Badge 
+                      variant={tab.badgeVariant || 'secondary'} 
+                      className="ml-2 text-xs"
+                    >
+                      {tab.badge}
+                    </Badge>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      </div>
+
+      {/* Mobile Tab Navigation */}
+      <div className="lg:hidden">
+        <div className="bg-white border-b border-gray-200">
+          <div className="px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center flex-1">
+                {currentTab && (
+                  <>
+                    <currentTab.icon className="w-5 h-5 text-green-600 mr-3" />
+                    <div className="flex-1">
+                      <h2 className="text-lg font-semibold text-gray-900">{currentTab.label}</h2>
+                      <p className="text-sm text-gray-500">{currentTab.description}</p>
+                    </div>
+                    {currentTab.badge !== undefined && currentTab.badge > 0 && (
+                      <Badge 
+                        variant={currentTab.badgeVariant || 'secondary'} 
+                        className="ml-2"
+                      >
+                        {currentTab.badge}
+                      </Badge>
+                    )}
+                  </>
+                )}
+              </div>
+              
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="ml-3">
+                    <Menu className="w-4 h-4 mr-2" />
+                    Switch
+                    <ChevronDown className="w-4 h-4 ml-2" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  {tabs.map((tab) => {
+                    const Icon = tab.icon;
+                    const isActive = activeTab === tab.id;
+                    
+                    return (
+                      <DropdownMenuItem
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`cursor-pointer ${isActive ? 'bg-green-50 text-green-700' : ''}`}
+                      >
+                        <Icon className="w-4 h-4 mr-3" />
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">{tab.label}</span>
+                            {tab.badge !== undefined && tab.badge > 0 && (
+                              <Badge 
+                                variant={tab.badgeVariant || 'secondary'} 
+                                className="ml-2 text-xs"
+                              >
+                                {tab.badge}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">{tab.description}</p>
+                        </div>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+};
 
 const AdminDashboard = () => {
   const { userProfile } = useAuth();
@@ -108,19 +272,27 @@ const AdminDashboard = () => {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
+      
+      console.log('🔥 Loading admin dashboard data...');
+      
       const [usersData, statsData, activityData, campaignsData, campaignStatsData] = await Promise.all([
         getAllUsers(),
         getSystemStats(),
         getRecentActivity(10),
-        getActiveCampaigns(true), // true = adminView
+        getAllCampaignsForAdmin(), // Changed from getActiveCampaigns(true)
         getCampaignStats()
       ]);
+      
+      // Debug the campaign data
+      console.log('📊 Campaign data received:', campaignsData);
+      console.log('📊 Number of campaigns:', campaignsData?.length || 0);
       
       setUsers(usersData);
       setSystemStats(statsData);
       setRecentActivity(activityData);
       setCampaigns(campaignsData);
       setCampaignStats(campaignStatsData);
+      
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       toast({
@@ -399,18 +571,21 @@ const AdminDashboard = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-          <p className="text-gray-600">Manage users, verifications, campaigns, and system settings</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+          <p className="text-gray-600 text-sm sm:text-base">Manage users, verifications, campaigns, and system settings</p>
         </div>
         
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={loadDashboardData}>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button variant="outline" onClick={loadDashboardData} className="w-full sm:w-auto">
+            🔄 Refresh Data
+          </Button>
+          <Button variant="outline" onClick={loadDashboardData} className="w-full sm:w-auto">
             <Download className="w-4 h-4 mr-2" />
             Export Data
           </Button>
-          <Button variant="outline">
+          <Button variant="outline" className="w-full sm:w-auto">
             <Settings className="w-4 h-4 mr-2" />
             Settings
           </Button>
@@ -469,17 +644,17 @@ const AdminDashboard = () => {
         </Card>
       </div>
 
+      {/* Responsive Tab Navigation */}
+      <ResponsiveAdminTabs 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab}
+        systemStats={systemStats}
+        campaignStats={campaignStats}
+      />
+
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="users">User Management</TabsTrigger>
-          <TabsTrigger value="verifications">Verifications</TabsTrigger>
-          <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
-        </TabsList>
-
+      {/* Main Content Tabs */}
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

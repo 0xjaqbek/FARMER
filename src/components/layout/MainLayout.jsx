@@ -602,7 +602,7 @@ const MainLayout = ({ children }) => {
                   >
                     <User className="w-4 h-4 mr-2 text-gray-600" />
                     <div>
-                      <p className="text-sm font-medium text-gray-700">Profile Settings</p>
+                      <p className="text-sm font-medium text-gray-700">Profile</p>
                       <p className="text-xs text-gray-500">Manage account</p>
                     </div>
                   </Link>
@@ -610,29 +610,6 @@ const MainLayout = ({ children }) => {
               </div>
               
               <div className="space-y-1 mt-3">
-                
-                {/* NEW: Mobile customer menu items */}
-                {(isKlient || isAdmin) && (
-                  <>
-                    <Link
-                      to="/farmers"
-                      className="flex items-center px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      <Users className="mr-3 h-5 w-5" />
-                      Find Farmers
-                    </Link>
-                    
-                    <Link
-                      to="/search"
-                      className="flex items-center px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      <Search className="mr-3 h-5 w-5" />
-                      Search & Map
-                    </Link>
-                  </>
-                )}
                 
                 {isAdmin && (
                   <Link

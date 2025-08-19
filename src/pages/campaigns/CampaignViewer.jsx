@@ -197,7 +197,6 @@ const CampaignViewer = () => {
 
   const submitBacking = async () => {
     try {
-      // Check if user is logged in
       if (!userProfile) {
         toast({
           title: "Login Required",
@@ -216,8 +215,16 @@ const CampaignViewer = () => {
         return;
       }
 
-      // TODO: Implement actual backing logic with payment processing
-      // This would save the backing to Firebase with userProfile.uid
+      // Import and call the actual backing function
+      const { backCampaign } = await import('../../firebase/crowdfunding');
+      
+      await backCampaign(
+        selectedCampaignForBacking.id, 
+        userProfile.uid, 
+        parseFloat(backingAmount),
+        selectedReward
+      );
+
       toast({
         title: "Backing Successful!",
         description: `You've backed ${selectedCampaignForBacking.title} with ${backingAmount} PLN`,
@@ -227,6 +234,9 @@ const CampaignViewer = () => {
       setSelectedCampaignForBacking(null);
       setBackingAmount('');
       setSelectedReward(null);
+
+      // Refresh campaigns to show updated data
+      loadCampaigns();
 
     } catch (error) {
       console.error('Error backing campaign:', error);

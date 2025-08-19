@@ -565,3 +565,38 @@ export const deleteCampaign = async (campaignId, userId, isAdmin = false) => {
     throw error;
   }
 };
+
+// Get all campaigns for admin view (including draft, active, etc.)
+export const getAllCampaignsForAdmin = async () => {
+  try {
+    console.log('🔥 Fetching ALL campaigns for admin...');
+    
+    const campaignsRef = collection(db, 'campaigns');
+    const q = query(
+      campaignsRef,
+      orderBy('createdAt', 'desc')
+    );
+    
+    const snapshot = await getDocs(q);
+    const campaigns = [];
+    
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      campaigns.push({
+        id: doc.id,
+        ...data,
+        createdAt: safeToDate(data.createdAt),
+        updatedAt: safeToDate(data.updatedAt),
+        startDate: safeToDate(data.startDate),
+        endDate: safeToDate(data.endDate)
+      });
+    });
+    
+    console.log(`✅ Found ${campaigns.length} total campaigns for admin`);
+    return campaigns;
+    
+  } catch (error) {
+    console.error('❌ Error fetching campaigns for admin:', error);
+    throw error;
+  }
+};
