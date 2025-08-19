@@ -27,79 +27,118 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   // Get user profile from Firestore
-  const getUserProfile = async (userId) => {
-    try {
-      console.log('Getting user profile for:', userId);
-      
-      if (!userId) {
-        console.warn('No userId provided to getUserProfile');
-        return null;
-      }
-      
-      const userDocRef = doc(db, 'users', userId);
-      const userDoc = await getDoc(userDocRef);
-      
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        console.log('User profile found:', userData);
-        
-        // Ensure all required fields are present
-        const completeProfile = {
-          uid: userId,
-          id: userId, // Add id field for compatibility
-          email: userData.email || '',
-          firstName: userData.firstName || '',
-          lastName: userData.lastName || '',
-          role: userData.role || 'customer',
-          displayName: userData.displayName || `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || 'User',
-          farmName: userData.farmName || '',
-          farmLocation: userData.farmLocation || '',
-          profileComplete: userData.profileComplete || false,
-          phone: userData.phone || '',
-          address: userData.address || {},
-          notificationPreferences: userData.notificationPreferences || {
-            email: true,
-            sms: false,
-            inApp: true
-          },
-          createdAt: userData.createdAt,
-          updatedAt: userData.updatedAt
-        };
-        
-        return completeProfile;
-      } else {
-        console.log('No user profile found in Firestore for:', userId);
-        return null;
-      }
-    } catch (error) {
-      console.error('Error getting user profile:', error);
+const getUserProfile = async (userId) => {
+  try {
+    console.log('Getting user profile for:', userId);
+    
+    if (!userId) {
+      console.warn('No userId provided to getUserProfile');
       return null;
     }
-  };
-
-  // Update user profile in Firestore
-  const updateUserProfile = async (updates) => {
-    try {
-      if (!currentUser) throw new Error('No authenticated user');
+    
+    const userDocRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userDocRef);
+    
+    if (userDoc.exists()) {
+      const userData = userDoc.data();
+      console.log('Raw user data from Firestore:', userData);
       
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      const updateData = {
-        ...updates,
-        updatedAt: serverTimestamp()
+      // DON'T FLATTEN THE DATA - PRESERVE THE STRUCTURE
+      const completeProfile = {
+        uid: userId,
+        id: userId,
+        
+        // Basic fields
+        email: userData.email || '',
+        firstName: userData.firstName || '',
+        lastName: userData.lastName || '',
+        role: userData.role || 'customer',
+        displayName: userData.displayName || `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || 'User',
+        phone: userData.phone || userData.phoneNumber || '',
+        bio: userData.bio || '',
+        profileComplete: userData.profileComplete || false,
+        
+        // CRITICAL: Preserve nested structures AS-IS
+        address: userData.address || {},
+        farmInfo: userData.farmInfo || {}, // This preserves farmInfo.farmName!
+        customerInfo: userData.customerInfo || {},
+        notificationPreferences: userData.notificationPreferences || {
+          email: { orderUpdates: true, newMessages: true, lowStock: true, reviews: true, marketing: false },
+          sms: { orderUpdates: false, newMessages: false, lowStock: false, reviews: false },
+          inApp: { orderUpdates: true, newMessages: true, lowStock: true, reviews: true, marketing: true }
+        },
+        privacy: userData.privacy || {},
+        
+        // Legacy fields (for backwards compatibility)
+        farmName: userData.farmName || userData.farmInfo?.farmName || '', // Support both structures
+        farmLocation: userData.farmLocation || '',
+        isPublic: userData.isPublic ?? true,
+        acceptsOrders: userData.acceptsOrders ?? true,
+        deliveryAvailable: userData.deliveryAvailable ?? false,
+        deliveryRadius: userData.deliveryRadius ?? 10,
+        
+        // Timestamps
+        createdAt: userData.createdAt,
+        updatedAt: userData.updatedAt,
+        lastLoginAt: userData.lastLoginAt
       };
       
-      await setDoc(userDocRef, updateData, { merge: true });
-      
-      // Refresh the user profile
-      const updatedProfile = await getUserProfile(currentUser.uid);
-      setUserProfile(updatedProfile);
-      
-      return updatedProfile;
-    } catch (error) {
-      console.error('Error updating user profile:', error);
-      throw error;
+      console.log('Complete profile with preserved structure:', completeProfile);
+      return completeProfile;
+    } else {
+      console.log('No user profile found in Firestore for:', userId);
+      return null;
     }
-  };
+  } catch (error) {
+    console.error('Error getting user profile:', error);
+    return null;
+  }
+};
+
+  // Update user profile in Firestore
+const updateUserProfile = async (updates) => {
+  try {
+    if (!currentUser) throw new Error('No authenticated user');
+    
+    console.log('=== AUTH CONTEXT UPDATE DEBUG ===');
+    console.log('Updates to save:', updates);
+    
+    const userDocRef = doc(db, 'users', currentUser.uid);
+    
+    // Prepare the update data with proper structure
+    const updateData = {
+      ...updates,
+      updatedAt: serverTimestamp()
+    };
+    
+    console.log('Final data being saved to Firestore:', updateData);
+    
+    // Save to Firestore with merge to preserve existing data
+    await setDoc(userDocRef, updateData, { merge: true });
+    console.log('✅ Data saved to Firestore successfully');
+    
+    // Verify the save by reading back immediately
+    console.log('🔍 Verifying save by reading document...');
+    const verifyDoc = await getDoc(userDocRef);
+    if (verifyDoc.exists()) {
+      const savedData = verifyDoc.data();
+      console.log('✅ Verified saved data:', savedData);
+      console.log('Farm info in saved data:', savedData.farmInfo);
+      console.log('Farm name in saved data:', savedData.farmInfo?.farmName);
+    }
+    
+    // Refresh the user profile with the new data
+    const updatedProfile = await getUserProfile(currentUser.uid);
+    console.log('✅ Profile refreshed after update:', updatedProfile);
+    
+    setUserProfile(updatedProfile);
+    return updatedProfile;
+    
+  } catch (error) {
+    console.error('❌ Error updating user profile:', error);
+    throw error;
+  }
+};
 
   // Refresh user profile (useful for manual refresh)
   const refreshUserProfile = async () => {

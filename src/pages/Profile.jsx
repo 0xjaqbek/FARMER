@@ -175,15 +175,21 @@ const Profile = () => {
   ];
 
   useEffect(() => {
-    if (userProfile) {
-      console.log('Loading comprehensive profile data:', userProfile);
-      setFormData({
+    console.log('=== PROFILE STATE CHANGE DETECTED ===');
+    console.log('Current userProfile:', userProfile);
+    console.log('Is editing:', editing);
+    
+    if (userProfile && !editing) {
+      console.log('Profile exists and not editing - reloading form data');
+      
+      // Create comprehensive form data that matches your database structure
+      const loadedFormData = {
         // Basic Information
         firstName: userProfile.firstName || '',
         lastName: userProfile.lastName || '',
-        displayName: userProfile.displayName || '',
+        displayName: userProfile.displayName || `${userProfile.firstName || ''} ${userProfile.lastName || ''}`.trim(),
         email: userProfile.email || '',
-        phone: userProfile.phone || '',
+        phone: userProfile.phone || userProfile.phoneNumber || '',
         bio: userProfile.bio || '',
         
         // Address Information
@@ -191,45 +197,52 @@ const Profile = () => {
           street: userProfile.address?.street || '',
           city: userProfile.address?.city || '',
           state: userProfile.address?.state || '',
-          postalCode: userProfile.address?.postalCode || '',
+          postalCode: userProfile.address?.postalCode || userProfile.postalCode || '',
           country: userProfile.address?.country || 'Poland'
         },
         
-        // Farm Information (for farmers)
+        // Farm Information (for farmers) - WITH SAFE DEFAULTS
         farmInfo: {
           farmName: userProfile.farmInfo?.farmName || userProfile.farmName || '',
-          description: userProfile.farmInfo?.description || userProfile.farmDescription || '',
+          description: userProfile.farmInfo?.description || '',
           established: userProfile.farmInfo?.established || '',
           farmSize: userProfile.farmInfo?.farmSize || '',
-          farmingMethods: userProfile.farmInfo?.farmingMethods || userProfile.farmInfo?.practices || [],
+          farmingMethods: userProfile.farmInfo?.farmingMethods || [],
           specialties: userProfile.farmInfo?.specialties || [],
           certifications: userProfile.farmInfo?.certifications || [],
           website: userProfile.farmInfo?.website || userProfile.website || '',
+          
+          // Social media with safe defaults
           socialMedia: {
             facebook: userProfile.farmInfo?.socialMedia?.facebook || userProfile.socialMedia?.facebook || '',
             instagram: userProfile.farmInfo?.socialMedia?.instagram || userProfile.socialMedia?.instagram || '',
             twitter: userProfile.farmInfo?.socialMedia?.twitter || userProfile.socialMedia?.twitter || ''
           },
+          
+          // Delivery options with safe defaults
           deliveryOptions: {
             deliveryAvailable: userProfile.farmInfo?.deliveryOptions?.deliveryAvailable ?? userProfile.deliveryAvailable ?? false,
             deliveryRadius: userProfile.farmInfo?.deliveryOptions?.deliveryRadius ?? userProfile.deliveryRadius ?? 10,
             pickupAvailable: userProfile.farmInfo?.deliveryOptions?.pickupAvailable ?? true,
             deliveryFee: userProfile.farmInfo?.deliveryOptions?.deliveryFee ?? 0
           },
+          
+          // Business info with safe defaults - THIS IS THE CRITICAL FIX
           businessInfo: {
             registrationNumber: userProfile.farmInfo?.businessInfo?.registrationNumber || userProfile.businessRegistration || '',
-            taxId: userProfile.farmInfo?.businessInfo?.taxId || '',
+            taxId: userProfile.farmInfo?.businessInfo?.taxId || userProfile.taxId || '',
             insurance: userProfile.farmInfo?.businessInfo?.insurance ?? false
           }
         },
         
-        // Customer Information
+        // Customer Information with safe defaults
         customerInfo: {
           dietaryRestrictions: userProfile.customerInfo?.dietaryRestrictions || [],
           allergies: userProfile.customerInfo?.allergies || '',
           preferredCategories: userProfile.customerInfo?.preferredCategories || [],
           budgetRange: userProfile.customerInfo?.budgetRange || '',
           orderFrequency: userProfile.customerInfo?.orderFrequency || '',
+          
           deliveryPreferences: {
             preferredDays: userProfile.customerInfo?.deliveryPreferences?.preferredDays || [],
             preferredTimes: userProfile.customerInfo?.deliveryPreferences?.preferredTimes || '',
@@ -237,7 +250,7 @@ const Profile = () => {
           }
         },
         
-        // Notification Preferences
+        // Notification Preferences with safe defaults
         notificationPreferences: {
           email: {
             orderUpdates: userProfile.notificationPreferences?.email?.orderUpdates ?? true,
@@ -262,7 +275,7 @@ const Profile = () => {
           }
         },
         
-        // Privacy Settings
+        // Privacy Settings with safe defaults
         privacy: {
           profilePublic: userProfile.privacy?.profilePublic ?? userProfile.isPublic ?? true,
           showContactInfo: userProfile.privacy?.showContactInfo ?? false,
@@ -270,15 +283,21 @@ const Profile = () => {
           shareLocation: userProfile.privacy?.shareLocation ?? false
         },
         
-        // Legacy compatibility
-        isPublic: userProfile.isPublic ?? true,
+        // Legacy compatibility fields
+        isPublic: userProfile.isPublic ?? userProfile.privacy?.profilePublic ?? true,
         acceptsOrders: userProfile.acceptsOrders ?? true,
-        deliveryAvailable: userProfile.deliveryAvailable ?? false,
-        deliveryRadius: userProfile.deliveryRadius ?? 10
-      });
+        deliveryAvailable: userProfile.deliveryAvailable ?? userProfile.farmInfo?.deliveryOptions?.deliveryAvailable ?? false,
+        deliveryRadius: userProfile.deliveryRadius ?? userProfile.farmInfo?.deliveryOptions?.deliveryRadius ?? 10
+      };
+      
+      console.log('=== PROCESSED FORM DATA ===');
+      console.log('Loaded form data:', loadedFormData);
+      
+      setFormData(loadedFormData);
       setLoading(false);
     }
-  }, [userProfile]);
+  }, [userProfile, editing]);
+
 
   const handleRefreshProfile = async () => {
     try {
@@ -324,7 +343,7 @@ const Profile = () => {
       [parent]: {
         ...prev[parent],
         [child]: {
-          ...prev[parent][child],
+          ...prev[parent]?.[child],
           [field]: value
         }
       }
@@ -355,42 +374,65 @@ const Profile = () => {
     });
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  
+  try {
+    setSaving(true);
     
+    console.log('=== PROFILE UPDATE DEBUG ===');
+    console.log('Form data being saved:', formData);
+    
+    // Prepare update data
+    const updateData = {
+      ...formData,
+      updatedAt: new Date(),
+      profileComplete: true
+    };
+    
+    console.log('Updating profile for user:', currentUser?.uid);
+    console.log('Update data:', updateData);
+    
+    // Use the AuthContext updateUserProfile method
+    const result = await updateUserProfile(updateData);
+    console.log('Update result:', result);
+    
+    // SUCCESS: Show toast and exit editing mode
+    toast({
+      title: "Success",
+      description: "Profile updated successfully"
+    });
+    
+    setEditing(false);
+    
+    // CRITICAL FIX: Force immediate refresh without delay
+    console.log('Forcing immediate profile refresh...');
     try {
-      setSaving(true);
+      const refreshedProfile = await refreshUserProfile();
+      console.log('Profile refreshed successfully:', refreshedProfile);
       
-      // Prepare update data by cleaning up and structuring properly
-      const updateData = {
-        ...formData,
-        updatedAt: new Date(),
-        profileComplete: true
-      };
-      
-      console.log('Updating comprehensive profile with data:', updateData);
-      
-      // Use the AuthContext updateUserProfile method
-      await updateUserProfile(updateData);
-      
-      toast({
-        title: "Success",
-        description: "Profile updated successfully"
-      });
-      
-      setEditing(false);
-      
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      toast({
-        title: "Error",
-        description: `Failed to update profile: ${error.message}`,
-        variant: "destructive"
-      });
-    } finally {
-      setSaving(false);
+      // Force re-render by updating local state
+      if (refreshedProfile) {
+        // This will trigger the useEffect to reload form data
+        console.log('Local state updated with refreshed profile');
+      }
+    } catch (refreshError) {
+      console.error('Error during profile refresh:', refreshError);
+      // Don't show error to user since save was successful
     }
-  };
+    
+  } catch (error) {
+    console.error('Profile update error:', error);
+    toast({
+      title: "Error",
+      description: `Failed to update profile: ${error.message}`,
+      variant: "destructive"
+    });
+  } finally {
+    setSaving(false);
+  }
+};
+
 
   const getRoleDisplayName = (role) => {
     switch (role) {
@@ -420,6 +462,18 @@ const Profile = () => {
     }
   };
 
+  useEffect(() => {
+  if (userProfile?.updatedAt) {
+    const lastUpdate = userProfile.updatedAt.seconds 
+      ? new Date(userProfile.updatedAt.seconds * 1000)
+      : new Date(userProfile.updatedAt);
+    
+    console.log('Profile last updated at:', lastUpdate.toLocaleString());
+    console.log('Profile updated in last 5 minutes:', 
+      (Date.now() - lastUpdate.getTime()) < 5 * 60 * 1000);
+  }
+}, [userProfile?.updatedAt]);
+
   const isFarmer = userProfile?.role === 'rolnik' || userProfile?.role === 'farmer';
   const isCustomer = userProfile?.role === 'klient' || userProfile?.role === 'customer';
 
@@ -434,6 +488,52 @@ const Profile = () => {
     );
   }
 
+  const ProfileDataComparison = () => {
+  if (import.meta.env.MODE !== 'development') return null;
+  
+  const farmNameInProfile = userProfile?.farmInfo?.farmName || userProfile?.farmName || 'Not found';
+  const farmNameInForm = formData?.farmInfo?.farmName || 'Not found';
+  const farmDescInProfile = userProfile?.farmInfo?.description || 'Not found';
+  const farmDescInForm = formData?.farmInfo?.description || 'Not found';
+  
+  return (
+    <Card className="border-blue-200 bg-blue-50 mb-4">
+      <CardHeader>
+        <CardTitle className="text-blue-800 text-sm">Data Comparison (Debug)</CardTitle>
+      </CardHeader>
+      <CardContent className="text-xs space-y-2">
+        <div>
+          <strong>Farm Name in Database:</strong> "{farmNameInProfile}"
+        </div>
+        <div>
+          <strong>Farm Name in Form:</strong> "{farmNameInForm}"
+        </div>
+        <div>
+          <strong>Names Match:</strong> {farmNameInProfile === farmNameInForm ? '✅ Yes' : '❌ No'}
+        </div>
+        <div>
+          <strong>Farm Desc in Database:</strong> "{farmDescInProfile}"
+        </div>
+        <div>
+          <strong>Farm Desc in Form:</strong> "{farmDescInForm}"
+        </div>
+        <div>
+          <strong>Descriptions Match:</strong> {farmDescInProfile === farmDescInForm ? '✅ Yes' : '❌ No'}
+        </div>
+        <div>
+          <strong>Last Updated:</strong> {userProfile?.updatedAt ? new Date(userProfile.updatedAt.seconds * 1000).toLocaleString() : 'Unknown'}
+        </div>
+        <div>
+          <strong>Profile Complete:</strong> {userProfile?.profileComplete ? '✅ Yes' : '❌ No'}
+        </div>
+        <div>
+          <strong>Editing Mode:</strong> {editing ? '✏️ Yes' : '👁️ View Mode'}
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -442,6 +542,8 @@ const Profile = () => {
           <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
           <p className="text-gray-600">Manage your account information and preferences</p>
         </div>
+
+        
         
         <div className="flex items-center gap-2">
           <Button 
@@ -481,6 +583,8 @@ const Profile = () => {
           )}
         </div>
       </div>
+
+      
 
       {/* Profile Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -1071,61 +1175,60 @@ const Profile = () => {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {editing ? (
-                    <div className="space-y-4">
-                      <div>
-                        <Label htmlFor="businessRegistration">Business Registration Number</Label>
-                        <Input
-                          id="businessRegistration"
-                          value={formData.farmInfo.businessInfo.registrationNumber}
-                          onChange={(e) => handleDeepNestedChange('farmInfo', 'businessInfo', 'registrationNumber', e.target.value)}
-                          placeholder="Your business registration number"
-                        />
-                      </div>
-                      
-                      <div>
-                        <Label htmlFor="taxId">Tax ID</Label>
-                        <Input
-                          id="taxId"
-                          value={formData.farmInfo.businessInfo.taxId}
-                          onChange={(e) => handleDeepNestedChange('farmInfo', 'businessInfo', 'taxId', e.target.value)}
-                          placeholder="Tax identification number"
-                        />
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label htmlFor="insurance">Business Insurance</Label>
-                          <p className="text-sm text-gray-500">Do you have business insurance?</p>
-                        </div>
-                        <Switch
-                          id="insurance"
-                          checked={formData.farmInfo.businessInfo.insurance}
-                          onCheckedChange={(checked) => handleDeepNestedChange('farmInfo', 'businessInfo', 'insurance', checked)}
-                        />
-                      </div>
+                {editing ? (
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="businessRegistration">Business Registration Number</Label>
+                      <Input
+                        id="businessRegistration"
+                        value={formData?.farmInfo?.businessInfo?.registrationNumber || ''}
+                        onChange={(e) => handleDeepNestedChange('farmInfo', 'businessInfo', 'registrationNumber', e.target.value)}
+                        placeholder="Your business registration number"
+                      />
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label className="text-sm text-gray-500">Registration Number</Label>
-                        <p className="font-medium">{userProfile?.farmInfo?.businessInfo?.registrationNumber || userProfile?.businessRegistration || 'Not provided'}</p>
-                      </div>
-                      
-                      <div>
-                        <Label className="text-sm text-gray-500">Tax ID</Label>
-                        <p className="font-medium">{userProfile?.farmInfo?.businessInfo?.taxId || 'Not provided'}</p>
-                      </div>
-                      
-                      <div>
-                        <Label className="text-sm text-gray-500">Business Insurance</Label>
-                        <Badge variant={userProfile?.farmInfo?.businessInfo?.insurance ? "default" : "secondary"}>
-                          {userProfile?.farmInfo?.businessInfo?.insurance ? "Insured" : "Not Insured"}
-                        </Badge>
-                      </div>
+                    
+                    <div>
+                      <Label htmlFor="taxId">Tax ID</Label>
+                      <Input
+                        id="taxId"
+                        value={formData?.farmInfo?.businessInfo?.taxId || ''}
+                        onChange={(e) => handleDeepNestedChange('farmInfo', 'businessInfo', 'taxId', e.target.value)}
+                        placeholder="Tax identification number"
+                      />
                     </div>
-                  )}
-                </CardContent>
+                    
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label htmlFor="insurance">Business Insurance</Label>
+                        <p className="text-sm text-gray-500">Do you have business insurance?</p>
+                      </div>
+                      <Switch
+                        id="insurance"
+                        checked={formData?.farmInfo?.businessInfo?.insurance || false}
+                        onCheckedChange={(checked) => handleDeepNestedChange('farmInfo', 'businessInfo', 'insurance', checked)}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm text-gray-500">Registration Number</Label>
+                      <p className="font-medium">{userProfile?.farmInfo?.businessInfo?.registrationNumber || userProfile?.businessRegistration || 'Not provided'}</p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm text-gray-500">Tax ID</Label>
+                      <p className="font-medium">{userProfile?.farmInfo?.businessInfo?.taxId || 'Not provided'}</p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm text-gray-500">Business Insurance</Label>
+                      <Badge variant={userProfile?.farmInfo?.businessInfo?.insurance ? "default" : "secondary"}>
+                        {userProfile?.farmInfo?.businessInfo?.insurance ? "Insured" : "Not Insured"}
+                      </Badge>
+                    </div>
+                  </div>
+                )}                </CardContent>
               </Card>
 
               {/* Delivery Options */}
@@ -1137,105 +1240,105 @@ const Profile = () => {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {editing ? (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label htmlFor="acceptsOrders">Accept New Orders</Label>
-                          <p className="text-sm text-gray-500">Allow customers to place orders</p>
-                        </div>
-                        <Switch
-                          id="acceptsOrders"
-                          checked={formData.acceptsOrders}
-                          onCheckedChange={(checked) => handleInputChange('acceptsOrders', checked)}
-                        />
+                {editing ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label htmlFor="acceptsOrders">Accept New Orders</Label>
+                        <p className="text-sm text-gray-500">Allow customers to place orders</p>
                       </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label htmlFor="deliveryAvailable">Delivery Available</Label>
-                          <p className="text-sm text-gray-500">Offer delivery service</p>
-                        </div>
-                        <Switch
-                          id="deliveryAvailable"
-                          checked={formData.farmInfo.deliveryOptions.deliveryAvailable}
-                          onCheckedChange={(checked) => handleDeepNestedChange('farmInfo', 'deliveryOptions', 'deliveryAvailable', checked)}
-                        />
-                      </div>
-                      
-                      {formData.farmInfo.deliveryOptions.deliveryAvailable && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <Label htmlFor="deliveryRadius">Delivery Radius (km)</Label>
-                            <Input
-                              id="deliveryRadius"
-                              type="number"
-                              min="1"
-                              max="100"
-                              value={formData.farmInfo.deliveryOptions.deliveryRadius}
-                              onChange={(e) => handleDeepNestedChange('farmInfo', 'deliveryOptions', 'deliveryRadius', parseInt(e.target.value) || 10)}
-                            />
-                          </div>
-                          
-                          <div>
-                            <Label htmlFor="deliveryFee">Delivery Fee (PLN)</Label>
-                            <Input
-                              id="deliveryFee"
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={formData.farmInfo.deliveryOptions.deliveryFee}
-                              onChange={(e) => handleDeepNestedChange('farmInfo', 'deliveryOptions', 'deliveryFee', parseFloat(e.target.value) || 0)}
-                            />
-                          </div>
-                        </div>
-                      )}
-                      
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label htmlFor="pickupAvailable">Pickup Available</Label>
-                          <p className="text-sm text-gray-500">Allow customers to pick up orders</p>
-                        </div>
-                        <Switch
-                          id="pickupAvailable"
-                          checked={formData.farmInfo.deliveryOptions.pickupAvailable}
-                          onCheckedChange={(checked) => handleDeepNestedChange('farmInfo', 'deliveryOptions', 'pickupAvailable', checked)}
-                        />
-                      </div>
+                      <Switch
+                        id="acceptsOrders"
+                        checked={formData?.acceptsOrders || false}
+                        onCheckedChange={(checked) => handleInputChange('acceptsOrders', checked)}
+                      />
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    
+                    <div className="flex items-center justify-between">
                       <div>
-                        <Label className="text-sm text-gray-500">Accepts Orders</Label>
-                        <Badge variant={userProfile?.acceptsOrders ? "default" : "secondary"}>
-                          {userProfile?.acceptsOrders ? 'Yes' : 'No'}
-                        </Badge>
+                        <Label htmlFor="deliveryAvailable">Delivery Available</Label>
+                        <p className="text-sm text-gray-500">Offer delivery service</p>
                       </div>
-                      
-                      <div>
-                        <Label className="text-sm text-gray-500">Delivery Available</Label>
-                        <Badge variant={(userProfile?.farmInfo?.deliveryOptions?.deliveryAvailable || userProfile?.deliveryAvailable) ? "default" : "secondary"}>
-                          {(userProfile?.farmInfo?.deliveryOptions?.deliveryAvailable || userProfile?.deliveryAvailable) ? 
-                            `Yes (${userProfile?.farmInfo?.deliveryOptions?.deliveryRadius || userProfile?.deliveryRadius || 10}km)` : 'No'}
-                        </Badge>
-                      </div>
-                      
-                      <div>
-                        <Label className="text-sm text-gray-500">Pickup Available</Label>
-                        <Badge variant={userProfile?.farmInfo?.deliveryOptions?.pickupAvailable ? "default" : "secondary"}>
-                          {userProfile?.farmInfo?.deliveryOptions?.pickupAvailable ? 'Yes' : 'No'}
-                        </Badge>
-                      </div>
-                      
-                      {(userProfile?.farmInfo?.deliveryOptions?.deliveryAvailable || userProfile?.deliveryAvailable) && (
-                        <div>
-                          <Label className="text-sm text-gray-500">Delivery Fee</Label>
-                          <p className="font-medium">{userProfile?.farmInfo?.deliveryOptions?.deliveryFee || 0} PLN</p>
-                        </div>
-                      )}
+                      <Switch
+                        id="deliveryAvailable"
+                        checked={formData?.farmInfo?.deliveryOptions?.deliveryAvailable || false}
+                        onCheckedChange={(checked) => handleDeepNestedChange('farmInfo', 'deliveryOptions', 'deliveryAvailable', checked)}
+                      />
                     </div>
-                  )}
-                </CardContent>
+                    
+                    {formData?.farmInfo?.deliveryOptions?.deliveryAvailable && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="deliveryRadius">Delivery Radius (km)</Label>
+                          <Input
+                            id="deliveryRadius"
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={formData?.farmInfo?.deliveryOptions?.deliveryRadius || 10}
+                            onChange={(e) => handleDeepNestedChange('farmInfo', 'deliveryOptions', 'deliveryRadius', parseInt(e.target.value) || 10)}
+                          />
+                        </div>
+                        
+                        <div>
+                          <Label htmlFor="deliveryFee">Delivery Fee (PLN)</Label>
+                          <Input
+                            id="deliveryFee"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={formData?.farmInfo?.deliveryOptions?.deliveryFee || 0}
+                            onChange={(e) => handleDeepNestedChange('farmInfo', 'deliveryOptions', 'deliveryFee', parseFloat(e.target.value) || 0)}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label htmlFor="pickupAvailable">Pickup Available</Label>
+                        <p className="text-sm text-gray-500">Allow customers to pick up orders</p>
+                      </div>
+                      <Switch
+                        id="pickupAvailable"
+                        checked={formData?.farmInfo?.deliveryOptions?.pickupAvailable || false}
+                        onCheckedChange={(checked) => handleDeepNestedChange('farmInfo', 'deliveryOptions', 'pickupAvailable', checked)}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  // Display version with safe access
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label className="text-sm text-gray-500">Accepts Orders</Label>
+                      <Badge variant={userProfile?.acceptsOrders ? "default" : "secondary"}>
+                        {userProfile?.acceptsOrders ? 'Yes' : 'No'}
+                      </Badge>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm text-gray-500">Delivery Available</Label>
+                      <Badge variant={(userProfile?.farmInfo?.deliveryOptions?.deliveryAvailable || userProfile?.deliveryAvailable) ? "default" : "secondary"}>
+                        {(userProfile?.farmInfo?.deliveryOptions?.deliveryAvailable || userProfile?.deliveryAvailable) ? 
+                          `Yes (${userProfile?.farmInfo?.deliveryOptions?.deliveryRadius || userProfile?.deliveryRadius || 10}km)` : 'No'}
+                      </Badge>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm text-gray-500">Pickup Available</Label>
+                      <Badge variant={userProfile?.farmInfo?.deliveryOptions?.pickupAvailable !== false ? "default" : "secondary"}>
+                        {userProfile?.farmInfo?.deliveryOptions?.pickupAvailable !== false ? 'Yes' : 'No'}
+                      </Badge>
+                    </div>
+                    
+                    {(userProfile?.farmInfo?.deliveryOptions?.deliveryAvailable || userProfile?.deliveryAvailable) && (
+                      <div>
+                        <Label className="text-sm text-gray-500">Delivery Fee</Label>
+                        <p className="font-medium">{userProfile?.farmInfo?.deliveryOptions?.deliveryFee || 0} PLN</p>
+                      </div>
+                    )}
+                  </div>
+                )}                </CardContent>
               </Card>
 
               {/* Farm Statistics */}
@@ -1863,136 +1966,9 @@ const Profile = () => {
                 )}
               </CardContent>
             </Card>
-
-            {/* Account Security */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings className="h-5 w-5" />
-                  Account Security
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Email Verification</Label>
-                      <p className="text-sm text-gray-500">Verify your email address for security</p>
-                    </div>
-                    <Badge variant={currentUser?.emailVerified ? "default" : "destructive"}>
-                      {currentUser?.emailVerified ? "Verified" : "Not Verified"}
-                    </Badge>
-                  </div>
-                  
-                  <Separator />
-                  
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Account Created</Label>
-                      <p className="text-sm text-gray-500">{formatDate(userProfile?.createdAt)}</p>
-                    </div>
-                    <Badge variant="outline">
-                      v{userProfile?.registrationVersion || '1.0'}
-                    </Badge>
-                  </div>
-                  
-                  <Separator />
-                  
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Last Login</Label>
-                      <p className="text-sm text-gray-500">{formatDate(userProfile?.lastLoginAt)}</p>
-                    </div>
-                  </div>
-                  
-                  <Separator />
-                  
-                  <div className="space-y-2">
-                    <Button variant="outline" className="w-full">
-                      Change Password
-                    </Button>
-                    <Button variant="outline" className="w-full">
-                      Download My Data
-                    </Button>
-                    <Button variant="destructive" className="w-full">
-                      Delete Account
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </TabsContent>
       </Tabs>
-
-      {/* Quick Actions Footer */}
-      <Card className="mt-8">
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {isFarmer ? (
-              <>
-                <Button variant="outline" className="h-20 flex flex-col gap-2">
-                  <Package className="h-6 w-6" />
-                  <span className="text-sm">Manage Products</span>
-                </Button>
-                <Button variant="outline" className="h-20 flex flex-col gap-2">
-                  <Users className="h-6 w-6" />
-                  <span className="text-sm">View Orders</span>
-                </Button>
-                <Button variant="outline" className="h-20 flex flex-col gap-2">
-                  <TrendingUp className="h-6 w-6" />
-                  <span className="text-sm">Analytics</span>
-                </Button>
-                <Button variant="outline" className="h-20 flex flex-col gap-2">
-                  <Settings className="h-6 w-6" />
-                  <span className="text-sm">Farm Settings</span>
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button variant="outline" className="h-20 flex flex-col gap-2">
-                  <Package className="h-6 w-6" />
-                  <span className="text-sm">Browse Products</span>
-                </Button>
-                <Button variant="outline" className="h-20 flex flex-col gap-2">
-                  <Clock className="h-6 w-6" />
-                  <span className="text-sm">Order History</span>
-                </Button>
-                <Button variant="outline" className="h-20 flex flex-col gap-2">
-                  <Heart className="h-6 w-6" />
-                  <span className="text-sm">Favorites</span>
-                </Button>
-                <Button variant="outline" className="h-20 flex flex-col gap-2">
-                  <Settings className="h-6 w-6" />
-                  <span className="text-sm">Preferences</span>
-                </Button>
-              </>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Debug Information (Development only) */}
-      {import.meta.env.MODE === 'development' && (
-        <Card className="border-yellow-200 bg-yellow-50">
-          <CardHeader>
-            <CardTitle className="text-yellow-800">Debug Information</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <details className="text-sm">
-              <summary className="cursor-pointer font-medium text-yellow-800 mb-2">
-                Raw Profile Data
-              </summary>
-              <pre className="bg-white p-4 rounded border overflow-auto max-h-96 text-xs">
-                {JSON.stringify(userProfile, null, 2)}
-              </pre>
-            </details>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };

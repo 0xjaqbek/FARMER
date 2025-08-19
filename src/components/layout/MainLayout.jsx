@@ -498,17 +498,17 @@ const MainLayout = ({ children }) => {
                   <Link
                     key={item.name}
                     to={item.href}
-                    className={`flex items-center pl-3 pr-4 py-3 border-l-4 text-base font-medium transition-colors ${
+                    className={`flex items-center pl-3 pr-4 py-3 sm:py-2 border-l-4 text-base sm:text-sm font-medium transition-colors ${
                       isActive
                         ? 'bg-green-50 border-green-500 text-green-700'
                         : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
                     }`}
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    <Icon className="w-5 h-5 mr-3" />
+                    <Icon className="w-5 h-5 sm:w-4 sm:h-4 mr-3 sm:mr-2" />
                     <div>
                       <p className="font-medium">{item.name}</p>
-                      <p className="text-xs text-gray-500">{item.description}</p>
+                      <p className="text-xs sm:text-[11px] text-gray-500 leading-tight">{item.description}</p>
                     </div>
                   </Link>
                 );
@@ -517,17 +517,17 @@ const MainLayout = ({ children }) => {
               {/* Mobile Notifications Link */}
               <Link
                 to="/notifications"
-                className={`flex items-center pl-3 pr-4 py-3 border-l-4 text-base font-medium transition-colors ${
+                className={`flex items-center pl-3 pr-4 py-3 sm:py-2 border-l-4 text-base sm:text-sm font-medium transition-colors ${
                   location.pathname === '/notifications'
                     ? 'bg-green-50 border-green-500 text-green-700'
                     : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
                 }`}
                 onClick={() => setMobileMenuOpen(false)}
               >
-                <Bell className="w-5 h-5 mr-3" />
+                <Bell className="w-5 h-5 sm:w-4 sm:h-4 mr-3 sm:mr-2" />
                 <div>
                   <p className="font-medium">Notifications</p>
-                  <p className="text-xs text-gray-500">View all notifications</p>
+                  <p className="text-xs sm:text-[11px] text-gray-500 leading-tight">View all notifications</p>
                 </div>
               </Link>
 
@@ -536,33 +536,33 @@ const MainLayout = ({ children }) => {
                 <>
                   <Link
                     to="/notifications/create"
-                    className={`flex items-center pl-3 pr-4 py-3 border-l-4 text-base font-medium transition-colors ${
+                    className={`flex items-center pl-3 pr-4 py-3 sm:py-2 border-l-4 text-base sm:text-sm font-medium transition-colors ${
                       location.pathname === '/notifications/create'
                         ? 'bg-green-50 border-green-500 text-green-700'
                         : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
                     }`}
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    <MessageSquare className="w-5 h-5 mr-3" />
+                    <MessageSquare className="w-5 h-5 sm:w-4 sm:h-4 mr-3 sm:mr-2" />
                     <div>
                       <p className="font-medium">Send Notifications</p>
-                      <p className="text-xs text-gray-500">Notify your customers</p>
+                      <p className="text-xs sm:text-[11px] text-gray-500 leading-tight">Notify your customers</p>
                     </div>
                   </Link>
                   
                   <Link
                     to="/farmer/location"
-                    className={`flex items-center pl-3 pr-4 py-3 border-l-4 text-base font-medium transition-colors ${
+                    className={`flex items-center pl-3 pr-4 py-3 sm:py-2 border-l-4 text-base sm:text-sm font-medium transition-colors ${
                       location.pathname === '/farmer/location'
                         ? 'bg-green-50 border-green-500 text-green-700'
                         : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
                     }`}
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    <MapPin className="w-5 h-5 mr-3" />
+                    <MapPin className="w-5 h-5 sm:w-4 sm:h-4 mr-3 sm:mr-2" />
                     <div>
                       <p className="font-medium">Set Farm Location</p>
-                      <p className="text-xs text-gray-500">Update your farm address</p>
+                      <p className="text-xs sm:text-[11px] text-gray-500 leading-tight">Update your farm address</p>
                     </div>
                   </Link>
                 </>
@@ -571,24 +571,24 @@ const MainLayout = ({ children }) => {
             
             {/* Mobile user section with Profile Settings button */}
             <div className="pt-4 pb-3 border-t border-gray-200">
-              <div className="px-3 py-3 bg-gray-50 mx-3 rounded-lg">
+              <div className="px-3 py-3 sm:py-2 bg-gray-50 mx-3 rounded-lg">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center flex-1">
                     <div className="flex-shrink-0">
-                      <Avatar className="h-10 w-10">
+                      <Avatar className="h-10 w-10 sm:h-8 sm:w-8">
                         <AvatarFallback className="bg-green-600 text-white">
                           {getInitials()}
                         </AvatarFallback>
                       </Avatar>
                     </div>
-                    <div className="ml-3 flex-1">
-                      <div className="text-sm font-medium text-gray-800">
+                    <div className="ml-3 sm:ml-2 flex-1">
+                      <div className="text-sm sm:text-xs font-medium text-gray-800">
                         {userProfile?.firstName} {userProfile?.lastName}
                       </div>
-                      <div className="text-xs font-medium text-gray-500">
+                      <div className="text-xs sm:text-[11px] font-medium text-gray-500">
                         {userProfile?.email}
                       </div>
-                      <Badge variant="secondary" className="text-xs mt-1">
+                      <Badge variant="secondary" className="text-xs sm:text-[10px] mt-1">
                         {getRoleDisplayName()}
                       </Badge>
                     </div>
@@ -597,13 +597,13 @@ const MainLayout = ({ children }) => {
                   {/* Profile Settings Button */}
                   <Link
                     to="/profile"
-                    className="flex items-center px-3 py-2 rounded-md bg-white hover:bg-gray-100 transition-colors shadow-sm border"
+                    className="flex items-center px-3 py-2 sm:px-2 sm:py-1 rounded-md bg-white hover:bg-gray-100 transition-colors shadow-sm border"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    <User className="w-4 h-4 mr-2 text-gray-600" />
+                    <User className="w-4 h-4 sm:w-3 sm:h-3 mr-2 sm:mr-1 text-gray-600" />
                     <div>
-                      <p className="text-sm font-medium text-gray-700">Profile</p>
-                      <p className="text-xs text-gray-500">Manage account</p>
+                      <p className="text-sm sm:text-xs font-medium text-gray-700">Profile</p>
+                      <p className="text-xs sm:text-[10px] text-gray-500">Manage account</p>
                     </div>
                   </Link>
                 </div>
@@ -614,10 +614,10 @@ const MainLayout = ({ children }) => {
                 {isAdmin && (
                   <Link
                     to="/admin"
-                    className="flex items-center px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+                    className="flex items-center px-4 py-2 sm:py-1 text-base sm:text-sm font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    <Shield className="mr-3 h-5 w-5" />
+                    <Shield className="mr-3 sm:mr-2 h-5 w-5 sm:h-4 sm:w-4" />
                     Admin Panel
                   </Link>
                 )}
@@ -627,9 +627,9 @@ const MainLayout = ({ children }) => {
                     handleLogout();
                     setMobileMenuOpen(false);
                   }}
-                  className="flex items-center w-full px-4 py-2 text-base font-medium text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors"
+                  className="flex items-center w-full px-4 py-2 sm:py-1 text-base sm:text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors"
                 >
-                  <LogOut className="mr-3 h-5 w-5" />
+                  <LogOut className="mr-3 sm:mr-2 h-5 w-5 sm:h-4 sm:w-4" />
                   Sign Out
                 </button>
               </div>
