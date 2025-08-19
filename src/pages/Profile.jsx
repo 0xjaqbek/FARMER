@@ -1350,7 +1350,7 @@ const handleSubmit = async (e) => {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="flex flex-col md:flex-row md:justify-evenly gap-4">
                     <div className="text-center">
                       <Package className="h-8 w-8 mx-auto text-green-600 mb-2" />
                       <p className="text-2xl font-bold">{userProfile?.farmerStats?.totalProducts || 0}</p>
@@ -1361,12 +1361,6 @@ const handleSubmit = async (e) => {
                       <Users className="h-8 w-8 mx-auto text-blue-600 mb-2" />
                       <p className="text-2xl font-bold">{userProfile?.farmerStats?.totalOrders || 0}</p>
                       <p className="text-sm text-gray-600">Orders</p>
-                    </div>
-                    
-                    <div className="text-center">
-                      <DollarSign className="h-8 w-8 mx-auto text-purple-600 mb-2" />
-                      <p className="text-2xl font-bold">{userProfile?.farmerStats?.totalRevenue || 0}</p>
-                      <p className="text-sm text-gray-600">Revenue (PLN)</p>
                     </div>
                     
                     <div className="text-center">
