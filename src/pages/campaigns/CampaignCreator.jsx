@@ -26,17 +26,26 @@ import {
   Truck,
   Award,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  Wallet,
+  Link
 } from 'lucide-react';
+
+// Import Web3 hook
+import { useWeb3 } from '../../hooks/useWeb3';
 
 const CampaignCreator = () => {
   const { userProfile } = useAuth();
   const { toast } = useToast();
   
+  // Web3 integration
+  const { isConnected, connect, account } = useWeb3();
+  
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     category: '',
+    type: 'preorder',
     goalAmount: '',
     duration: 30,
     story: '',
@@ -76,13 +85,63 @@ const CampaignCreator = () => {
     'Market Access'
   ];
 
+  const campaignTypes = [
+    { value: 'preorder', label: 'Pre-Order Campaign', description: 'Pre-sell products before harvest' },
+    { value: 'equipment', label: 'Equipment & Infrastructure', description: 'Fund equipment purchases' },
+    { value: 'expansion', label: 'Farm Expansion', description: 'Expand farming operations' },
+    { value: 'emergency', label: 'Emergency Funding', description: 'Emergency financial support' }
+  ];
+
+  // Helper function for campaign type mapping
+  const getCampaignTypeIndex = (campaignType) => {
+    const typeMapping = {
+      'preorder': 0,
+      'equipment': 1,
+      'expansion': 2,
+      'emergency': 3
+    };
+    return typeMapping[campaignType.toLowerCase()] || 0;
+  };
+
+  // Wallet signature function
+  const signWalletOwnership = async (campaignId) => {
+    try {
+      if (!window.ethereum) {
+        throw new Error('MetaMask not installed');
+      }
+
+      const provider = new (await import('ethers')).ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      
+      const message = `Farm Direct Campaign Ownership Verification
+      
+Campaign ID: ${campaignId}
+Email: ${userProfile.email}
+Timestamp: ${Date.now()}
+
+By signing this message, I confirm that I am the creator of this campaign and the owner of this wallet address.`;
+
+      const signature = await signer.signMessage(message);
+      const address = await signer.getAddress();
+
+      return {
+        address,
+        signature,
+        message,
+        timestamp: Date.now()
+      };
+    } catch (error) {
+      console.error('Wallet signing failed:', error);
+      throw error;
+    }
+  };
+
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }));
     
-    // Clear error for this field
     if (errors[field]) {
       setErrors(prev => ({
         ...prev,
@@ -172,7 +231,11 @@ const CampaignCreator = () => {
         if (!formData.title.trim()) newErrors.title = 'Campaign title is required';
         if (!formData.description.trim()) newErrors.description = 'Short description is required';
         if (!formData.category) newErrors.category = 'Category is required';
+        if (!formData.type) newErrors.type = 'Campaign type is required';
         if (!formData.goalAmount || formData.goalAmount <= 0) newErrors.goalAmount = 'Valid goal amount is required';
+        
+        // Only require wallet connection
+        if (!isConnected) newErrors.wallet = 'Please connect your wallet to verify campaign ownership';
         break;
       
       case 2:
@@ -204,49 +267,99 @@ const CampaignCreator = () => {
     setCurrentStep(prev => Math.max(prev - 1, 1));
   };
 
-const handleSubmit = async () => {
-  if (!validateStep(currentStep)) return;
+  const handleSubmit = async () => {
+    if (!validateStep(currentStep)) return;
 
-  setSaving(true);
-  try {
-    // First import the createCampaign function at the top of your file
-    const { createCampaign } = await import('../../firebase/crowdfunding');
-    
-    const campaignData = {
-      ...formData,
-      farmerId: userProfile.uid,
-      farmerName: `${userProfile.firstName} ${userProfile.lastName}`,
-      farmName: userProfile.farmInfo?.farmName || userProfile.farmName,
-      status: 'draft',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      currentAmount: 0,
-      backerCount: 0
-    };
+    setSaving(true);
+    try {
+      if (!isConnected) {
+        toast({
+          title: "Wallet Required",
+          description: "Please connect your wallet to verify campaign ownership",
+          variant: "destructive"
+        });
+        return;
+      }
 
-    console.log('Creating campaign:', campaignData);
-    
-    // Replace the mock save with actual Firebase call
-    await createCampaign(campaignData);
-    
-    toast({
-      title: "Success!",
-      description: "Campaign created successfully"
-    });
-    
-    window.location.href = '/campaigns/manage';
-    
-  } catch (error) {
-    console.error('Error creating campaign:', error);
-    toast({
-      title: "Error",
-      description: "Failed to create campaign",
-      variant: "destructive"
-    });
-  } finally {
-    setSaving(false);
-  }
-};
+      // Prepare campaign data
+      const campaignData = {
+        ...formData,
+        farmerId: userProfile.uid,
+        farmerName: `${userProfile.firstName} ${userProfile.lastName}`,
+        farmName: userProfile.farmInfo?.farmName || userProfile.farmName,
+        farmerEmail: userProfile.email,
+        status: 'pending_wallet_verification',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        currentAmount: 0,
+        backerCount: 0,
+        walletVerified: false,
+        blockchainDeployment: {
+          status: 'pending',
+          contractAddress: null,
+          transactionHash: null,
+          deployedAt: null,
+          deployedBy: null
+        },
+        web3Data: {
+          goalAmountEth: parseFloat(formData.goalAmount) / 4000, // PLN to ETH conversion
+          durationDays: formData.duration,
+          campaignType: getCampaignTypeIndex(formData.type)
+        }
+      };
+
+      console.log('Creating campaign with wallet verification...');
+      
+      // Create campaign in Firebase first
+      const { createCampaign } = await import('../../firebase/crowdfunding');
+      const campaignId = await createCampaign(campaignData);
+      
+      // Sign wallet ownership
+      const signatureData = await signWalletOwnership(campaignId);
+      
+      // Update campaign with wallet verification
+      const { updateCampaign } = await import('../../firebase/crowdfunding');
+      await updateCampaign(campaignId, {
+        walletVerification: {
+          address: signatureData.address,
+          signature: signatureData.signature,
+          message: signatureData.message,
+          timestamp: signatureData.timestamp,
+          verified: true
+        },
+        status: 'draft',
+        walletVerified: true,
+        farmerWallet: signatureData.address,
+        updatedAt: new Date()
+      });
+      
+      toast({
+        title: "Success!",
+        description: `Campaign created and wallet verified! Address: ${signatureData.address.slice(0, 10)}...`,
+      });
+      
+      window.location.href = '/campaigns/manage';
+      
+    } catch (error) {
+      console.error('Error creating verified campaign:', error);
+      
+      if (error.message.includes('user rejected')) {
+        toast({
+          title: "Signature Required",
+          description: "Please sign the message to verify wallet ownership",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to create campaign",
+          variant: "destructive"
+        });
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const renderStepIndicator = () => (
     <div className="flex items-center justify-center space-x-4 mb-8">
@@ -284,6 +397,39 @@ const handleSubmit = async () => {
     }
   };
 
+  const Web3Status = () => (
+    <Card className={`mb-6 ${isConnected ? 'border-green-200 bg-green-50' : 'border-blue-200 bg-blue-50'}`}>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Wallet className={`h-5 w-5 ${isConnected ? 'text-green-600' : 'text-blue-600'}`} />
+            <div>
+              <p className="font-medium">
+                {isConnected ? 'Wallet Connected' : 'Wallet Verification Required'}
+              </p>
+              <p className="text-sm text-gray-600">
+                {isConnected ? (
+                  <>
+                    {account?.slice(0, 6)}...{account?.slice(-4)}
+                    <span className="text-green-600"> • Ready for Campaign Creation</span>
+                  </>
+                ) : (
+                  'Connect wallet to verify campaign ownership and enable blockchain deployment'
+                )}
+              </p>
+            </div>
+          </div>
+          {!isConnected && (
+            <Button onClick={connect} variant="outline" size="sm">
+              <Link className="w-4 h-4 mr-2" />
+              Connect Wallet
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-8">
       {/* Header */}
@@ -302,6 +448,9 @@ const handleSubmit = async () => {
         </div>
       </div>
 
+      {/* Web3 Status */}
+      <Web3Status />
+
       {/* Step Indicator */}
       {renderStepIndicator()}
 
@@ -317,6 +466,13 @@ const handleSubmit = async () => {
           {/* Step 1: Basic Information */}
           {currentStep === 1 && (
             <div className="space-y-6">
+              {errors.wallet && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{errors.wallet}</AlertDescription>
+                </Alert>
+              )}
+
               <div>
                 <Label htmlFor="title">Campaign Title *</Label>
                 <Input
@@ -363,6 +519,28 @@ const handleSubmit = async () => {
                 </div>
 
                 <div>
+                  <Label htmlFor="type">Campaign Type *</Label>
+                  <Select value={formData.type} onValueChange={(value) => handleInputChange('type', value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select campaign type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {campaignTypes.map((type) => (
+                        <SelectItem key={type.value} value={type.value}>
+                          <div>
+                            <div className="font-medium">{type.label}</div>
+                            <div className="text-xs text-gray-500">{type.description}</div>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.type && <p className="text-sm text-red-600 mt-1">{errors.type}</p>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
                   <Label htmlFor="goalAmount">Funding Goal (PLN) *</Label>
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -377,10 +555,13 @@ const handleSubmit = async () => {
                     />
                   </div>
                   {errors.goalAmount && <p className="text-sm text-red-600 mt-1">{errors.goalAmount}</p>}
+                  {formData.goalAmount && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      ≈ {(parseFloat(formData.goalAmount) / 4000).toFixed(3)} ETH
+                    </p>
+                  )}
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="duration">Campaign Duration (days)</Label>
                   <Select 
@@ -398,19 +579,19 @@ const handleSubmit = async () => {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
 
-                <div>
-                  <Label htmlFor="location">Location</Label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <Input
-                      id="location"
-                      value={formData.location}
-                      onChange={(e) => handleInputChange('location', e.target.value)}
-                      placeholder="City, Region"
-                      className="pl-10"
-                    />
-                  </div>
+              <div>
+                <Label htmlFor="location">Location</Label>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    id="location"
+                    value={formData.location}
+                    onChange={(e) => handleInputChange('location', e.target.value)}
+                    placeholder="City, Region"
+                    className="pl-10"
+                  />
                 </div>
               </div>
             </div>
@@ -647,7 +828,6 @@ const handleSubmit = async () => {
                     </CardContent>
                   </Card>
                 ))}
-                
                 <Button variant="outline" onClick={addTimelineItem} className="w-full">
                   <Plus className="w-4 h-4 mr-2" />
                   Add Timeline Phase
@@ -675,6 +855,7 @@ const handleSubmit = async () => {
                     <div className="space-y-2 text-sm">
                       <p><strong>Title:</strong> {formData.title}</p>
                       <p><strong>Category:</strong> {formData.category}</p>
+                      <p><strong>Type:</strong> {campaignTypes.find(t => t.value === formData.type)?.label}</p>
                       <p><strong>Goal:</strong> {formData.goalAmount} PLN</p>
                       <p><strong>Duration:</strong> {formData.duration} days</p>
                       <p><strong>Location:</strong> {formData.location || 'Not specified'}</p>
@@ -690,9 +871,9 @@ const handleSubmit = async () => {
                   <CardContent>
                     <div className="space-y-2 text-sm">
                       <p>✅ Campaign will be saved as draft</p>
-                      <p>✅ You can preview before going live</p>
+                      <p>✅ Wallet ownership will be verified</p>
+                      <p>✅ Admin can deploy to blockchain</p>
                       <p>✅ Edit anytime before launch</p>
-                      <p>✅ Get feedback from community</p>
                       <p>⏳ Review process (1-2 days)</p>
                     </div>
                   </CardContent>
@@ -734,6 +915,16 @@ const handleSubmit = async () => {
                   </CardContent>
                 </Card>
               </div>
+
+              {isConnected && (
+                <Alert>
+                  <Wallet className="h-4 w-4" />
+                  <AlertDescription>
+                    Your wallet ({account?.slice(0, 6)}...{account?.slice(-4)}) will be verified as the campaign owner.
+                    You'll be asked to sign a message to prove ownership.
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
           )}
 
@@ -754,10 +945,11 @@ const handleSubmit = async () => {
             ) : (
               <Button
                 onClick={handleSubmit}
-                disabled={saving}
+                disabled={saving || !isConnected}
                 className="bg-green-600 hover:bg-green-700"
               >
-                {saving ? 'Creating...' : 'Create Campaign'}
+                {saving ? 'Creating & Verifying...' : 
+                 isConnected ? 'Create Campaign & Verify Wallet' : 'Connect Wallet First'}
               </Button>
             )}
           </div>
