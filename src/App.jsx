@@ -11,6 +11,8 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import CampaignCreator from './pages/campaigns/CampaignCreator';
 import CampaignViewer from './pages/campaigns/CampaignViewer';
 import CampaignManager from './pages/campaigns/CampaignManager';
+import CampaignDetail from './pages/campaigns/CampaignDetail';
+
 
 // FIXED: Correct import paths for search components
 import SearchWithMap from './components/search/SearchWithMap';
@@ -147,6 +149,14 @@ const AppRoutes = () => {
          <ProtectedRoute>
             <MainLayout>
              <CampaignCreator />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/campaigns/:id" element={
+         <ProtectedRoute>
+            <MainLayout>
+             <CampaignDetail />
             </MainLayout>
           </ProtectedRoute>
         } />

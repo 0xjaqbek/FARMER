@@ -218,11 +218,12 @@ contract FarmDirectCrowdfunding is ReentrancyGuard, Pausable, Ownable {
     }
     
     /**
-     * @dev Launch a campaign (change status from Draft to Active)
+     * @dev Launch a campaign as admin (admin only)
+     * @param _campaignId Campaign to launch
      */
-    function launchCampaign(uint256 _campaignId) 
+    function launchCampaignAsAdmin(uint256 _campaignId) 
         external 
-        onlyFarmer(_campaignId) 
+        onlyOwner 
         campaignExists(_campaignId) 
     {
         Campaign storage campaign = campaigns[_campaignId];
@@ -413,7 +414,7 @@ contract FarmDirectCrowdfunding is ReentrancyGuard, Pausable, Ownable {
         emit RefundIssued(_campaignId, msg.sender, contribution);
     }
     
-    // ============ Milestone Management ============
+// ============ Milestone Management ============
     
     /**
      * @dev Mark a milestone as completed (farmer only)
@@ -436,6 +437,61 @@ contract FarmDirectCrowdfunding is ReentrancyGuard, Pausable, Ownable {
     
     // ============ Admin Functions ============
     
+    /**
+     * @dev Create a campaign on behalf of a verified farmer (admin only)
+     * @param _firebaseId Firebase document ID for off-chain data
+     * @param _goalAmount Target funding amount in wei
+     * @param _durationDays Campaign duration in days
+     * @param _campaignType Type of campaign (PreOrder, Equipment, etc.)
+     * @param _farmerAddress Address of the verified farmer
+     */
+    function createCampaignAsAdmin(
+        string memory _firebaseId,
+        uint256 _goalAmount,
+        uint256 _durationDays,
+        CampaignType _campaignType,
+        address _farmerAddress
+    ) external onlyOwner whenNotPaused returns (uint256) {
+        require(verifiedFarmers[_farmerAddress], "Farmer not verified");
+        require(_goalAmount > 0, "Goal amount must be positive");
+        require(
+            _durationDays * 1 days >= MIN_CAMPAIGN_DURATION && 
+            _durationDays * 1 days <= MAX_CAMPAIGN_DURATION,
+            "Invalid campaign duration"
+        );
+        require(bytes(_firebaseId).length > 0, "Firebase ID required");
+        require(_farmerAddress != address(0), "Invalid farmer address");
+        
+        _campaignIds.increment();
+        uint256 newCampaignId = _campaignIds.current();
+        
+        Campaign storage newCampaign = campaigns[newCampaignId];
+        newCampaign.id = newCampaignId;
+        newCampaign.firebaseId = _firebaseId;
+        newCampaign.farmer = _farmerAddress;
+        newCampaign.goalAmount = _goalAmount;
+        newCampaign.deadline = block.timestamp + (_durationDays * 1 days);
+        newCampaign.createdAt = block.timestamp;
+        newCampaign.status = CampaignStatus.Draft;
+        newCampaign.campaignType = _campaignType;
+        newCampaign.verified = false;
+        newCampaign.fundsWithdrawn = false;
+        newCampaign.backerCount = 0;
+        
+        farmerCampaigns[_farmerAddress].push(newCampaignId);
+        
+        emit CampaignCreated(
+            newCampaignId,
+            _firebaseId,
+            _farmerAddress,
+            _goalAmount,
+            newCampaign.deadline,
+            _campaignType
+        );
+        
+        return newCampaignId;
+    }
+
     /**
      * @dev Verify a farmer (admin only)
      */
@@ -509,6 +565,8 @@ contract FarmDirectCrowdfunding is ReentrancyGuard, Pausable, Ownable {
     function unpause() external onlyOwner {
         _unpause();
     }
+
+    
     
     // ============ View Functions ============
     

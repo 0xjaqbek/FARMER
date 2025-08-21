@@ -1922,7 +1922,7 @@ const AdminDashboard = () => {
       return;
     }
 
-    if (!confirm(`Deploy campaign "${selectedCampaign.title}" to blockchain?\n\nThis will:\n1. Verify the farmer's wallet\n2. Create the campaign on blockchain\n3. Enable crypto contributions\n4. Activate the campaign for backers`)) {
+    if (!confirm(`Deploy and launch campaign "${selectedCampaign.title}" to blockchain?\n\nThis will:\n1. Verify the farmer's wallet\n2. Create the campaign on blockchain\n3. Launch the campaign to Active status\n4. Enable crypto contributions`)) {
       return;
     }
 
@@ -1954,9 +1954,12 @@ const AdminDashboard = () => {
         throw new Error('Wallet account mismatch');
       }
 
-      // Extended contract ABI with admin functions
+      // Extended contract ABI with launch function
       const contractABI = [
-        "function createCampaign(string memory firebaseId, uint256 goalAmount, uint256 durationDays, uint8 campaignType) external returns (uint256)",
+        "event CampaignCreated(uint256 indexed campaignId, string firebaseId, address indexed farmer, uint256 goalAmount, uint256 deadline, uint8 campaignType)",
+        "event CampaignStatusChanged(uint256 indexed campaignId, uint8 oldStatus, uint8 newStatus)",
+        "function createCampaignAsAdmin(string memory firebaseId, uint256 goalAmount, uint256 durationDays, uint8 campaignType, address farmerAddress) external returns (uint256)",
+        "function launchCampaign(uint256 campaignId) external",
         "function getTotalCampaigns() external view returns (uint256)",
         "function verifyFarmer(address farmer, bool verified) external",
         "function verifiedFarmers(address) external view returns (bool)"
@@ -1988,7 +1991,6 @@ const AdminDashboard = () => {
         if (!isVerified) {
           console.log('Verifying farmer wallet:', farmerWallet);
           
-          // Show verification progress
           toast({
             title: "Verifying Farmer",
             description: "Verifying farmer wallet on blockchain...",
@@ -2036,11 +2038,12 @@ const AdminDashboard = () => {
         description: "Creating campaign on blockchain...",
       });
 
-      const tx = await contract.createCampaign(
+      const tx = await contract.createCampaignAsAdmin(
         selectedCampaign.id,
         goalAmountWei,
         selectedCampaign.duration || 30,
-        campaignType
+        campaignType,
+        farmerWallet
       );
 
       console.log('Campaign creation transaction sent:', tx.hash);
@@ -2049,21 +2052,73 @@ const AdminDashboard = () => {
 
       // Extract campaign ID from events
       let web3CampaignId = null;
+      console.log('Processing receipt logs:', receipt.logs.length);
+
       if (receipt.logs && receipt.logs.length > 0) {
-        for (const log of receipt.logs) {
+        for (let i = 0; i < receipt.logs.length; i++) {
+          const log = receipt.logs[i];
           try {
             const parsedLog = contract.interface.parseLog(log);
+            console.log(`Log ${i}:`, parsedLog?.name, parsedLog?.args);
+            
             if (parsedLog && parsedLog.name === 'CampaignCreated') {
               web3CampaignId = parsedLog.args[0].toString();
+              console.log('Successfully extracted campaign ID:', web3CampaignId);
               break;
             }
-          } catch {
+          } catch (parseError) {
+            console.log(`Failed to parse log ${i}:`, parseError.message);
             continue;
           }
         }
       }
 
-      // Update Firebase
+      // Fallback method: get the latest campaign ID
+      if (!web3CampaignId) {
+        try {
+          console.log('Event parsing failed, using fallback method...');
+          const totalCampaigns = await contract.getTotalCampaigns();
+          web3CampaignId = totalCampaigns.toString();
+          console.log('Using latest campaign ID from counter:', web3CampaignId);
+        } catch (error) {
+          console.error('Fallback method also failed:', error);
+          web3CampaignId = 'Unknown';
+        }
+      }
+
+      // STEP 3: Launch the campaign to Active status
+      if (web3CampaignId && web3CampaignId !== 'Unknown') {
+        try {
+          toast({
+            title: "Launching Campaign",
+            description: "Activating campaign for contributions...",
+          });
+
+          console.log('Launching campaign with ID:', web3CampaignId);
+          
+          const launchTx = await contract.launchCampaignAsAdmin(web3CampaignId);
+          console.log('Launch transaction sent:', launchTx.hash);
+          
+          const launchReceipt = await launchTx.wait();
+          console.log('Campaign launched successfully:', launchReceipt.hash);
+          
+          toast({
+            title: "Campaign Launched",
+            description: "Campaign is now active and accepting contributions",
+          });
+
+        } catch (launchError) {
+          console.error('Campaign launch failed:', launchError);
+          // Don't throw here - campaign was created successfully, just not launched
+          toast({
+            title: "Launch Warning",
+            description: "Campaign created but launch failed. May need manual launch.",
+            variant: "destructive"
+          });
+        }
+      }
+
+      // STEP 4: Update Firebase
       await updateCampaign(selectedCampaign.id, {
         blockchainDeployment: {
           status: 'deployed',
@@ -2073,9 +2128,11 @@ const AdminDashboard = () => {
           blockNumber: receipt.blockNumber,
           deployedAt: new Date(),
           deployedBy: account,
-          farmerVerified: true
+          farmerVerified: true,
+          launched: true // Mark as launched
         },
         web3Enabled: true,
+        web3CampaignId: web3CampaignId, // Add to top level
         status: 'active',
         updatedAt: new Date()
       });
@@ -2091,9 +2148,11 @@ const AdminDashboard = () => {
           blockNumber: receipt.blockNumber,
           deployedAt: new Date(),
           deployedBy: account,
-          farmerVerified: true
+          farmerVerified: true,
+          launched: true
         },
         web3Enabled: true,
+        web3CampaignId: web3CampaignId,
         status: 'active'
       }));
 
@@ -2109,9 +2168,11 @@ const AdminDashboard = () => {
               blockNumber: receipt.blockNumber,
               deployedAt: new Date(),
               deployedBy: account,
-              farmerVerified: true
+              farmerVerified: true,
+              launched: true
             },
             web3Enabled: true,
+            web3CampaignId: web3CampaignId,
             status: 'active'
           } : c
         ));
@@ -2119,7 +2180,7 @@ const AdminDashboard = () => {
 
       toast({
         title: "Deployment Successful!",
-        description: `Campaign deployed! TX: ${receipt.hash.slice(0, 10)}... | Campaign ID: ${web3CampaignId || 'Unknown'}`,
+        description: `Campaign deployed and launched! TX: ${receipt.hash.slice(0, 10)}... | Campaign ID: ${web3CampaignId || 'Unknown'}`,
       });
 
     } catch (error) {
@@ -2137,8 +2198,10 @@ const AdminDashboard = () => {
         errorMessage = error.message;
       } else if (error.message.includes('Invalid farmer wallet')) {
         errorMessage = 'Invalid farmer wallet address. Check campaign data.';
+      } else if (error.message.includes('Contract connection failed')) {
+        errorMessage = 'Cannot connect to contract. Check network and contract address.';
       } else {
-        errorMessage = error.message || 'Failed to deploy campaign to blockchain';
+        errorMessage = error.message || 'Deployment failed';
       }
 
       toast({
@@ -2150,18 +2213,18 @@ const AdminDashboard = () => {
       setDeploying(false);
     }
   }}
-  disabled={deploying || !isConnected}
-  className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+  disabled={deploying || !selectedCampaign?.farmerWallet}
+  className="w-full"
 >
   {deploying ? (
     <>
-      <Clock className="w-4 h-4 mr-2 animate-spin" />
-      Deploying to Blockchain...
+      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+      Deploying & Launching...
     </>
   ) : (
     <>
-      <Wallet className="w-4 h-4 mr-2" />
-      Deploy to Blockchain
+      <Upload className="w-4 h-4 mr-2" />
+      Deploy & Launch Campaign
     </>
   )}
 </Button>
