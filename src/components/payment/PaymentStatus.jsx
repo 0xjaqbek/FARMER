@@ -20,7 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow, isPast } from 'date-fns';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/firebase/config';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/context/AuthContext';
 
 const PaymentStatus = ({ order, onStatusUpdate }) => {
   const { userProfile } = useAuth();
