@@ -1954,12 +1954,11 @@ const AdminDashboard = () => {
         throw new Error('Wallet account mismatch');
       }
 
-      // Extended contract ABI with launch function
       const contractABI = [
         "event CampaignCreated(uint256 indexed campaignId, string firebaseId, address indexed farmer, uint256 goalAmount, uint256 deadline, uint8 campaignType)",
         "event CampaignStatusChanged(uint256 indexed campaignId, uint8 oldStatus, uint8 newStatus)",
         "function createCampaignAsAdmin(string memory firebaseId, uint256 goalAmount, uint256 durationDays, uint8 campaignType, address farmerAddress) external returns (uint256)",
-        "function launchCampaign(uint256 campaignId) external",
+        "function launchCampaignAsAdmin(uint256 campaignId) external",
         "function getTotalCampaigns() external view returns (uint256)",
         "function verifyFarmer(address farmer, bool verified) external",
         "function verifiedFarmers(address) external view returns (bool)"
@@ -1976,49 +1975,57 @@ const AdminDashboard = () => {
         throw new Error('Contract connection failed. Please verify the contract address and network.');
       }
 
-      // STEP 1: Verify the farmer's wallet address
+      // Get and validate farmer wallet
       const farmerWallet = selectedCampaign.farmerWallet;
       if (!farmerWallet || !ethers.isAddress(farmerWallet)) {
-        throw new Error('Invalid farmer wallet address');
+        throw new Error('Invalid farmer wallet address. Check campaign data.');
       }
 
-      console.log('Checking farmer verification status for:', farmerWallet);
-      
+      console.log('Farmer wallet from campaign:', farmerWallet);
+
+      // STEP 1: Verify farmer
+      toast({
+        title: "Verifying Farmer",
+        description: "Checking farmer verification status...",
+      });
+
       try {
         const isVerified = await contract.verifiedFarmers(farmerWallet);
-        console.log('Farmer verification status:', isVerified);
+        console.log('Current verification status:', isVerified);
         
         if (!isVerified) {
-          console.log('Verifying farmer wallet:', farmerWallet);
-          
-          toast({
-            title: "Verifying Farmer",
-            description: "Verifying farmer wallet on blockchain...",
-          });
-          
+          console.log('Farmer not verified, verifying now...');
           const verifyTx = await contract.verifyFarmer(farmerWallet, true);
-          console.log('Verification transaction sent:', verifyTx.hash);
-          
-          const verifyReceipt = await verifyTx.wait();
-          console.log('Farmer verified successfully:', verifyReceipt.hash);
+          console.log('Farmer verification transaction sent:', verifyTx.hash);
+          await verifyTx.wait();
+          console.log('Farmer verified successfully');
           
           toast({
             title: "Farmer Verified",
-            description: "Farmer wallet verified successfully",
+            description: "Farmer wallet has been verified",
           });
+        } else {
+          console.log('Farmer already verified');
         }
       } catch (verifyError) {
         console.error('Farmer verification failed:', verifyError);
-        throw new Error(`Failed to verify farmer: ${verifyError.message}`);
+        throw new Error('Failed to verify farmer: ' + verifyError.message);
       }
 
-      // STEP 2: Create the campaign
-      const goalAmountEth = parseFloat(selectedCampaign.goalAmount) / 4000;
+      // STEP 2: Create campaign
+      toast({
+        title: "Creating Campaign",
+        description: "Creating campaign on blockchain...",
+      });
+
+      // Calculate goal amount in wei
+      const goalAmountEth = parseFloat(selectedCampaign.goalAmount) / 4000; // Assuming 1 ETH = 4000 PLN
       const goalAmountWei = ethers.parseEther(goalAmountEth.toString());
-      
+
+      // Map campaign type
       const typeMapping = {
         'preorder': 0,
-        'equipment': 1, 
+        'equipment': 1,
         'expansion': 2,
         'emergency': 3
       };
@@ -2033,12 +2040,7 @@ const AdminDashboard = () => {
         farmerWallet
       });
 
-      toast({
-        title: "Creating Campaign",
-        description: "Creating campaign on blockchain...",
-      });
-
-      const tx = await contract.createCampaignAsAdmin(
+      const createTx = await contract.createCampaignAsAdmin(
         selectedCampaign.id,
         goalAmountWei,
         selectedCampaign.duration || 30,
@@ -2046,17 +2048,17 @@ const AdminDashboard = () => {
         farmerWallet
       );
 
-      console.log('Campaign creation transaction sent:', tx.hash);
-      const receipt = await tx.wait();
-      console.log('Campaign created successfully:', receipt);
+      console.log('Campaign creation transaction sent:', createTx.hash);
+      const createReceipt = await createTx.wait();
+      console.log('Campaign created successfully:', createReceipt);
 
       // Extract campaign ID from events
       let web3CampaignId = null;
-      console.log('Processing receipt logs:', receipt.logs.length);
+      console.log('Processing receipt logs:', createReceipt.logs.length);
 
-      if (receipt.logs && receipt.logs.length > 0) {
-        for (let i = 0; i < receipt.logs.length; i++) {
-          const log = receipt.logs[i];
+      if (createReceipt.logs && createReceipt.logs.length > 0) {
+        for (let i = 0; i < createReceipt.logs.length; i++) {
+          const log = createReceipt.logs[i];
           try {
             const parsedLog = contract.interface.parseLog(log);
             console.log(`Log ${i}:`, parsedLog?.name, parsedLog?.args);
@@ -2124,8 +2126,8 @@ const AdminDashboard = () => {
           status: 'deployed',
           contractAddress: contractAddress,
           web3CampaignId: web3CampaignId,
-          transactionHash: receipt.hash,
-          blockNumber: receipt.blockNumber,
+          transactionHash: createReceipt.hash,
+          blockNumber: createReceipt.blockNumber,
           deployedAt: new Date(),
           deployedBy: account,
           farmerVerified: true,
@@ -2144,8 +2146,8 @@ const AdminDashboard = () => {
           status: 'deployed',
           contractAddress: contractAddress,
           web3CampaignId: web3CampaignId,
-          transactionHash: receipt.hash,
-          blockNumber: receipt.blockNumber,
+          transactionHash: createReceipt.hash,
+          blockNumber: createReceipt.blockNumber,
           deployedAt: new Date(),
           deployedBy: account,
           farmerVerified: true,
@@ -2164,8 +2166,8 @@ const AdminDashboard = () => {
               status: 'deployed',
               contractAddress: contractAddress,
               web3CampaignId: web3CampaignId,
-              transactionHash: receipt.hash,
-              blockNumber: receipt.blockNumber,
+              transactionHash: createReceipt.hash,
+              blockNumber: createReceipt.blockNumber,
               deployedAt: new Date(),
               deployedBy: account,
               farmerVerified: true,
@@ -2180,7 +2182,7 @@ const AdminDashboard = () => {
 
       toast({
         title: "Deployment Successful!",
-        description: `Campaign deployed and launched! TX: ${receipt.hash.slice(0, 10)}... | Campaign ID: ${web3CampaignId || 'Unknown'}`,
+        description: `Campaign deployed and launched! TX: ${createReceipt.hash.slice(0, 10)}... | Campaign ID: ${web3CampaignId || 'Unknown'}`,
       });
 
     } catch (error) {

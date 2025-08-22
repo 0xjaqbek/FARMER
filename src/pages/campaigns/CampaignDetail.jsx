@@ -190,137 +190,178 @@ const CampaignDetail = () => {
     }
   };
 
-  const handleCryptoBacking = async () => {
-    if (!web3Connected) {
-      await connectWallet();
-      return;
+const handleCryptoBacking = async () => {
+  if (!web3Connected) {
+    await connectWallet();
+    return;
+  }
+
+  if (!backingAmount || parseFloat(backingAmount) <= 0) {
+    toast({
+      title: "Invalid Amount",
+      description: "Please enter a valid ETH amount",
+      variant: "destructive"
+    });
+    return;
+  }
+
+  if (!campaign.web3CampaignId && !campaign.blockchainDeployment?.web3CampaignId) {
+    toast({
+      title: "Campaign Not Available",
+      description: "This campaign is not available for crypto backing yet",
+      variant: "destructive"
+    });
+    return;
+  }
+
+  try {
+    setBacking(true);
+
+    const { ethers } = await import('ethers');
+    
+    // Get contract configuration
+    const contractAddress = import.meta.env.VITE_APP_CONTRACT_ADDRESS;
+    if (!contractAddress) {
+      throw new Error('Contract address not configured');
     }
 
-    if (!backingAmount || parseFloat(backingAmount) <= 0) {
-      toast({
-        title: "Invalid Amount",
-        description: "Please enter a valid ETH amount",
-        variant: "destructive"
-      });
-      return;
+    // Contract ABI for contribution
+    const contractABI = [
+      "function contribute(uint256 campaignId, uint256 rewardTierIndex) external payable",
+      "function getCampaignBasic(uint256 campaignId) external view returns (uint256, string, address, uint256, uint256, uint256)",
+      "event ContributionMade(uint256 indexed campaignId, address indexed backer, uint256 amount, uint256 totalRaised)"
+    ];
+
+    // Connect to contract
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    const contract = new ethers.Contract(contractAddress, contractABI, signer);
+
+    // Convert ETH to Wei
+    const amountWei = ethers.parseEther(backingAmount);
+    
+    // Get the campaign ID (check both locations)
+    const web3CampaignId = campaign.web3CampaignId || campaign.blockchainDeployment?.web3CampaignId;
+    
+    // Make contribution (using MaxUint256 for no reward tier)
+    const tx = await contract.contribute(
+      web3CampaignId,
+      ethers.MaxUint256, // No specific reward tier
+      { value: amountWei }
+    );
+
+    toast({
+      title: "Transaction Sent",
+      description: `Transaction hash: ${tx.hash.slice(0, 10)}...`,
+    });
+
+    // Wait for transaction confirmation
+    const receipt = await tx.wait();
+    
+    console.log('Transaction confirmed:', receipt);
+
+    // STEP 1: Save backing info to Firebase
+    const backingData = {
+      campaignId: campaign.id,
+      userId: userProfile?.uid || 'anonymous',
+      userEmail: userProfile?.email || 'anonymous',
+      userName: userProfile ? `${userProfile.firstName} ${userProfile.lastName}`.trim() : 'Anonymous',
+      walletAddress: web3Account,
+      amount: parseFloat(backingAmount), // ETH amount
+      currency: 'ETH',
+      transactionHash: receipt.hash,
+      blockNumber: receipt.blockNumber,
+      timestamp: new Date(),
+      paymentMethod: 'crypto',
+      status: 'confirmed'
+    };
+
+    // Save to Firebase backings collection
+    const { addDoc, collection } = await import('firebase/firestore');
+    const { db } = await import('../../firebase/config');
+    
+    await addDoc(collection(db, 'backings'), backingData);
+
+    // STEP 2: Get updated blockchain data
+    const [_id, _firebaseId, _farmer, goalAmount, raisedAmount, _deadline] = await contract.getCampaignBasic(web3CampaignId);
+    
+    const raisedAmountETH = parseFloat(ethers.formatEther(raisedAmount));
+    const goalAmountETH = parseFloat(ethers.formatEther(goalAmount));
+    
+    console.log('Updated blockchain data:', {
+      raisedAmountETH,
+      goalAmountETH,
+      raisedAmountWei: raisedAmount.toString()
+    });
+
+    // STEP 3: Update Firebase campaign with blockchain data
+    const { updateCampaign } = await import('../../firebase/crowdfunding');
+    const { increment } = await import('firebase/firestore');
+    
+    // Convert ETH to PLN for Firebase (assuming 1 ETH = 4000 PLN)
+    const ethToPln = 4000;
+    const raisedAmountPLN = raisedAmountETH * ethToPln;
+    
+    await updateCampaign(campaign.id, {
+      currentAmount: raisedAmountPLN, // Update with actual blockchain amount
+      backerCount: increment(1), // Increment backer count
+      lastContributionAt: new Date(),
+      lastTransactionHash: receipt.hash,
+      blockchainSynced: true,
+      updatedAt: new Date()
+    });
+
+    // STEP 4: Update local campaign state with real blockchain data
+    setCampaign(prev => ({
+      ...prev,
+      currentAmount: raisedAmountPLN,
+      backerCount: (prev.backerCount || 0) + 1,
+      lastContributionAt: new Date(),
+      lastTransactionHash: receipt.hash,
+      blockchainSynced: true
+    }));
+
+    toast({
+      title: "Contribution Successful!",
+      description: `You backed ${backingAmount} ETH to this campaign`,
+    });
+
+    setShowBackingForm(false);
+    setBackingAmount('');
+    
+    // Refresh the page to show updated data
+    setTimeout(() => {
+      window.location.reload();
+    }, 2000);
+    
+  } catch (error) {
+    console.error('Error making crypto contribution:', error);
+    
+    let errorMessage = 'Failed to process contribution';
+    
+    if (error.message.includes('user rejected')) {
+      errorMessage = 'Transaction cancelled by user';
+    } else if (error.message.includes('insufficient funds')) {
+      errorMessage = 'Insufficient funds for this transaction';
+    } else if (error.message.includes('Campaign not active')) {
+      errorMessage = 'Campaign is not currently accepting contributions';
+    } else if (error.message.includes('Campaign deadline passed')) {
+      errorMessage = 'Campaign has expired';
+    } else if (error.message.includes('Farmers cannot back their own campaigns')) {
+      errorMessage = 'You cannot back your own campaign.';
+    } else if (error.message.includes('missing revert data')) {
+      errorMessage = 'Transaction failed. Check if campaign is active and you are not the farmer.';
     }
-
-    if (!campaign.web3CampaignId && !campaign.blockchainDeployment?.web3CampaignId) {
-      toast({
-        title: "Campaign Not Available",
-        description: "This campaign is not available for crypto backing yet",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      setBacking(true);
-
-      const { ethers } = await import('ethers');
-      
-      // Get contract configuration
-      const contractAddress = import.meta.env.VITE_APP_CONTRACT_ADDRESS;
-      if (!contractAddress) {
-        throw new Error('Contract address not configured');
-      }
-
-      // Contract ABI for contribution
-      const contractABI = [
-        "function contribute(uint256 campaignId, uint256 rewardTierIndex) external payable",
-        "event ContributionMade(uint256 indexed campaignId, address indexed backer, uint256 amount, uint256 totalRaised)"
-      ];
-
-      // Connect to contract
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(contractAddress, contractABI, signer);
-
-      // Convert ETH to Wei
-      const amountWei = ethers.parseEther(backingAmount);
-      
-      // Get the campaign ID (check both locations)
-      const web3CampaignId = campaign.web3CampaignId || campaign.blockchainDeployment?.web3CampaignId;
-      
-      // Make contribution (using MaxUint256 for no reward tier)
-      const tx = await contract.contribute(
-        web3CampaignId,
-        ethers.MaxUint256, // No specific reward tier
-        { value: amountWei }
-      );
-
-      toast({
-        title: "Transaction Sent",
-        description: `Transaction hash: ${tx.hash.slice(0, 10)}...`,
-      });
-
-      // Wait for transaction confirmation
-      const receipt = await tx.wait();
-      
-      // Save backing info to Firebase (without undefined amount)
-      const backingData = {
-        campaignId: campaign.id,
-        userId: userProfile?.uid || 'anonymous',
-        userEmail: userProfile?.email || 'anonymous',
-        walletAddress: web3Account,
-        amount: parseFloat(backingAmount), // Ensure it's a number
-        currency: 'ETH',
-        transactionHash: receipt.hash,
-        blockNumber: receipt.blockNumber,
-        timestamp: new Date(),
-        paymentMethod: 'crypto',
-        status: 'confirmed'
-      };
-
-      // Save to Firebase backings collection
-      const { addDoc, collection } = await import('firebase/firestore');
-      const { db } = await import('../../firebase/config');
-      
-      await addDoc(collection(db, 'backings'), backingData);
-
-      // Update local campaign state optimistically
-      setCampaign(prev => ({
-        ...prev,
-        currentAmount: (prev.currentAmount || 0) + parseFloat(backingAmount),
-        backerCount: (prev.backerCount || 0) + 1
-      }));
-
-      toast({
-        title: "Contribution Successful!",
-        description: `You backed ${backingAmount} ETH to this campaign`,
-      });
-
-      setShowBackingForm(false);
-      setBackingAmount('');
-      
-    } catch (error) {
-      console.error('Error making crypto contribution:', error);
-      
-      let errorMessage = 'Failed to process contribution';
-      
-      if (error.message.includes('user rejected')) {
-        errorMessage = 'Transaction cancelled by user';
-      } else if (error.message.includes('insufficient funds')) {
-        errorMessage = 'Insufficient funds for this transaction';
-      } else if (error.message.includes('Campaign not active')) {
-        errorMessage = 'Campaign is not currently accepting contributions';
-      } else if (error.message.includes('Campaign deadline passed')) {
-        errorMessage = 'Campaign has expired';
-      } else if (error.message.includes('Farmers cannot back their own campaigns')) {
-        errorMessage = 'You cannot back your own campaign. Please use a different wallet.';
-      } else if (error.message.includes('missing revert data')) {
-        errorMessage = 'Transaction failed. Check if campaign is active and you are not the farmer.';
-      }
-      
-      toast({
-        title: "Contribution Failed",
-        description: errorMessage,
-        variant: "destructive"
-      });
-    } finally {
-      setBacking(false);
-    }
-  };
+    
+    toast({
+      title: "Contribution Failed",
+      description: errorMessage,
+      variant: "destructive"
+    });
+  } finally {
+    setBacking(false);
+  }
+};
 
   const calculateProgress = () => {
     if (!campaign?.goalAmount) return 0;
