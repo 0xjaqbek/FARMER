@@ -1,7 +1,7 @@
-// src/App.jsx - Updated with Farmer Profile Routes
-import React, { useEffect } from 'react';
+// src/App.jsx - Fixed with correct imports
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Toaster } from '@/components/ui/use-toast';
+import { Toaster } from '@/components/ui/toaster'; // Fixed import
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import MainLayout from './components/layout/MainLayout';
@@ -12,7 +12,6 @@ import CampaignCreator from './pages/campaigns/CampaignCreator';
 import CampaignViewer from './pages/campaigns/CampaignViewer';
 import CampaignManager from './pages/campaigns/CampaignManager';
 import CampaignDetail from './pages/campaigns/CampaignDetail';
-
 
 // FIXED: Correct import paths for search components
 import SearchWithMap from './components/search/SearchWithMap';
@@ -45,47 +44,92 @@ import ChatDetail from './pages/chat/ChatDetail';
 
 import { FirebaseDebug } from './utils/firebaseDebug';
 
-// Protected route component - MUST be inside AuthProvider
-const ProtectedRoute = ({ children, allowedRoles = [] }) => {
+// Protected route component
+const ProtectedRoute = ({ children, allowedRoles = null }) => {
   const { currentUser, userProfile, loading } = useAuth();
-  
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-green-600"></div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Check role-based access
+  if (allowedRoles && userProfile?.role && !allowedRoles.includes(userProfile.role)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h1>
+          <p className="text-gray-600 mb-6">You don't have permission to access this page.</p>
+          <button 
+            onClick={() => window.history.back()} 
+            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
+          >
+            Go Back
+          </button>
         </div>
       </div>
     );
   }
+
+  return children;
+};
+
+// Public route component (for login/register pages)
+const PublicRoute = ({ children }) => {
+  const { currentUser } = useAuth();
   
-  if (!currentUser) {
-    return <Navigate to="/login" replace />;
-  }
-  
-  if (allowedRoles.length > 0 && userProfile && !allowedRoles.includes(userProfile.role)) {
+  if (currentUser) {
     return <Navigate to="/dashboard" replace />;
   }
   
   return children;
 };
 
-// Main App Routes component - MUST be inside AuthProvider
+// App routes component
 const AppRoutes = () => {
-  useEffect(() => {
-    FirebaseDebug.checkConfiguration();
-    FirebaseDebug.testConnection();
-  }, []);
+  const { loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-green-600"></div>
+      </div>
+    );
+  }
 
   return (
     <Router>
       <Routes>
-        {/* Auth Routes - No layout needed */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
+        {/* Public Routes */}
+        <Route path="/login" element={
+          <PublicRoute>
+            <Login />
+          </PublicRoute>
+        } />
         
-        {/* Protected Routes with Layout */}
+        <Route path="/register" element={
+          <PublicRoute>
+            <Register />
+          </PublicRoute>
+        } />
+
+        {/* Debug Route (Development Only) */}
+        <Route path="/debug" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <MainLayout>
+              <FirebaseDebug />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+
+        {/* Dashboard Route */}
         <Route path="/dashboard" element={
           <ProtectedRoute>
             <MainLayout>
@@ -93,7 +137,8 @@ const AppRoutes = () => {
             </MainLayout>
           </ProtectedRoute>
         } />
-        
+
+        {/* Profile Route */}
         <Route path="/profile" element={
           <ProtectedRoute>
             <MainLayout>
@@ -101,8 +146,25 @@ const AppRoutes = () => {
             </MainLayout>
           </ProtectedRoute>
         } />
-        
-        {/* NEW: Farmer Directory and Profile Routes */}
+
+        {/* Enhanced Search Routes */}
+        <Route path="/search" element={
+          <ProtectedRoute>
+            <MainLayout>
+              <SearchWithMap />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/location-picker" element={
+          <ProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
+            <MainLayout>
+              <EnhancedLocationPicker showMap={true} />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+
+        {/* Farmer Directory Routes */}
         <Route path="/farmers" element={
           <ProtectedRoute>
             <MainLayout>
@@ -115,77 +177,6 @@ const AppRoutes = () => {
           <ProtectedRoute>
             <MainLayout>
               <FarmerProfile />
-            </MainLayout>
-          </ProtectedRoute>
-        } />
-        
-        {/* Notification Routes */}
-        <Route path="/notifications" element={
-          <ProtectedRoute>
-            <MainLayout>
-              <NotificationPage />
-            </MainLayout>
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/notifications/create" element={
-          <ProtectedRoute allowedRoles={['farmer', 'rolnik', 'admin']}>
-            <MainLayout>
-              <NotificationCreator />
-            </MainLayout>
-          </ProtectedRoute>
-        } />
-
-        {/* Campaign Routes */}
-        <Route path="/campaigns" element={
-         <ProtectedRoute>
-            <MainLayout>
-              <CampaignViewer />
-            </MainLayout>
-          </ProtectedRoute>
-        } />
-
-        <Route path="/campaigns/create" element={
-         <ProtectedRoute>
-            <MainLayout>
-             <CampaignCreator />
-            </MainLayout>
-          </ProtectedRoute>
-        } />
-
-        <Route path="/campaigns/:id" element={
-         <ProtectedRoute>
-            <MainLayout>
-             <CampaignDetail />
-            </MainLayout>
-          </ProtectedRoute>
-        } />
-
-        <Route path="/campaigns/manage" element={
-          <ProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
-            <MainLayout>
-              <CampaignManager />
-            </MainLayout>
-          </ProtectedRoute>
-        } />
-        
-        {/* SEARCH ROUTES - FIXED: Single route, correct component name */}
-        <Route path="/search" element={
-          <ProtectedRoute>
-            <MainLayout>
-              <SearchWithMap />
-            </MainLayout>
-          </ProtectedRoute>
-        } />
-
-        {/* Farmer Location Setup Route */}
-        <Route path="/farmer/location" element={
-          <ProtectedRoute allowedRoles={['farmer', 'rolnik']}>
-            <MainLayout>
-              <EnhancedLocationPicker onLocationSet={(location) => {
-                // Handle location update
-                console.log('Location set:', location);
-              }} />
             </MainLayout>
           </ProtectedRoute>
         } />
@@ -246,8 +237,9 @@ const AppRoutes = () => {
             </MainLayout>
           </ProtectedRoute>
         } />
-        
-        <Route path="/products/:id/tracker" element={
+
+        {/* Product Tracker Route */}
+        <Route path="/track" element={
           <ProtectedRoute>
             <MainLayout>
               <ProductTracker />
@@ -255,6 +247,14 @@ const AppRoutes = () => {
           </ProtectedRoute>
         } />
         
+        <Route path="/track/:trackingCode" element={
+          <ProtectedRoute>
+            <MainLayout>
+              <ProductTracker />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+
         {/* Order Routes */}
         <Route path="/orders" element={
           <ProtectedRoute>
@@ -310,6 +310,56 @@ const AppRoutes = () => {
           <ProtectedRoute>
             <MainLayout>
               <ChatDetail />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+
+        {/* Notification Routes */}
+        <Route path="/notifications" element={
+          <ProtectedRoute>
+            <MainLayout>
+              <NotificationPage />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/notifications/create" element={
+          <ProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
+            <MainLayout>
+              <NotificationCreator />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+
+        {/* Campaign Routes */}
+        <Route path="/campaigns" element={
+          <ProtectedRoute>
+            <MainLayout>
+              <CampaignViewer />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/campaigns/create" element={
+          <ProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
+            <MainLayout>
+              <CampaignCreator />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/campaigns/manage" element={
+          <ProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
+            <MainLayout>
+              <CampaignManager />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/campaigns/:id" element={
+          <ProtectedRoute>
+            <MainLayout>
+              <CampaignDetail />
             </MainLayout>
           </ProtectedRoute>
         } />

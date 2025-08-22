@@ -46,6 +46,8 @@ import {
   Truck
 } from 'lucide-react';
 
+import FarmerPaymentSetup from '../components/payment/FarmerPaymentSetup';
+
 const Profile = () => {
   const { currentUser, userProfile, updateUserProfile, refreshUserProfile } = useAuth();
   const { toast } = useToast();
@@ -1174,6 +1176,7 @@ const handleSubmit = async (e) => {
                     Business Information
                   </CardTitle>
                 </CardHeader>
+                <FarmerPaymentSetup />
                 <CardContent>
                 {editing ? (
                   <div className="space-y-4">

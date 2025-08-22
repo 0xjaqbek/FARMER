@@ -1,103 +1,131 @@
-// Fixed CartContext.jsx - Ensure proper farmer data storage
-
-import { createContext, useContext, useState, useEffect } from 'react';
-import { useToast } from '@/components/ui/use-toast';
+// src/context/CartContext.jsx - Fixed version without toast issues
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const CartContext = createContext();
 
+// Simple notification function that doesn't cause render issues
+const showSimpleNotification = (message) => {
+  // Only log to console for now - you can enhance this later
+  console.log('Cart notification:', message);
+  
+  // Optional: create a simple DOM notification
+  if (typeof window !== 'undefined') {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #10b981;
+      color: white;
+      padding: 12px 16px;
+      border-radius: 8px;
+      z-index: 9999;
+      font-size: 14px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      max-width: 300px;
+    `;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+      if (document.body.contains(notification)) {
+        document.body.removeChild(notification);
+      }
+    }, 3000);
+  }
+};
+
 export const CartProvider = ({ children }) => {
   const [cartItems, setCartItems] = useState([]);
-  const { toast } = useToast();
 
-  // Load cart from localStorage on mount
+  // Load cart from localStorage on component mount
   useEffect(() => {
-    const savedCart = localStorage.getItem('farmDirectCart');
-    if (savedCart) {
-      try {
+    try {
+      const savedCart = localStorage.getItem('cart');
+      if (savedCart) {
         const parsedCart = JSON.parse(savedCart);
-        console.log('Loaded cart from localStorage:', parsedCart);
+        console.log('Loading cart from localStorage:', parsedCart);
         setCartItems(parsedCart);
-      } catch (error) {
-        console.error('Error loading cart from localStorage:', error);
-        setCartItems([]);
       }
+    } catch (error) {
+      console.error('Error loading cart from localStorage:', error);
     }
   }, []);
 
-  // Save cart to localStorage whenever it changes
+  // Save cart to localStorage whenever cartItems changes
   useEffect(() => {
-    console.log('Saving cart to localStorage:', cartItems);
-    localStorage.setItem('farmDirectCart', JSON.stringify(cartItems));
+    try {
+      console.log('Saving cart to localStorage:', cartItems);
+      localStorage.setItem('cart', JSON.stringify(cartItems));
+    } catch (error) {
+      console.error('Error saving cart to localStorage:', error);
+    }
   }, [cartItems]);
 
-  // Calculate cart count and total
-  const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0);
-  const cartTotal = cartItems.reduce((total, item) => total + (item.price * item.quantity), 0);
+  // Calculate cart count
+  const cartCount = cartItems.reduce((total, item) => total + (item.quantity || 0), 0);
 
-  // Add item to cart - FIXED: Ensure all farmer data is preserved
+  // Calculate cart total
+  const cartTotal = cartItems.reduce((total, item) => {
+    const price = item.price || 0;
+    const quantity = item.quantity || 0;
+    return total + (price * quantity);
+  }, 0);
+
+  // Add item to cart
   const addToCart = (product, quantity = 1) => {
-    console.log('Adding product to cart:', product);
-    console.log('Quantity:', quantity);
-    
-    setCartItems(prevItems => {
-      const existingItem = prevItems.find(item => item.id === product.id);
+    try {
+      console.log('Adding to cart:', { product, quantity });
       
-      if (existingItem) {
-        // Update quantity if item already exists
-        toast({
-          title: 'Updated cart',
-          description: `Updated ${product.name} quantity in your cart`,
-        });
-        
-        return prevItems.map(item =>
-          item.id === product.id 
-            ? { ...item, quantity: item.quantity + quantity }
-            : item
-        );
-      } else {
-        // Add new item - FIXED: Include all necessary farmer fields
-        const cartItem = {
-          id: product.id,
-          name: product.name,
-          price: product.price,
-          unit: product.unit || 'piece',
-          image: product.images?.[0] || null,
-          
-          // FIXED: Try multiple possible field names and ensure we have farmer info
-          rolnikId: product.rolnikId || product.farmerId || product.userId,
-          rolnikName: product.rolnikName || product.farmerName || product.userName || 'Unknown Farmer',
-          
-          // Backup fields for compatibility
-          farmerId: product.rolnikId || product.farmerId || product.userId,
-          farmerName: product.rolnikName || product.farmerName || product.userName || 'Unknown Farmer',
-          
-          quantity
-        };
-        
-        console.log('Created cart item:', cartItem);
-        
-        // Validate that we have farmer information
-        if (!cartItem.rolnikId && !cartItem.farmerId) {
-          console.error('Missing farmer ID in product:', product);
-          toast({
-            title: 'Error',
-            description: 'Unable to add product: missing farmer information',
-            variant: 'destructive'
-          });
-          return prevItems; // Don't add the item
-        }
-        
-        toast({
-          title: 'Added to cart',
-          description: `${product.name} added to your cart`,
-        });
-        
-        return [...prevItems, cartItem];
+      if (!product || !product.id) {
+        console.error('Invalid product provided to addToCart');
+        return;
       }
-    });
+
+      setCartItems(prevItems => {
+        const existingItem = prevItems.find(item => item.id === product.id);
+        
+        if (existingItem) {
+          // Update quantity of existing item
+          const updatedItems = prevItems.map(item =>
+            item.id === product.id
+              ? { ...item, quantity: item.quantity + quantity }
+              : item
+          );
+          
+          // Show notification after state update
+          setTimeout(() => {
+            showSimpleNotification(`Updated ${product.name} quantity in cart`);
+          }, 0);
+          
+          return updatedItems;
+        } else {
+          // Add new item to cart
+          const newItem = {
+            id: product.id,
+            name: product.name,
+            price: product.price,
+            image: product.images?.[0] || product.image || null,
+            quantity: quantity,
+            unit: product.unit || 'piece',
+            farmerId: product.farmerId || product.rolnikId,
+            farmerName: product.farmerName || product.rolnikName
+          };
+          
+          // Show notification after state update
+          setTimeout(() => {
+            showSimpleNotification(`${product.name} added to cart`);
+          }, 0);
+          
+          return [...prevItems, newItem];
+        }
+      });
+    } catch (error) {
+      console.error('Error adding item to cart:', error);
+    }
   };
 
-  // Update item quantity
+  // Update cart item quantity
   const updateCartItemQuantity = (productId, quantity) => {
     if (quantity <= 0) {
       removeFromCart(productId);
@@ -117,24 +145,24 @@ export const CartProvider = ({ children }) => {
   const removeFromCart = (productId) => {
     setCartItems(prevItems => {
       const itemToRemove = prevItems.find(item => item.id === productId);
+      const updatedItems = prevItems.filter(item => item.id !== productId);
+      
       if (itemToRemove) {
-        toast({
-          title: 'Removed from cart',
-          description: `${itemToRemove.name} removed from your cart`,
-        });
+        setTimeout(() => {
+          showSimpleNotification(`${itemToRemove.name} removed from cart`);
+        }, 0);
       }
       
-      return prevItems.filter(item => item.id !== productId);
+      return updatedItems;
     });
   };
 
   // Clear cart
   const clearCart = () => {
     setCartItems([]);
-    toast({
-      title: 'Cart cleared',
-      description: 'All items have been removed from your cart',
-    });
+    setTimeout(() => {
+      showSimpleNotification('Cart cleared');
+    }, 0);
   };
 
   // Debug function to log cart state
