@@ -20,6 +20,7 @@ import {
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../context/AuthContext';
+import { getBlockExplorerUrl } from '../../utils/networkUtils';
 
 const PaymentStatus = ({ order, onStatusUpdate }) => {
   const { userProfile } = useAuth();
@@ -43,28 +44,8 @@ const PaymentStatus = ({ order, onStatusUpdate }) => {
   };
 
   // Get block explorer URL based on network
-  const getBlockExplorerUrl = (network, txHash) => {
-    const explorers = {
-      'ethereum': `https://etherscan.io/tx/${txHash}`,
-      'sepolia': `https://sepolia.etherscan.io/tx/${txHash}`,
-      'bitcoin': `https://blockstream.info/tx/${txHash}`,
-      'polygon': `https://polygonscan.com/tx/${txHash}`,
-      'bsc': `https://bscscan.com/tx/${txHash}`,
-      'arbitrum': `https://arbiscan.io/tx/${txHash}`,
-      'optimism': `https://optimistic.etherscan.io/tx/${txHash}`,
-      'avalanche': `https://snowtrace.io/tx/${txHash}`,
-      'fantom': `https://ftmscan.com/tx/${txHash}`,
-      'solana': `https://solscan.io/tx/${txHash}`,
-      'cardano': `https://cardanoscan.io/transaction/${txHash}`,
-      'tron': `https://tronscan.org/#/transaction/${txHash}`,
-      'litecoin': `https://blockchair.com/litecoin/transaction/${txHash}`,
-      'dogecoin': `https://blockchair.com/dogecoin/transaction/${txHash}`,
-      'base': `https://basescan.org/tx/${txHash}`,
-      'linea': `https://lineascan.build/tx/${txHash}`,
-      'zksync': `https://explorer.zksync.io/tx/${txHash}`
-    };
-    
-    return explorers[network?.toLowerCase()] || `https://etherscan.io/tx/${txHash}`;
+  const getBlockExplorerUrlForTx = (network, txHash) => {
+    return getBlockExplorerUrl(network, txHash);
   };
 
   // Mark payment as received (for farmers)
@@ -418,7 +399,7 @@ const PaymentStatus = ({ order, onStatusUpdate }) => {
                     </Button>
                     <Button 
                       onClick={() => {
-                        const explorerUrl = getBlockExplorerUrl(paymentDetails.crypto.network, paymentDetails.crypto.txHash);
+                        const explorerUrl = getBlockExplorerUrlForTx(paymentDetails.crypto.network, paymentDetails.crypto.txHash);
                         window.open(explorerUrl, '_blank');
                       }}
                       variant="ghost" 

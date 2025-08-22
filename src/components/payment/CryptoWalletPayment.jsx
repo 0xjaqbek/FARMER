@@ -15,6 +15,8 @@ import {
   QrCode
 } from 'lucide-react';
 
+import { getNetworkName, getNetworkDisplayName, isTestnet } from '../../utils/networkUtils';
+
 // Web3 integration utilities
 const isWeb3Available = () => {
   return typeof window !== 'undefined' && typeof window.ethereum !== 'undefined';
@@ -49,30 +51,6 @@ const connectMetaMask = async () => {
     }
     throw error;
   }
-};
-
-const getNetworkName = (chainId) => {
-  const networks = {
-    '0x1': 'ethereum',
-    '0x89': 'polygon',
-    '0x38': 'bsc',
-    '0xa86a': 'avalanche',
-    '0xa4b1': 'arbitrum'
-  };
-  
-  return networks[chainId] || 'unknown';
-};
-
-const getNetworkDisplayName = (chainId) => {
-  const networks = {
-    '0x1': 'Ethereum Mainnet',
-    '0x89': 'Polygon',
-    '0x38': 'Binance Smart Chain',
-    '0xa86a': 'Avalanche',
-    '0xa4b1': 'Arbitrum'
-  };
-  
-  return networks[chainId] || 'Unknown Network';
 };
 
 const switchNetwork = async (targetChainId) => {
@@ -218,6 +196,7 @@ const CryptoWalletPayment = ({
   const [walletConnected, setWalletConnected] = useState(false);
   const [connectedAddress, setConnectedAddress] = useState('');
   const [currentNetwork, setCurrentNetwork] = useState('');
+  const [currentChainId, setCurrentChainId] = useState(''); 
   const [loading, setLoading] = useState(false);
   const [txHash, setTxHash] = useState('');
   const [txStatus, setTxStatus] = useState(''); // 'pending', 'success', 'failed'
@@ -243,9 +222,10 @@ const CryptoWalletPayment = ({
         }
       };
 
-      const handleChainChanged = (chainId) => {
+        const handleChainChanged = (chainId) => {
         setCurrentNetwork(getNetworkName(chainId));
-      };
+        setCurrentChainId(chainId); // Add this line
+        };
 
       window.ethereum.on('accountsChanged', handleAccountsChanged);
       window.ethereum.on('chainChanged', handleChainChanged);
@@ -257,49 +237,51 @@ const CryptoWalletPayment = ({
     }
   }, []);
 
-  const checkWalletConnection = async () => {
+    const checkWalletConnection = async () => {
     if (!isWeb3Available()) return;
 
     try {
-      const accounts = await window.ethereum.request({
+        const accounts = await window.ethereum.request({
         method: 'eth_accounts'
-      });
+        });
 
-      if (accounts.length > 0) {
+        if (accounts.length > 0) {
         setWalletConnected(true);
         setConnectedAddress(accounts[0]);
         
         const chainId = await window.ethereum.request({
-          method: 'eth_chainId'
+            method: 'eth_chainId'
         });
         setCurrentNetwork(getNetworkName(chainId));
-      }
+        setCurrentChainId(chainId); // Add this line
+        }
     } catch (error) {
-      console.error('Error checking wallet connection:', error);
+        console.error('Error checking wallet connection:', error);
     }
-  };
+    };
 
-  const connectWallet = async () => {
+    const connectWallet = async () => {
     setLoading(true);
     setError('');
 
     try {
-      const connection = await connectMetaMask();
-      setWalletConnected(true);
-      setConnectedAddress(connection.address);
-      setCurrentNetwork(connection.network);
-      
-      // Check if we need to switch networks
-      if (connection.chainId !== requiredChainId) {
+        const connection = await connectMetaMask();
+        setWalletConnected(true);
+        setConnectedAddress(connection.address);
+        setCurrentNetwork(connection.network);
+        setCurrentChainId(connection.chainId); // Add this line
+        
+        // Check if we need to switch networks
+        if (connection.chainId !== requiredChainId) {
         await switchToRequiredNetwork();
-      }
-      
+        }
+        
     } catch (error) {
-      setError(error.message);
+        setError(error.message);
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
-  };
+    };
 
   const switchToRequiredNetwork = async () => {
     setLoading(true);
@@ -477,6 +459,15 @@ const CryptoWalletPayment = ({
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
+
+        {walletConnected && isTestnet(currentChainId) && (
+  <Alert className="mb-3">
+    <AlertCircle className="h-4 w-4" />
+    <AlertDescription>
+      🧪 TESTNET MODE: Connected to {getNetworkDisplayName(currentChainId)}
+    </AlertDescription>
+  </Alert>
+)}
 
         {/* Wallet Connection Status */}
         {walletConnected ? (

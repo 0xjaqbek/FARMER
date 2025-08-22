@@ -1,42 +1,12 @@
 // src/context/CartContext.jsx - Fixed version without toast issues
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useToast } from '../hooks/use-toast';
 
 const CartContext = createContext();
 
-// Simple notification function that doesn't cause render issues
-const showSimpleNotification = (message) => {
-  // Only log to console for now - you can enhance this later
-  console.log('Cart notification:', message);
-  
-  // Optional: create a simple DOM notification
-  if (typeof window !== 'undefined') {
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: #10b981;
-      color: white;
-      padding: 12px 16px;
-      border-radius: 8px;
-      z-index: 9999;
-      font-size: 14px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      max-width: 300px;
-    `;
-    notification.textContent = message;
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-      if (document.body.contains(notification)) {
-        document.body.removeChild(notification);
-      }
-    }, 3000);
-  }
-};
-
 export const CartProvider = ({ children }) => {
   const [cartItems, setCartItems] = useState([]);
+  const { toast } = useToast(); 
 
   // Load cart from localStorage on component mount
   useEffect(() => {
@@ -94,9 +64,10 @@ export const CartProvider = ({ children }) => {
           );
           
           // Show notification after state update
-          setTimeout(() => {
-            showSimpleNotification(`Updated ${product.name} quantity in cart`);
-          }, 0);
+          toast({
+            title: "Cart Updated",
+            description: `Updated ${product.name} quantity in cart`
+          });
           
           return updatedItems;
         } else {
@@ -113,9 +84,10 @@ export const CartProvider = ({ children }) => {
           };
           
           // Show notification after state update
-          setTimeout(() => {
-            showSimpleNotification(`${product.name} added to cart`);
-          }, 0);
+          toast({
+            title: "Added to Cart",
+            description: `${product.name} added to cart`
+          });
           
           return [...prevItems, newItem];
         }
@@ -148,9 +120,10 @@ export const CartProvider = ({ children }) => {
       const updatedItems = prevItems.filter(item => item.id !== productId);
       
       if (itemToRemove) {
-        setTimeout(() => {
-          showSimpleNotification(`${itemToRemove.name} removed from cart`);
-        }, 0);
+        toast({
+          title: "Removed from Cart",
+          description: `${itemToRemove.name} removed from cart`
+        });
       }
       
       return updatedItems;
@@ -160,9 +133,10 @@ export const CartProvider = ({ children }) => {
   // Clear cart
   const clearCart = () => {
     setCartItems([]);
-    setTimeout(() => {
-      showSimpleNotification('Cart cleared');
-    }, 0);
+    toast({
+      title: "Cart Cleared",
+      description: "All items removed from cart"
+    });
   };
 
   // Debug function to log cart state

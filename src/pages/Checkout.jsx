@@ -38,6 +38,7 @@ import {
   calculatePaymentDeadline,
   PAYMENT_TYPES 
 } from '../lib/firebaseSchema';
+import { isTestnet, getNetworkDisplayName, getNetworkName, DEFAULT_NETWORK, getRequiredChainId, NETWORK_CONFIG } from '../utils/networkUtils';
 
 // Web3 Integration Functions
 const isWeb3Available = () => {
@@ -73,26 +74,6 @@ const connectMetaMask = async () => {
     }
     throw error;
   }
-};
-
-const getNetworkName = (chainId) => {
-  const networks = {
-    '0x1': 'ethereum',
-    '0xaa36a7': 'sepolia', // Sepolia testnet
-    '0x89': 'polygon',
-    '0x38': 'bsc'
-  };
-  return networks[chainId] || 'unknown';
-};
-
-const getRequiredChainId = (network) => {
-  const chainIds = {
-    ethereum: '0xaa36a7', // Use Sepolia instead of mainnet
-    sepolia: '0xaa36a7',
-    polygon: '0x89',
-    bsc: '0x38'
-  };
-  return chainIds[network] || '0xaa36a7'; // Default to Sepolia
 };
 
 const switchNetwork = async (targetChainId) => {
@@ -182,6 +163,40 @@ const getBlockExplorerUrl = (txHash, network) => {
     bsc: `https://bscscan.com/tx/${txHash}`
   };
   return explorers[network] || `https://etherscan.io/tx/${txHash}`;
+};
+
+// Smart network validation - works for both testnet and mainnet
+const isValidNetworkForWallet = (currentNetwork, walletNetwork) => {
+  // If wallet is configured for "ethereum", accept both mainnet and sepolia
+  if (walletNetwork === 'ethereum') {
+    return currentNetwork === 'ethereum' || currentNetwork === 'sepolia';
+  }
+  
+  // For other networks, require exact match
+  return currentNetwork === walletNetwork;
+};
+
+// Get user-friendly network name for display
+const getNetworkDisplayForWallet = (walletNetwork) => {
+  if (walletNetwork === 'ethereum') {
+    return 'Ethereum (Mainnet or Sepolia)';
+  }
+  return getNetworkDisplayName(walletNetwork);
+};
+
+// Get the correct target network based on environment
+const getTargetNetworkForWallet = (walletNetwork, currentNetwork) => {
+  // If wallet supports ethereum and we're in development/testnet mode
+  if (walletNetwork === 'ethereum') {
+    // In development, prefer Sepolia if that's what user is already on
+    if (currentNetwork === 'sepolia') {
+      return 'sepolia';
+    }
+    // Otherwise, use the DEFAULT_NETWORK setting
+    return DEFAULT_NETWORK.name;
+  }
+  
+  return walletNetwork;
 };
 
 // Payment method components
@@ -336,13 +351,32 @@ const CryptoPayment = ({ wallet, orderData, exchangeRate, onCopy, onPaymentSucce
   const [walletConnected, setWalletConnected] = useState(false);
   const [connectedAddress, setConnectedAddress] = useState('');
   const [currentNetwork, setCurrentNetwork] = useState('');
+  const [currentChainId, setCurrentChainId] = useState('');
   const [loading, setLoading] = useState(false);
   const [txHash, setTxHash] = useState('');
   const [txStatus, setTxStatus] = useState('');
   const [error, setError] = useState('');
 
+  const isNetworkValid = isValidNetworkForWallet(currentNetwork, wallet.network);
+  const targetNetwork = getTargetNetworkForWallet(wallet.network, currentNetwork);
+
+const switchToTargetNetwork = async (targetNetworkName) => {
+  setLoading(true);
+  try {
+    const networkConfig = Object.values(NETWORK_CONFIG).find(net => net.name === targetNetworkName);
+    if (networkConfig) {
+      await switchNetwork(networkConfig.chainId); // Pass chainId string, not config object
+      setCurrentNetwork(targetNetworkName);
+    }
+  } catch (error) {
+    setError(`Failed to switch to ${targetNetworkName} network: ${error.message}`);
+  } finally {
+    setLoading(false);
+  }
+};
+
   const cryptoAmount = (orderData.totalPrice / exchangeRate).toFixed(6);
-  const requiredChainId = getRequiredChainId(wallet.network);
+  const requiredChainId = getRequiredChainId();
 
   // Check wallet connection on mount
   useEffect(() => {
@@ -361,9 +395,10 @@ const CryptoPayment = ({ wallet, orderData, exchangeRate, onCopy, onPaymentSucce
         }
       };
 
-      const handleChainChanged = (chainId) => {
-        setCurrentNetwork(getNetworkName(chainId));
-      };
+const handleChainChanged = (chainId) => {
+  setCurrentNetwork(getNetworkName(chainId));
+  setCurrentChainId(chainId); // Add this line
+};
 
       window.ethereum.on('accountsChanged', handleAccountsChanged);
       window.ethereum.on('chainChanged', handleChainChanged);
@@ -375,48 +410,50 @@ const CryptoPayment = ({ wallet, orderData, exchangeRate, onCopy, onPaymentSucce
     }
   }, []);
 
-  const checkWalletConnection = async () => {
-    if (!isWeb3Available()) return;
+const checkWalletConnection = async () => {
+  if (!isWeb3Available()) return;
 
-    try {
-      const accounts = await window.ethereum.request({
-        method: 'eth_accounts'
-      });
+  try {
+    const accounts = await window.ethereum.request({
+      method: 'eth_accounts'
+    });
 
-      if (accounts.length > 0) {
-        setWalletConnected(true);
-        setConnectedAddress(accounts[0]);
-        
-        const chainId = await window.ethereum.request({
-          method: 'eth_chainId'
-        });
-        setCurrentNetwork(getNetworkName(chainId));
-      }
-    } catch (error) {
-      console.error('Error checking wallet connection:', error);
-    }
-  };
-
-  const connectWallet = async () => {
-    setLoading(true);
-    setError('');
-
-    try {
-      const connection = await connectMetaMask();
+    if (accounts.length > 0) {
       setWalletConnected(true);
-      setConnectedAddress(connection.address);
-      setCurrentNetwork(connection.network);
+      setConnectedAddress(accounts[0]);
       
-      if (connection.chainId !== requiredChainId) {
-        await switchToRequiredNetwork();
-      }
-      
-    } catch (error) {
-      setError(error.message);
-    } finally {
-      setLoading(false);
+      const chainId = await window.ethereum.request({
+        method: 'eth_chainId'
+      });
+      setCurrentNetwork(getNetworkName(chainId));
+      setCurrentChainId(chainId); // Add this line
     }
-  };
+  } catch (error) {
+    console.error('Error checking wallet connection:', error);
+  }
+};
+
+const connectWallet = async () => {
+  setLoading(true);
+  setError('');
+
+  try {
+    const connection = await connectMetaMask();
+    setWalletConnected(true);
+    setConnectedAddress(connection.address);
+    setCurrentNetwork(connection.network);
+    setCurrentChainId(connection.chainId); // Add this line
+    
+    if (connection.chainId !== requiredChainId) {
+      await switchToRequiredNetwork();
+    }
+    
+  } catch (error) {
+    setError(error.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const switchToRequiredNetwork = async () => {
     setLoading(true);
@@ -564,16 +601,20 @@ const CryptoPayment = ({ wallet, orderData, exchangeRate, onCopy, onPaymentSucce
         )}
 
         {/* Payment Details */}
-        {walletConnected && (
-          <div className="space-y-3">
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                🧪 TESTNET MODE: You're using Sepolia testnet. This is for testing only - no real money will be transferred.
-                <br />
-                Send exactly the amount shown below to the wallet address. Network: {wallet.network}
-              </AlertDescription>
-            </Alert>
+{/* Payment Details */}
+{walletConnected && (
+  <div className="space-y-3">
+    {isTestnet(currentChainId) && (
+      <Alert>
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          🧪 TESTNET MODE: You're using {getNetworkDisplayName(currentChainId)}. 
+          This is for testing only - no real money will be transferred.
+          <br />
+          Send exactly the amount shown below to the wallet address.
+        </AlertDescription>
+      </Alert>
+    )}
             
             <div className="space-y-3">
               <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
@@ -614,31 +655,39 @@ const CryptoPayment = ({ wallet, orderData, exchangeRate, onCopy, onPaymentSucce
             </div>
 
             {/* Network Switch Warning */}
-            {currentNetwork !== wallet.network && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  Please switch to {wallet.network} network to continue.
-                  <Button 
-                    onClick={switchToRequiredNetwork}
-                    variant="outline"
-                    size="sm"
-                    className="ml-2"
-                    disabled={loading}
-                  >
-                    {loading ? 'Switching...' : 'Switch Network'}
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            )}
+{!isNetworkValid && (
+  <Alert variant="destructive">
+    <AlertCircle className="h-4 w-4" />
+    <AlertDescription>
+      Network mismatch. This wallet accepts {getNetworkDisplayForWallet(wallet.network)}.
+      {currentNetwork === 'sepolia' && wallet.network === 'ethereum' ? (
+        <div className="mt-2">
+          <p className="text-sm">You're on Sepolia testnet which is perfect for testing!</p>
+          <p className="text-sm font-medium">No network switch needed - you can proceed with payment.</p>
+        </div>
+      ) : (
+        <Button 
+          onClick={() => switchToTargetNetwork(targetNetwork)}
+          variant="outline"
+          size="sm"
+          className="ml-2"
+          disabled={loading}
+        >
+          {loading ? 'Switching...' : `Switch to ${getNetworkDisplayName(targetNetwork)}`}
+        </Button>
+      )}
+    </AlertDescription>
+  </Alert>
+)}
+
 
             {/* Send Payment Button */}
-            {currentNetwork === wallet.network && (
-              <Button 
-                onClick={sendPayment}
-                disabled={loading || txStatus === 'success' || disabled}
-                className="w-full"
-                size="lg"
+ {isNetworkValid && (
+  <Button 
+    onClick={sendPayment}
+    disabled={loading || txStatus === 'success' || disabled}
+    className="w-full"
+    size="lg"
               >
                 {disabled ? (
                   'Place Order First'
@@ -727,6 +776,100 @@ const Checkout = () => {
   const [exchangeRates, setExchangeRates] = useState({});
   const [currentOrderId, setCurrentOrderId] = useState(null);
   const [orderCreated, setOrderCreated] = useState(false);
+  
+  // Add these new state variables:
+  const [isMonitoringPayment, setIsMonitoringPayment] = useState(false);
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const [txHash, setTxHash] = useState('');
+
+    // Add the monitorPaymentConfirmation function here:
+  const monitorPaymentConfirmation = async (transactionHash, orderId) => {
+    setIsMonitoringPayment(true);
+    setTxHash(transactionHash);
+
+    try {
+      // Poll for transaction confirmation
+      const checkTransaction = async () => {
+        try {
+          const receipt = await window.ethereum.request({
+            method: 'eth_getTransactionReceipt',
+            params: [transactionHash]
+          });
+
+          if (receipt && receipt.status === '0x1') {
+            // Transaction confirmed successfully
+            setPaymentConfirmed(true);
+            setIsMonitoringPayment(false);
+            
+            // Show confirmation toast
+            toast({
+              title: "Payment Confirmed!",
+              description: "Your crypto payment has been confirmed on the blockchain."
+            });
+
+            // Update order status in database
+            await updateOrderPayment(orderId, {
+              status: 'paid',
+              confirmedAt: new Date(),
+              txHash: transactionHash,
+              verification: {
+                method: 'blockchain',
+                verifiedAt: new Date(),
+                notes: `Transaction confirmed: ${transactionHash}`
+              }
+            });
+
+            // Redirect to order details after a short delay
+            setTimeout(() => {
+              navigate(`/orders/${orderId}`);
+            }, 2000);
+            
+            return true;
+          }
+          return false;
+        } catch (error) {
+          console.error('Error checking transaction:', error);
+          return false;
+        }
+      };
+
+      // Poll every 15 seconds for up to 10 minutes
+      let attempts = 0;
+      const maxAttempts = 40; // 10 minutes
+
+      const pollTransaction = async () => {
+        const confirmed = await checkTransaction();
+        if (confirmed) {
+          return;
+        }
+        
+        attempts++;
+        if (attempts >= maxAttempts) {
+          // Timeout - show manual verification option
+          setIsMonitoringPayment(false);
+          toast({
+            title: "Confirmation Timeout",
+            description: "Please check your order status manually or contact support.",
+            variant: "destructive"
+          });
+          return;
+        }
+        
+        setTimeout(pollTransaction, 15000);
+      };
+
+      await pollTransaction();
+      
+    } catch (error) {
+      console.error('Error monitoring payment:', error);
+      setIsMonitoringPayment(false);
+      toast({
+        title: "Monitoring Error",
+        description: "Unable to monitor payment. Please check your order status manually.",
+        variant: "destructive"
+      });
+    }
+  };
   
   // Form data
   const [formData, setFormData] = useState({
@@ -824,44 +967,43 @@ const Checkout = () => {
   };
 
   // Handle crypto payment success
-  const handleCryptoPaymentSuccess = async (paymentData) => {
-    try {
-      if (!currentOrderId) {
-        throw new Error('No order ID available');
-      }
-
-      // Update order with crypto payment details
-      await updateOrderPayment(currentOrderId, {
-        status: 'confirming',
-        txHash: paymentData.txHash,
-        verification: {
-          method: 'blockchain',
-          verifiedAt: new Date(),
-          notes: `Crypto payment sent: ${paymentData.txHash} on ${paymentData.network}`
-        }
-      });
-
-      toast({
-        title: 'Payment Sent!',
-        description: 'Your crypto payment has been sent. Waiting for blockchain confirmation.'
-      });
-
-      setSuccess(true);
-      clearCart();
-
-      setTimeout(() => {
-        navigate('/orders');
-      }, 3000);
-      
-    } catch (error) {
-      console.error('Error updating crypto payment:', error);
-      toast({
-        title: 'Payment Error',
-        description: 'Payment sent but failed to update order. Please contact support.',
-        variant: 'destructive'
-      });
+const handleCryptoPaymentSuccess = async (paymentData) => {
+  try {
+    if (!currentOrderId) {
+      throw new Error('No order ID available');
     }
-  };
+
+    // Update order with crypto payment details
+    await updateOrderPayment(currentOrderId, {
+      status: 'confirming',
+      txHash: paymentData.txHash,
+      verification: {
+        method: 'blockchain',
+        verifiedAt: new Date(),
+        notes: `Crypto payment sent: ${paymentData.txHash} on ${paymentData.network}`
+      }
+    });
+
+    toast({
+      title: 'Payment Sent!',
+      description: 'Your crypto payment has been sent. Waiting for blockchain confirmation.'
+    });
+
+    setSuccess(true);
+    clearCart();
+
+    // Start monitoring for confirmation instead of immediate redirect
+    monitorPaymentConfirmation(paymentData.txHash, currentOrderId);
+    
+  } catch (error) {
+    console.error('Error updating crypto payment:', error);
+    toast({
+      title: 'Payment Error',
+      description: 'Payment sent but failed to update order. Please contact support.',
+      variant: 'destructive'
+    });
+  }
+};
 
   // Handle crypto payment error
   const handleCryptoPaymentError = (error) => {
@@ -1076,33 +1218,91 @@ const Checkout = () => {
   };
 
   // Show success screen
-  if (success) {
-    return (
-      <div className="max-w-md mx-auto">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center py-8">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+if (success) {
+  return (
+    <div className="max-w-md mx-auto">
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-center py-8">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              {paymentConfirmed ? (
                 <CheckCircle className="h-8 w-8 text-green-600" />
-              </div>
-              <h2 className="text-2xl font-semibold mb-2">Order Placed Successfully!</h2>
-              <p className="text-gray-600 mb-6">
-                {selectedPaymentMethod === 'cash' 
-                  ? 'Your order has been placed. You can pay when you receive your items.'
-                  : selectedPaymentMethod === 'crypto'
-                  ? 'Your crypto payment has been sent. The order will be confirmed once the transaction is verified.'
-                  : 'Please complete the payment to confirm your order.'
-                }
-              </p>
-              <Button asChild>
-                <Link to="/orders">View Your Orders</Link>
-              </Button>
+              ) : (
+                <RefreshCw className={`h-8 w-8 text-blue-600 ${isMonitoringPayment ? 'animate-spin' : ''}`} />
+              )}
             </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+            
+            <h2 className="text-2xl font-semibold mb-2">
+              {paymentConfirmed ? 'Payment Confirmed!' : 'Order Placed Successfully!'}
+            </h2>
+            
+            <p className="text-gray-600 mb-6">
+              {selectedPaymentMethod === 'cash' 
+                ? 'Your order has been placed. You can pay when you receive your items.'
+                : selectedPaymentMethod === 'crypto' && !paymentConfirmed
+                ? 'Your crypto payment has been sent. Waiting for blockchain confirmation...'
+                : selectedPaymentMethod === 'crypto' && paymentConfirmed
+                ? 'Your payment has been confirmed on the blockchain. Redirecting to order details...'
+                : 'Please complete the payment to confirm your order.'
+              }
+            </p>
+
+            {/* Blockchain monitoring status */}
+            {selectedPaymentMethod === 'crypto' && txHash && !paymentConfirmed && (
+              <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+                <div className="flex items-center justify-center mb-2">
+                  <RefreshCw className="h-4 w-4 text-blue-600 animate-spin mr-2" />
+                  <span className="text-sm font-medium text-blue-800">
+                    Monitoring blockchain confirmation...
+                  </span>
+                </div>
+                <p className="text-xs text-blue-600">
+                  Transaction: {txHash.slice(0, 10)}...{txHash.slice(-8)}
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  This usually takes 1-5 minutes on Sepolia testnet
+                </p>
+              </div>
+            )}
+
+            {/* Confirmed payment status */}
+            {paymentConfirmed && (
+              <div className="mb-6 p-4 bg-green-50 rounded-lg">
+                <div className="flex items-center justify-center mb-2">
+                  <CheckCircle className="h-4 w-4 text-green-600 mr-2" />
+                  <span className="text-sm font-medium text-green-800">
+                    Payment confirmed on blockchain!
+                  </span>
+                </div>
+                <p className="text-xs text-green-600">
+                  Redirecting to your order details...
+                </p>
+              </div>
+            )}
+
+            {/* Action buttons */}
+            {!isMonitoringPayment || paymentConfirmed ? (
+              <Button asChild>
+                <Link to={paymentConfirmed && currentOrderId ? `/orders/${currentOrderId}` : "/orders"}>
+                  {paymentConfirmed ? 'View Order Details' : 'View Your Orders'}
+                </Link>
+              </Button>
+            ) : (
+              <div className="space-y-2">
+                <Button variant="outline" asChild>
+                  <Link to="/orders">View All Orders</Link>
+                </Button>
+                <p className="text-xs text-gray-500">
+                  Or wait for automatic confirmation above
+                </p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
   // Show empty cart
   if (cartItems.length === 0) {
@@ -1382,14 +1582,16 @@ const Checkout = () => {
           )}
 
           {/* Place Order Button */}
-          <Button 
-            onClick={handleSubmit} 
-            disabled={loading || !selectedPaymentMethod}
-            className="w-full"
-            size="lg"
-          >
-            {loading ? 'Processing...' : `Place Order - ${totalPrice.toFixed(2)} PLN`}
-          </Button>
+<Button 
+  onClick={handleSubmit} 
+  disabled={loading || !selectedPaymentMethod || orderCreated}
+  className="w-full"
+  size="lg"
+>
+  {loading ? 'Processing...' : 
+   orderCreated ? 'Order Placed - Complete Payment Above' :
+   `Place Order - ${totalPrice.toFixed(2)} PLN`}
+</Button>
         </div>
       </div>
     </div>
