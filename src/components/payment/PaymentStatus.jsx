@@ -1,9 +1,10 @@
-// src/components/payment/PaymentStatus.jsx
+
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Input } from '@/components/ui/input';
 import { 
   Clock, 
   CheckCircle, 
@@ -16,42 +17,146 @@ import {
   Wallet,
   RefreshCw
 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { formatDistanceToNow, isPast } from 'date-fns';
 import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '@/firebase/config';
-import { useAuth } from '@/context/AuthContext';
+import { db } from '../../firebase/config';
+import { useAuth } from '../../context/AuthContext';
 
 const PaymentStatus = ({ order, onStatusUpdate }) => {
   const { userProfile } = useAuth();
-  const { toast } = useToast();
   const [updating, setUpdating] = useState(false);
   const [txHash, setTxHash] = useState('');
 
   const payment = order.payment || {};
-  const paymentMethod = payment.method;
-  const paymentStatus = payment.status || 'pending';
+  const paymentMethod = payment.method || order.paymentMethod || 'cash';
+  const paymentStatus = payment.status || (paymentMethod === 'cash' ? 'paid' : 'pending');
   const paymentDetails = payment.paymentDetails || {};
   const expiresAt = payment.expiresAt;
 
   // Check if payment is expired
-  const isExpired = expiresAt && isPast(new Date(expiresAt.seconds ? expiresAt.seconds * 1000 : expiresAt));
+  const isExpired = expiresAt && new Date() > new Date(expiresAt.seconds ? expiresAt.seconds * 1000 : expiresAt);
+
+  // Copy to clipboard
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    // Simple toast replacement
+    console.log('Copied to clipboard:', text);
+  };
+
+  // Get block explorer URL based on network
+  const getBlockExplorerUrl = (network, txHash) => {
+    const explorers = {
+      'ethereum': `https://etherscan.io/tx/${txHash}`,
+      'sepolia': `https://sepolia.etherscan.io/tx/${txHash}`,
+      'bitcoin': `https://blockstream.info/tx/${txHash}`,
+      'polygon': `https://polygonscan.com/tx/${txHash}`,
+      'bsc': `https://bscscan.com/tx/${txHash}`,
+      'arbitrum': `https://arbiscan.io/tx/${txHash}`,
+      'optimism': `https://optimistic.etherscan.io/tx/${txHash}`,
+      'avalanche': `https://snowtrace.io/tx/${txHash}`,
+      'fantom': `https://ftmscan.com/tx/${txHash}`,
+      'solana': `https://solscan.io/tx/${txHash}`,
+      'cardano': `https://cardanoscan.io/transaction/${txHash}`,
+      'tron': `https://tronscan.org/#/transaction/${txHash}`,
+      'litecoin': `https://blockchair.com/litecoin/transaction/${txHash}`,
+      'dogecoin': `https://blockchair.com/dogecoin/transaction/${txHash}`,
+      'base': `https://basescan.org/tx/${txHash}`,
+      'linea': `https://lineascan.build/tx/${txHash}`,
+      'zksync': `https://explorer.zksync.io/tx/${txHash}`
+    };
+    
+    return explorers[network?.toLowerCase()] || `https://etherscan.io/tx/${txHash}`;
+  };
+
+  // Mark payment as received (for farmers)
+  const markAsReceived = async () => {
+    try {
+      setUpdating(true);
+      
+      const orderRef = doc(db, 'orders', order.id);
+      await updateDoc(orderRef, {
+        'payment.status': 'confirming',
+        'payment.verification.method': 'manual',
+        'payment.verification.verifiedBy': userProfile.uid,
+        'payment.verification.verifiedAt': new Date(),
+        'payment.verification.notes': 'Manually marked as received by farmer',
+        updatedAt: new Date()
+      });
+
+      if (onStatusUpdate) {
+        onStatusUpdate();
+      }
+    } catch (error) {
+      console.error('Error updating payment status:', error);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  // Confirm payment (for farmers)
+  const confirmPayment = async () => {
+    try {
+      setUpdating(true);
+      
+      const orderRef = doc(db, 'orders', order.id);
+      await updateDoc(orderRef, {
+        'payment.status': 'paid',
+        'payment.paidAt': new Date(),
+        'payment.confirmedAt': new Date(),
+        status: 'confirmed',
+        confirmedAt: new Date(),
+        updatedAt: new Date()
+      });
+
+      if (onStatusUpdate) {
+        onStatusUpdate();
+      }
+    } catch (error) {
+      console.error('Error confirming payment:', error);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  // Submit crypto transaction hash
+  const submitTxHash = async () => {
+    if (!txHash.trim()) {
+      return;
+    }
+
+    try {
+      setUpdating(true);
+      
+      const orderRef = doc(db, 'orders', order.id);
+      await updateDoc(orderRef, {
+        'payment.status': 'confirming',
+        'payment.paymentDetails.crypto.txHash': txHash,
+        'payment.verification.method': 'blockchain',
+        'payment.verification.notes': `Transaction hash provided by customer: ${txHash}`,
+        updatedAt: new Date()
+      });
+
+      setTxHash('');
+      if (onStatusUpdate) {
+        onStatusUpdate();
+      }
+    } catch (error) {
+      console.error('Error submitting transaction hash:', error);
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   // Get payment method icon
   const getPaymentMethodIcon = (method) => {
     switch (method) {
-      case 'bank_transfer':
-        return CreditCard;
-      case 'blik':
-        return Smartphone;
-      case 'crypto':
-        return Wallet;
-      default:
-        return CreditCard;
+      case 'bank_transfer': return CreditCard;
+      case 'blik': return Smartphone;
+      case 'crypto': return Wallet;
+      default: return CreditCard;
     }
   };
 
-  // Get status color and icon
+  // Get status display
   const getStatusDisplay = (status) => {
     switch (status) {
       case 'pending':
@@ -100,134 +205,37 @@ const PaymentStatus = ({ order, onStatusUpdate }) => {
     }
   };
 
-  // Copy to clipboard
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
-    toast({
-      title: 'Copied',
-      description: 'Copied to clipboard'
-    });
-  };
-
-  // Mark payment as received (for farmers)
-  const markAsReceived = async () => {
-    try {
-      setUpdating(true);
-      
-      const orderRef = doc(db, 'orders', order.id);
-      await updateDoc(orderRef, {
-        'payment.status': 'confirming',
-        'payment.verification.method': 'manual',
-        'payment.verification.verifiedBy': userProfile.uid,
-        'payment.verification.verifiedAt': new Date(),
-        'payment.verification.notes': 'Manually marked as received by farmer',
-        updatedAt: new Date()
-      });
-
-      toast({
-        title: 'Success',
-        description: 'Payment marked as received'
-      });
-
-      if (onStatusUpdate) {
-        onStatusUpdate();
-      }
-    } catch (error) {
-      console.error('Error updating payment status:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to update payment status',
-        variant: 'destructive'
-      });
-    } finally {
-      setUpdating(false);
-    }
-  };
-
-  // Confirm payment (for farmers)
-  const confirmPayment = async () => {
-    try {
-      setUpdating(true);
-      
-      const orderRef = doc(db, 'orders', order.id);
-      await updateDoc(orderRef, {
-        'payment.status': 'paid',
-        'payment.paidAt': new Date(),
-        'payment.confirmedAt': new Date(),
-        status: 'confirmed',
-        confirmedAt: new Date(),
-        updatedAt: new Date()
-      });
-
-      toast({
-        title: 'Success',
-        description: 'Payment confirmed successfully'
-      });
-
-      if (onStatusUpdate) {
-        onStatusUpdate();
-      }
-    } catch (error) {
-      console.error('Error confirming payment:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to confirm payment',
-        variant: 'destructive'
-      });
-    } finally {
-      setUpdating(false);
-    }
-  };
-
-  // Submit crypto transaction hash
-  const submitTxHash = async () => {
-    if (!txHash.trim()) {
-      toast({
-        title: 'Error',
-        description: 'Please enter a transaction hash',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    try {
-      setUpdating(true);
-      
-      const orderRef = doc(db, 'orders', order.id);
-      await updateDoc(orderRef, {
-        'payment.status': 'confirming',
-        'payment.paymentDetails.crypto.txHash': txHash,
-        'payment.verification.method': 'blockchain',
-        'payment.verification.notes': `Transaction hash provided by customer: ${txHash}`,
-        updatedAt: new Date()
-      });
-
-      toast({
-        title: 'Success',
-        description: 'Transaction hash submitted. Payment will be verified shortly.'
-      });
-
-      setTxHash('');
-      if (onStatusUpdate) {
-        onStatusUpdate();
-      }
-    } catch (error) {
-      console.error('Error submitting transaction hash:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to submit transaction hash',
-        variant: 'destructive'
-      });
-    } finally {
-      setUpdating(false);
-    }
-  };
-
   const statusDisplay = getStatusDisplay(paymentStatus);
   const PaymentIcon = getPaymentMethodIcon(paymentMethod);
   const StatusIcon = statusDisplay.icon;
   const isFarmer = userProfile?.role === 'rolnik' || userProfile?.role === 'farmer';
   const isCustomer = userProfile?.role === 'klient' || userProfile?.role === 'customer';
+
+  // Handle cash payments
+  if (paymentMethod === 'cash') {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CreditCard className="h-5 w-5" />
+            Payment Information
+            <Badge variant="secondary" className="ml-auto">
+              Cash on Delivery
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Alert>
+            <CreditCard className="h-4 w-4" />
+            <AlertDescription>
+              Payment will be collected in cash when the order is delivered.
+              Amount to pay: <strong>{order.totalPrice?.toFixed(2)} PLN</strong>
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -236,9 +244,9 @@ const PaymentStatus = ({ order, onStatusUpdate }) => {
           <PaymentIcon className="h-5 w-5" />
           Payment Information
           <Badge 
-            variant={statusDisplay.color === 'green' ? 'success' : 
+            variant={statusDisplay.color === 'green' ? 'default' : 
                    statusDisplay.color === 'red' ? 'destructive' : 
-                   statusDisplay.color === 'yellow' ? 'warning' : 'secondary'}
+                   'secondary'}
             className="ml-auto"
           >
             <StatusIcon className="h-3 w-3 mr-1" />
@@ -271,7 +279,7 @@ const PaymentStatus = ({ order, onStatusUpdate }) => {
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-yellow-600" />
               <span className="text-sm font-medium text-yellow-800">
-                Payment due: {formatDistanceToNow(new Date(expiresAt.seconds ? expiresAt.seconds * 1000 : expiresAt), { addSuffix: true })}
+                Payment due: {new Date(expiresAt.seconds ? expiresAt.seconds * 1000 : expiresAt).toLocaleString()}
               </span>
             </div>
           </div>
@@ -287,10 +295,6 @@ const PaymentStatus = ({ order, onStatusUpdate }) => {
                 <span className="text-sm">{paymentDetails.bankTransfer.bankName}</span>
               </div>
               <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                <span className="text-sm font-medium">Account Holder:</span>
-                <span className="text-sm">{paymentDetails.bankTransfer.accountHolder}</span>
-              </div>
-              <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
                 <span className="text-sm font-medium">IBAN:</span>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-mono">{paymentDetails.bankTransfer.iban}</span>
@@ -303,23 +307,25 @@ const PaymentStatus = ({ order, onStatusUpdate }) => {
                   </Button>
                 </div>
               </div>
-              <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                <span className="text-sm font-medium">Transfer Title:</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-mono">{paymentDetails.bankTransfer.transferTitle}</span>
-                  <Button 
-                    onClick={() => copyToClipboard(paymentDetails.bankTransfer.transferTitle)}
-                    variant="ghost" 
-                    size="sm"
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
+              {order.transferTitle && (
+                <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                  <span className="text-sm font-medium">Transfer Title:</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-mono">{order.transferTitle}</span>
+                    <Button 
+                      onClick={() => copyToClipboard(order.transferTitle)}
+                      variant="ghost" 
+                      size="sm"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="flex justify-between items-center p-2 bg-green-50 rounded border border-green-200">
                 <span className="text-sm font-medium">Amount:</span>
                 <span className="text-sm font-bold text-green-600">
-                  {paymentDetails.bankTransfer.amount.toFixed(2)} {paymentDetails.bankTransfer.currency}
+                  {paymentDetails.bankTransfer.amount?.toFixed(2)} {paymentDetails.bankTransfer.currency}
                 </span>
               </div>
             </div>
@@ -344,23 +350,25 @@ const PaymentStatus = ({ order, onStatusUpdate }) => {
                   </Button>
                 </div>
               </div>
-              <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                <span className="text-sm font-medium">Transfer Title:</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-mono">{paymentDetails.blik.transferTitle}</span>
-                  <Button 
-                    onClick={() => copyToClipboard(paymentDetails.blik.transferTitle)}
-                    variant="ghost" 
-                    size="sm"
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
+              {order.transferTitle && (
+                <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                  <span className="text-sm font-medium">Transfer Title:</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-mono">{order.transferTitle}</span>
+                    <Button 
+                      onClick={() => copyToClipboard(order.transferTitle)}
+                      variant="ghost" 
+                      size="sm"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="flex justify-between items-center p-2 bg-green-50 rounded border border-green-200">
                 <span className="text-sm font-medium">Amount:</span>
                 <span className="text-sm font-bold text-green-600">
-                  {paymentDetails.blik.amount.toFixed(2)} {paymentDetails.blik.currency}
+                  {paymentDetails.blik.amount?.toFixed(2)} {paymentDetails.blik.currency}
                 </span>
               </div>
             </div>
@@ -392,7 +400,7 @@ const PaymentStatus = ({ order, onStatusUpdate }) => {
               <div className="flex justify-between items-center p-2 bg-green-50 rounded border border-green-200">
                 <span className="text-sm font-medium">Amount:</span>
                 <span className="text-sm font-bold text-green-600">
-                  {paymentDetails.crypto.amount.toFixed(6)} {paymentDetails.crypto.currency}
+                  {paymentDetails.crypto.amount?.toFixed(6)} {paymentDetails.crypto.currency}
                 </span>
               </div>
               {paymentDetails.crypto.txHash && (
@@ -404,51 +412,51 @@ const PaymentStatus = ({ order, onStatusUpdate }) => {
                       onClick={() => copyToClipboard(paymentDetails.crypto.txHash)}
                       variant="ghost" 
                       size="sm"
+                      title="Copy transaction hash"
                     >
                       <Copy className="h-3 w-3" />
                     </Button>
                     <Button 
-                      onClick={() => window.open(`https://etherscan.io/tx/${paymentDetails.crypto.txHash}`, '_blank')}
+                      onClick={() => {
+                        const explorerUrl = getBlockExplorerUrl(paymentDetails.crypto.network, paymentDetails.crypto.txHash);
+                        window.open(explorerUrl, '_blank');
+                      }}
                       variant="ghost" 
                       size="sm"
+                      title="View on block explorer"
                     >
                       <ExternalLink className="h-3 w-3" />
                     </Button>
                   </div>
                 </div>
               )}
-
-              {/* Transaction Hash Input for Customers */}
-              {isCustomer && paymentStatus === 'pending' && !paymentDetails.crypto.txHash && (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Submit Transaction Hash:</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={txHash}
-                      onChange={(e) => setTxHash(e.target.value)}
-                      placeholder="0x..."
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm"
-                    />
-                    <Button 
-                      onClick={submitTxHash}
-                      disabled={updating || !txHash.trim()}
-                      size="sm"
-                    >
-                      {updating ? 'Submitting...' : 'Submit'}
-                    </Button>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    Submit your transaction hash after sending the payment for faster verification
-                  </p>
-                </div>
-              )}
             </div>
+
+            {/* Crypto transaction submission for customers */}
+            {isCustomer && order.clientId === userProfile.uid && paymentStatus === 'pending' && (
+              <div className="space-y-2 pt-4 border-t">
+                <h5 className="font-medium">Submit Transaction Hash</h5>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Enter transaction hash..."
+                    value={txHash}
+                    onChange={(e) => setTxHash(e.target.value)}
+                  />
+                  <Button 
+                    onClick={submitTxHash}
+                    disabled={updating || !txHash.trim()}
+                    size="sm"
+                  >
+                    {updating ? 'Submitting...' : 'Submit'}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* Farmer Actions */}
-        {isFarmer && order.rolnikId === userProfile.uid && (
+        {isFarmer && order.rolnikId === userProfile.uid && paymentStatus !== 'paid' && paymentMethod !== 'cash' && (
           <div className="space-y-2 pt-4 border-t">
             <h4 className="font-medium">Farmer Actions</h4>
             
@@ -460,7 +468,7 @@ const PaymentStatus = ({ order, onStatusUpdate }) => {
                 size="sm"
                 className="w-full"
               >
-                {updating ? 'Updating...' : 'Mark as Received'}
+                {updating ? 'Updating...' : 'Mark Payment as Received'}
               </Button>
             )}
             

@@ -97,7 +97,7 @@ const MainLayout = ({ children }) => {
       name: 'Find Farmers',
       href: '/farmers',
       icon: Users,
-      show: isKlient || isAdmin,
+      show: isKlient ,
       description: 'Browse local farmers and their specialties'
     },
     // SEARCH: Show for customers and admins
@@ -105,7 +105,7 @@ const MainLayout = ({ children }) => {
       name: 'Search & Map',
       href: '/search',
       icon: Search,
-      show: isKlient || isAdmin,
+      show: isKlient ,
       description: 'Find local farm products with location-based search'
     },
     // BROWSE: Show for customers and admins
@@ -121,7 +121,7 @@ const MainLayout = ({ children }) => {
       name: 'My Products',
       href: '/products/manage',
       icon: Package,
-      show: isRolnik || isAdmin,
+      show: isRolnik ,
       description: 'Manage your product listings'
     },
     {
