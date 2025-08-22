@@ -18,6 +18,11 @@ const CROWDFUNDING_ABI = [
   
   // Main functions
   "function createCampaign(string memory firebaseId, uint256 goalAmount, uint256 durationDays, uint8 campaignType) external returns (uint256)",
+  
+  // ADD THESE MISSING ADMIN FUNCTIONS:
+  "function createCampaignAsAdmin(string memory firebaseId, uint256 goalAmount, uint256 durationDays, uint8 campaignType, address farmerAddress) external returns (uint256)",
+  "function launchCampaignAsAdmin(uint256 campaignId) external",
+  
   "function launchCampaign(uint256 campaignId) external",
   "function contribute(uint256 campaignId, uint256 rewardTierIndex) external payable",
   "function withdrawFunds(uint256 campaignId) external",
@@ -45,13 +50,35 @@ const CROWDFUNDING_ABI = [
   "function platformFeeRate() external view returns (uint256)"
 ];
 
+
 // Contract configuration
 const CONTRACT_CONFIG = {
-  // Deploy this contract to your preferred network
-  address: import.meta.env.REACT_APP_CONTRACT_ADDRESS || "0x...", // Replace with deployed contract address
+  get address() {
+    const addr = import.meta.env.VITE_APP_CONTRACT_ADDRESS;
+    
+    if (!addr || addr === "0x..." || addr === "0x") {
+      throw new Error("Contract address not configured. Please set VITE_APP_CONTRACT_ADDRESS in your .env file");
+    }
+    
+    // Clean the address
+    let cleanAddr = addr;
+    if (typeof cleanAddr === 'string') {
+      cleanAddr = cleanAddr
+        .trim()
+        .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+        .split('')
+        .filter(char => {
+          const code = char.charCodeAt(0);
+          return (code >= 32 && code <= 126);
+        })
+        .join('');
+    }
+    
+    return cleanAddr;
+  },
   abi: CROWDFUNDING_ABI,
   
-  // Network configuration
+  // Network configuration remains the same
   networks: {
     mainnet: {
       chainId: 1,
@@ -87,59 +114,77 @@ class Web3Service {
 
   // ============ Connection Management ============
 
-  async connect() {
-    try {
-      if (!window.ethereum) {
-        throw new Error('MetaMask not installed');
-      }
-
-      // Request account access
-      const accounts = await window.ethereum.request({
-        method: 'eth_requestAccounts'
-      });
-
-      if (accounts.length === 0) {
-        throw new Error('No accounts found');
-      }
-
-      // Validate account address
-      const accountAddress = accounts[0];
-      if (!ethers.isAddress(accountAddress)) {
-        throw new Error('Invalid wallet address format');
-      }
-
-      // Initialize provider and signer
-      this.provider = new ethers.BrowserProvider(window.ethereum);
-      this.signer = await this.provider.getSigner();
-      this.account = accountAddress;
-
-      // Get network information
-      this.network = await this.provider.getNetwork();
-
-      // Initialize contract
-      this.contract = new ethers.Contract(
-        CONTRACT_CONFIG.address,
-        CONTRACT_CONFIG.abi,
-        this.signer
-      );
-
-      console.log('✅ Web3 connected:', {
-        account: this.account,
-        network: this.network.name,
-        chainId: this.network.chainId
-      });
-
-      return {
-        account: this.account,
-        network: this.network,
-        connected: true
-      };
-
-    } catch (error) {
-      console.error('❌ Web3 connection error:', error);
-      throw error;
+async connect() {
+  try {
+    if (!window.ethereum) {
+      throw new Error('MetaMask not installed');
     }
+
+    // Request account access
+    const accounts = await window.ethereum.request({
+      method: 'eth_requestAccounts'
+    });
+
+    if (accounts.length === 0) {
+      throw new Error('No accounts found');
+    }
+
+    // Validate account address
+    const accountAddress = accounts[0];
+    if (!ethers.isAddress(accountAddress)) {
+      throw new Error('Invalid wallet address format');
+    }
+
+    // Initialize provider and signer
+    this.provider = new ethers.BrowserProvider(window.ethereum);
+    this.signer = await this.provider.getSigner();
+    this.account = accountAddress;
+
+    // Get network information
+    this.network = await this.provider.getNetwork();
+
+    // Get and validate contract address
+    let contractAddress;
+    try {
+      contractAddress = CONTRACT_CONFIG.address;
+    } catch (configError) {
+      throw new Error(`Contract configuration error: ${configError.message}`);
+    }
+
+    // Validate the contract address
+    if (!contractAddress || !ethers.isAddress(contractAddress)) {
+      throw new Error(`Invalid contract address: ${contractAddress}. Please check your .env file and ensure REACT_APP_CONTRACT_ADDRESS is set to a valid Ethereum address.`);
+    }
+
+    // Convert to checksum address
+    const checksumContractAddress = ethers.getAddress(contractAddress);
+
+    console.log('Using contract address:', checksumContractAddress);
+
+    // Initialize contract
+    this.contract = new ethers.Contract(
+      checksumContractAddress,
+      CONTRACT_CONFIG.abi,
+      this.signer
+    );
+
+    console.log('✅ Web3 connected:', {
+      account: this.account,
+      network: this.network.name,
+      chainId: this.network.chainId
+    });
+
+    return {
+      account: this.account,
+      network: this.network,
+      connected: true
+    };
+
+  } catch (error) {
+    console.error('❌ Web3 connection error:', error);
+    throw error;
   }
+}
 
   async disconnect() {
     this.provider = null;
@@ -149,6 +194,26 @@ class Web3Service {
     this.network = null;
     console.log('🔌 Web3 disconnected');
   }
+
+  getCleanContractAddress() {
+  let contractAddress = import.meta.env.REACT_APP_CONTRACT_ADDRESS || "0x...";
+  
+  // Clean the address
+  if (typeof contractAddress === 'string') {
+    contractAddress = contractAddress
+      .trim()
+      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+      .split('')
+      .filter(char => {
+        const code = char.charCodeAt(0);
+        return (code >= 32 && code <= 126);
+      })
+      .join('')
+      .toLowerCase();
+  }
+  
+  return contractAddress;
+}
 
   async switchNetwork(chainId) {
     try {
@@ -240,6 +305,64 @@ class Web3Service {
       throw this.handleContractError(error);
     }
   }
+
+  async launchCampaignAsAdmin(campaignId) {
+  try {
+    if (!this.contract) throw new Error('Contract not initialized');
+
+    const tx = await this.contract.launchCampaignAsAdmin(campaignId);
+    console.log('🚀 Launching campaign as admin transaction:', tx.hash);
+    
+    const receipt = await tx.wait();
+    return {
+      success: true,
+      transactionHash: receipt.hash,
+      gasUsed: receipt.gasUsed.toString()
+    };
+
+  } catch (error) {
+    console.error('❌ Error launching campaign as admin:', error);
+    throw this.handleContractError(error);
+  }
+}
+
+async createCampaignAsAdmin(firebaseId, goalAmountEth, durationDays, campaignType, farmerAddress) {
+  try {
+    if (!this.contract) throw new Error('Contract not initialized');
+
+    const goalAmountWei = ethers.parseEther(goalAmountEth.toString());
+    
+    const tx = await this.contract.createCampaignAsAdmin(
+      firebaseId,
+      goalAmountWei,
+      durationDays,
+      campaignType,
+      farmerAddress
+    );
+
+    console.log('🔥 Creating campaign as admin transaction:', tx.hash);
+    const receipt = await tx.wait();
+    
+    // Extract campaign ID from events
+    const campaignCreatedEvent = receipt.logs.find(
+      log => log.fragment?.name === 'CampaignCreated'
+    );
+    
+    const campaignId = campaignCreatedEvent?.args?.[0];
+    
+    return {
+      success: true,
+      campaignId: campaignId?.toString(),
+      transactionHash: receipt.hash,
+      blockNumber: receipt.blockNumber,
+      gasUsed: receipt.gasUsed.toString()
+    };
+
+  } catch (error) {
+    console.error('❌ Error creating campaign as admin:', error);
+    throw this.handleContractError(error);
+  }
+}
 
   async contributeToToCampaign(campaignId, amountEth, rewardTierIndex = null) {
     try {
@@ -445,26 +568,69 @@ class Web3Service {
     }
   }
 
-  async isVerifiedFarmer(farmerAddress = null) {
-    try {
-      if (!this.contract) throw new Error('Contract not initialized');
-      
-      const address = farmerAddress || this.account;
-      
-      // Validate the address format before calling contract
-      if (!address || !ethers.isAddress(address)) {
-        console.warn('Invalid address provided for farmer verification:', address);
-        return false;
-      }
-      
-      return await this.contract.verifiedFarmers(address);
-
-    } catch (error) {
-      console.error('❌ Error checking farmer verification:', error);
-      // Return false instead of throwing to prevent UI breaks
+  // FIXED: Farmer verification methods with proper error handling
+async checkFarmerVerification(address) {
+  try {
+    if (!this.contract) throw new Error('Contract not initialized');
+    
+    // Aggressive address cleaning to remove ALL invisible characters
+    let cleanAddress = address;
+    if (typeof address === 'string') {
+      // Remove invisible and control characters without using control char regex
+      cleanAddress = address
+        .trim()
+        .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '') // Remove zero-width and non-breaking spaces
+        .split('')
+        .filter(char => {
+          const code = char.charCodeAt(0);
+          // Keep only printable ASCII, valid hex chars, and 'x'
+          return (code >= 32 && code <= 126);
+        })
+        .join('')
+        .toLowerCase(); // Normalize case
+    }
+    
+    if (!cleanAddress || !ethers.isAddress(cleanAddress)) {
+      console.warn('Invalid address provided for farmer verification:', address);
       return false;
     }
+    
+    // Convert to checksum address to ensure proper formatting
+    const checksumAddress = ethers.getAddress(cleanAddress);
+    
+    console.log('Checking farmer verification for address:', checksumAddress);
+    
+    // CRITICAL FIX: Use call() to avoid ENS resolution
+    const contractInterface = new ethers.Interface(['function verifiedFarmers(address) view returns (bool)']);
+    const callData = contractInterface.encodeFunctionData('verifiedFarmers', [checksumAddress]);
+    
+    const result = await this.provider.call({
+      to: this.contract.target,
+      data: callData
+    });
+    
+    const [verified] = contractInterface.decodeFunctionResult('verifiedFarmers', result);
+    return verified;
+
+  } catch (error) {
+    console.error('❌ Error checking farmer verification:', error);
+    
+    // Check if the error is related to ENS resolution
+    if (error.message && error.message.includes('invalid ENS name')) {
+      console.warn('ENS resolution failed, treating as unverified farmer');
+      return false;
+    }
+    
+    // Return false instead of throwing to prevent UI breaks
+    return false;
   }
+}
+
+  // Kept for backward compatibility
+async isVerifiedFarmer(farmerAddress = null) {
+  const address = farmerAddress || this.account;
+  return this.checkFarmerVerification(address);
+}
 
   async getPlatformFeeRate() {
     try {
@@ -569,25 +735,49 @@ class Web3Service {
 
   // ============ Admin Functions (for admin users) ============
 
-  async verifyFarmer(farmerAddress, verified) {
-    try {
-      if (!this.contract) throw new Error('Contract not initialized');
+async verifyFarmer(farmerAddress, verified) {
+  try {
+    if (!this.contract) throw new Error('Contract not initialized');
 
-      const tx = await this.contract.verifyFarmer(farmerAddress, verified);
-      console.log('👨‍🌾 Verifying farmer transaction:', tx.hash);
-      
-      const receipt = await tx.wait();
-      return {
-        success: true,
-        transactionHash: receipt.hash,
-        gasUsed: receipt.gasUsed.toString()
-      };
-
-    } catch (error) {
-      console.error('❌ Error verifying farmer:', error);
-      throw this.handleContractError(error);
+    // Clean the address before sending to contract
+    let cleanAddress = farmerAddress;
+    if (typeof farmerAddress === 'string') {
+      // Remove invisible and control characters without using control char regex
+      cleanAddress = farmerAddress
+        .trim()
+        .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+        .split('')
+        .filter(char => {
+          const code = char.charCodeAt(0);
+          // Keep only printable ASCII characters
+          return (code >= 32 && code <= 126);
+        })
+        .join('')
+        .toLowerCase();
     }
+    
+    if (!ethers.isAddress(cleanAddress)) {
+      throw new Error(`Invalid farmer address: ${cleanAddress}`);
+    }
+
+    // Convert to checksum address
+    const checksumAddress = ethers.getAddress(cleanAddress);
+
+    const tx = await this.contract.verifyFarmer(checksumAddress, verified);
+    console.log('👨‍🌾 Verifying farmer transaction:', tx.hash);
+    
+    const receipt = await tx.wait();
+    return {
+      success: true,
+      transactionHash: receipt.hash,
+      gasUsed: receipt.gasUsed.toString()
+    };
+
+  } catch (error) {
+    console.error('❌ Error verifying farmer:', error);
+    throw this.handleContractError(error);
   }
+}
 
   async verifyCampaign(campaignId, verified) {
     try {
