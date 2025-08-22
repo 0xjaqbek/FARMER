@@ -38,7 +38,7 @@ import {
   calculatePaymentDeadline,
   PAYMENT_TYPES 
 } from '../lib/firebaseSchema';
-import { isTestnet, getNetworkDisplayName, getNetworkName, DEFAULT_NETWORK, getRequiredChainId, NETWORK_CONFIG } from '../utils/networkUtils';
+import { isTestnet, getNetworkDisplayName, getNetworkName, DEFAULT_NETWORK, getRequiredChainId, NETWORK_CONFIG, getBlockExplorerUrl } from '../utils/networkUtils';
 
 // Web3 Integration Functions
 const isWeb3Available = () => {
@@ -154,15 +154,6 @@ const sendEthereumTransaction = async ({ to, value }) => {
     }
     throw error;
   }
-};
-
-const getBlockExplorerUrl = (txHash, network) => {
-  const explorers = {
-    ethereum: `https://etherscan.io/tx/${txHash}`,
-    polygon: `https://polygonscan.com/tx/${txHash}`,
-    bsc: `https://bscscan.com/tx/${txHash}`
-  };
-  return explorers[network] || `https://etherscan.io/tx/${txHash}`;
 };
 
 // Smart network validation - works for both testnet and mainnet
@@ -738,7 +729,7 @@ const connectWallet = async () => {
                       <Copy className="h-3 w-3" />
                     </Button>
                     <Button 
-                      onClick={() => window.open(getBlockExplorerUrl(txHash, wallet.network), '_blank')}
+                      onClick={() => window.open(getBlockExplorerUrl(wallet.network, txHash), '_blank')}
                       variant="ghost" 
                       size="sm"
                     >
