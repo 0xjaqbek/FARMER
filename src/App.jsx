@@ -1,10 +1,18 @@
-// src/App.jsx - Fixed with correct imports
+// src/App.jsx - Updated with Terms of Service and Privacy Policy routes
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Toaster } from '@/components/ui/toaster'; // Fixed import
+import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import MainLayout from './components/layout/MainLayout';
+import Home from './pages/Home';
+
+
+// Legal Pages - NEW IMPORTS
+import TermsOfService from './pages/legal/TermsOfService';
+import PrivacyPolicy from './pages/legal/PrivacyPolicy';
+
+// Existing imports
 import NotificationPage from './pages/NotificationPage';
 import NotificationCreator from './components/farmer/NotificationCreator';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -13,16 +21,10 @@ import CampaignViewer from './pages/campaigns/CampaignViewer';
 import CampaignManager from './pages/campaigns/CampaignManager';
 import CampaignDetail from './pages/campaigns/CampaignDetail';
 import CampaignEdit from './pages/campaigns/CampaignEdit';
-
-// FIXED: Correct import paths for search components
 import SearchWithMap from './components/search/SearchWithMap';
 import EnhancedLocationPicker from './components/location/EnhancedLocationPicker';
-
-// NEW: Farmer profile components
 import FarmersDirectory from './pages/farmers/FarmersDirectory';
 import FarmerProfile from './pages/farmers/FarmerProfile';
-
-// Existing imports
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
@@ -42,7 +44,6 @@ import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
 import ChatList from './pages/chat/ChatList';
 import ChatDetail from './pages/chat/ChatDetail';
-
 import { FirebaseDebug } from './utils/firebaseDebug';
 
 // Protected route component
@@ -108,6 +109,11 @@ const AppRoutes = () => {
   return (
     <Router>
       <Routes>
+        <Route path="/" element={
+
+            <Home />
+
+        } />
         {/* Public Routes */}
         <Route path="/login" element={
           <PublicRoute>
@@ -120,6 +126,10 @@ const AppRoutes = () => {
             <Register />
           </PublicRoute>
         } />
+
+        {/* Legal Pages - PUBLIC ACCESS (No authentication required) */}
+        <Route path="/terms" element={<TermsOfService />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
 
         {/* Debug Route (Development Only) */}
         <Route path="/debug" element={

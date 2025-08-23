@@ -1,37 +1,54 @@
-# Farm Direct - Clean Server-Side Version
+# Farm Direct - Enhanced Farm-to-Table Marketplace
 
-A clean, server-side farm-to-table marketplace application built with React and Firebase. This version focuses on core functionality without blockchain dependencies.
+An advanced farm-to-table marketplace application built with React, Firebase, and blockchain integration for enhanced transparency and crowdfunding capabilities. This version builds upon the core server-side functionality with Ethereum-based smart contracts for secure transactions and campaign management.
 
 ## 🌟 Features
 
 ### **For Customers**
-- Browse fresh products from local farmers
-- Add products to cart and place orders
-- Track order status and delivery
-- Chat with farmers directly
-- User authentication and profile management
+- Browse and search for fresh products from local farmers with map integration
+- Add products to cart, place orders, and track deliveries in real-time
+- Participate in crowdfunding campaigns for farm projects
+- Chat directly with farmers
+- Leave reviews and ratings
+- Crypto wallet payments
+- User authentication, profile management, and notification center
 
 ### **For Farmers**
-- List and manage products with images
-- Receive and manage customer orders
-- Update order status and delivery information
-- Generate QR codes for product tracking
-- Chat with customers
+- List and manage products with inventory tracking, images, and QR codes
+- Create and manage crowdfunding campaigns
+- Process orders, update status, and manage deliveries
+- Set up payment wallets and receive crypto payments
+- Real-time chat with customers
+- Notification dashboard and preferences
+- Blockchain synchronization for transparent operations
+
+### **For Admins**
+- Deploy and manage blockchain contracts
+- Verify farmers and campaigns
+- Monitor system-wide activities
+- Manage user roles and permissions
 
 ### **Core Functionality**
-- Real-time messaging system
-- Image upload and storage
-- Order management with status tracking
-- User role-based access control
+- Real-time messaging and notifications
+- Image upload and storage with Firebase
+- Order management with timeline and QR tracking
+- Geolocation-based search and maps
+- Crowdfunding with milestones and rewards
+- Blockchain integration for transparent funding
+- Role-based access control
 - Responsive design for mobile and desktop
 
 ## 🛠️ Tech Stack
 
 - **Frontend**: React 19, React Router, Vite
 - **UI Components**: Radix UI, Tailwind CSS, Lucide Icons
-- **Backend**: Firebase (Auth, Firestore, Storage)
+- **Backend**: Firebase (Auth, Firestore, Storage, Functions)
+- **Blockchain**: Ethereum (Ethers.js, OpenZeppelin Contracts)
 - **Form Handling**: React Hook Form with Zod validation
+- **Payments**: Crypto wallet integration
+- **Maps**: Google Maps API integration
 - **Styling**: Tailwind CSS with custom design system
+- **Other**: QR code generation, Web3 hooks, Notification system
 
 ## 📦 Installation
 
@@ -48,12 +65,18 @@ A clean, server-side farm-to-table marketplace application built with React and 
 
 3. **Set up Firebase**
    - Create a new Firebase project at [Firebase Console](https://console.firebase.google.com)
-   - Enable Authentication, Firestore, and Storage
-   - Copy your Firebase config
+   - Enable Authentication (Email/Password), Firestore, Storage, and Cloud Functions
+   - Copy your Firebase config to `.env` (see below)
+   - Deploy Cloud Functions: `cd functions && npm install && firebase deploy --only functions`
 
-4. **Environment setup**
+4. **Set up Blockchain (Optional for development)**
+   - Configure Ethereum provider (e.g., Infura or Alchemy)
+   - Deploy the smart contract (`FarmDirectCrowdfunding.sol`) to a testnet (e.g., Sepolia)
+   - Update contract address in `src/services/web3Service.js`
+
+5. **Environment setup**
    - Create a `.env` file in the root directory
-   - Add your Firebase configuration:
+   - Add your configurations:
    ```env
    VITE_FIREBASE_API_KEY=your_api_key
    VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
@@ -61,13 +84,15 @@ A clean, server-side farm-to-table marketplace application built with React and 
    VITE_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
    VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
    VITE_FIREBASE_APP_ID=your_app_id
+   VITE_ETHEREUM_RPC_URL=https://sepolia.infura.io/v3/your_infura_key  # For blockchain
+   VITE_CONTRACT_ADDRESS=your_deployed_contract_address
+   VITE_GOOGLE_MAPS_API_KEY=your_google_maps_key  # For maps integration
    ```
 
-5. **Run the development server**
+6. **Run the development server**
    ```bash
    npm run dev
    ```
-
    The app will be available at `http://localhost:3000`
 
 ## 🚀 Build for Production
@@ -75,6 +100,8 @@ A clean, server-side farm-to-table marketplace application built with React and 
 ```bash
 npm run build
 ```
+
+Deploy the `dist` folder to your hosting provider (e.g., Firebase Hosting: `firebase deploy --only hosting`).
 
 ## 📁 Project Structure
 
@@ -86,88 +113,105 @@ src/
 │   ├── auth/           # Authentication components
 │   ├── products/       # Product-related components
 │   ├── orders/         # Order management components
-│   └── chat/           # Chat components
+│   ├── chat/           # Chat components
+│   ├── notifications/  # Notification components
+│   ├── payment/        # Payment and wallet components
+│   ├── maps/           # Map integration components
+│   ├── location/       # Location picker components
+│   ├── farmer/         # Farmer-specific components
+│   ├── admin/          # Admin-specific components
+│   └── ...             # Other feature-specific components
 ├── pages/              # Page components
 │   ├── auth/           # Login, Register, Profile
 │   ├── products/       # Product listing, details, management
 │   ├── orders/         # Order management
 │   ├── chat/           # Chat interface
+│   ├── campaigns/      # Crowdfunding campaigns
+│   ├── farmers/        # Farmer directory and profiles
+│   ├── notifications/  # Notification pages
 │   └── admin/          # Admin dashboard
-├── context/            # React Context providers
+├── context/            # React Context providers (Auth, Cart)
 ├── firebase/           # Firebase service functions
-├── hooks/              # Custom React hooks
+├── hooks/              # Custom React hooks (useWeb3, useLocation, etc.)
 ├── lib/                # Utility functions
+├── services/           # API services (auth, farmer, web3, etc.)
+├── smartcontract/      # Solidity contracts
+├── utils/              # Helper utilities (notifications, maps, etc.)
 └── App.jsx             # Main app component
 ```
 
 ## 🔥 Firebase Setup
 
 ### Firestore Collections
-
-The app uses these Firestore collections:
-
-- **users**: User profiles and authentication data
-- **products**: Product listings with images and details
-- **orders**: Order management and tracking
-- **conversations**: Chat conversations between users
+- **users**: User profiles and roles
+- **products**: Product listings with inventory and seasonality
+- **orders**: Order tracking and status
+- **conversations**: Real-time chat sessions
 - **messages**: Individual chat messages
+- **notifications**: User notifications
+- **campaigns**: Crowdfunding campaigns (synced with blockchain)
+- **reviews**: Product and farmer reviews
+- **inventory_logs**: Inventory change history
 
 ### Storage Structure
-
-Firebase Storage is organized as:
-
 ```
 products/
-  ├── {timestamp}_{filename}     # Product images
+  ├── {product_id}/     # Product images
 users/
-  ├── avatars/                   # User profile pictures
+  ├── avatars/          # User profile pictures
+campaigns/
+  ├── {campaign_id}/    # Campaign media
 ```
 
 ### Security Rules
+Configure Firestore and Storage security rules to enforce role-based access. Example rules are available in the Firebase console.
 
-Make sure to set up appropriate Firestore security rules for your collections.
+### Cloud Functions
+Deploy the functions in `/functions` for scheduled tasks like expiring batch checks, notifications, and order status updates.
+
+## 🔗 Blockchain Integration
+
+- Smart Contract: `FarmDirectCrowdfunding.sol` for crowdfunding campaigns
+- Network: Supports Ethereum mainnet/testnets (default: Sepolia)
+- Features: Campaign creation, contributions, milestones, refunds, and admin verification
+- Wallet: MetaMask or similar for crypto interactions
 
 ## 👥 User Roles
 
-- **Customer** (`customer`/`klient`): Can browse, order, and chat
-- **Farmer** (`farmer`/`rolnik`): Can list products, manage orders
-- **Admin** (`admin`): Full access to all features
+- **Customer** (`customer`/`klient`): Browse, order, chat, contribute to campaigns
+- **Farmer** (`farmer`/`rolnik`): Manage products, orders, campaigns, and inventory
+- **Admin** (`admin`): Full access, blockchain deployment, verifications
 
 ## 🎨 Styling
-
-The app uses Tailwind CSS with a custom design system:
 
 - **Primary Color**: Green (#16a34a)
 - **Components**: Radix UI primitives
 - **Icons**: Lucide React
-- **Responsive**: Mobile-first design
+- **Responsive**: Mobile-first design with Tailwind CSS
 
 ## 🔧 Development
 
 ### Available Scripts
-
 - `npm run dev` - Start development server
 - `npm run build` - Build for production
 - `npm run preview` - Preview production build
 - `npm run lint` - Run ESLint
 
 ### Code Style
-
 - Use functional components with hooks
 - Follow React best practices
-- Use TypeScript-style prop validation with Zod
+- Use Zod for validation
 - Keep components small and focused
+- ESLint for code quality
 
 ## 🚧 Future Enhancements
 
-This clean version provides a solid foundation for adding:
-
-- **Blockchain Integration**: Ethereum or Solana for transparency
-- **Payment Processing**: Stripe or other payment gateways
-- **Advanced Search**: Filtering and sorting capabilities
-- **Analytics Dashboard**: Sales and user analytics
-- **Mobile App**: React Native version
-- **Email Notifications**: Order confirmations and updates
+- **Payment Gateways**: Integrate Stripe for fiat payments
+- **Advanced Analytics**: Sales dashboards and insights
+- **Mobile App**: React Native companion app
+- **AI Features**: Product recommendations and inventory predictions
+- **Multi-Chain Support**: Add Solana or other blockchains
+- **Sustainability Tracking**: Carbon footprint and eco-metrics
 
 ## 📄 License
 
@@ -183,8 +227,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-For support, email your-email@example.com or create an issue on GitHub.
+For support, create an issue on GitHub or email your-email@example.com.
 
 ---
 
-**Built with ❤️ for connecting farmers and customers directly**
+**Built with ❤️ for connecting farmers and customers directly, powered by blockchain for trust and transparency**
