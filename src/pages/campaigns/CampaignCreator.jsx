@@ -28,13 +28,21 @@ import {
   AlertCircle,
   CheckCircle,
   Wallet,
-  Link
+    Link,
+  Loader2
 } from 'lucide-react';
 
 // Import Web3 hook
 import { useWeb3 } from '../../hooks/useWeb3';
 
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage } from '../../firebase/config';
+
 const CampaignCreator = () => {
+  const [campaignImage, setCampaignImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState('');
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageError, setImageError] = useState('');
   const { userProfile } = useAuth();
   const { toast } = useToast();
   
@@ -102,6 +110,68 @@ const CampaignCreator = () => {
     };
     return typeMapping[campaignType.toLowerCase()] || 0;
   };
+  
+  // Image upload handler
+const handleImageUpload = (e) => {
+  setImageError('');
+  const file = e.target.files[0];
+  
+  if (!file) return;
+  
+  // Validate file size (max 5MB)
+  if (file.size > 5 * 1024 * 1024) {
+    setImageError('Image must be smaller than 5MB');
+    return;
+  }
+  
+  // Validate file type
+  if (!file.type.startsWith('image/')) {
+    setImageError('Please select a valid image file');
+    return;
+  }
+  
+  setCampaignImage(file);
+  
+  // Generate preview
+  const previewUrl = URL.createObjectURL(file);
+  setImagePreview(previewUrl);
+};
+
+// Upload image to Firebase Storage
+const uploadCampaignImage = async (file) => {
+  try {
+    setImageUploading(true);
+    
+    // Create unique filename
+    const fileName = `campaigns/${Date.now()}_${file.name}`;
+    const storageRef = ref(storage, fileName);
+    
+    // Upload file
+    const snapshot = await uploadBytes(storageRef, file);
+    
+    // Get download URL
+    const downloadUrl = await getDownloadURL(snapshot.ref);
+    
+    console.log('Campaign image uploaded:', downloadUrl);
+    return downloadUrl;
+    
+  } catch (error) {
+    console.error('Error uploading campaign image:', error);
+    throw new Error('Failed to upload image');
+  } finally {
+    setImageUploading(false);
+  }
+};
+
+// Remove selected image
+const removeImage = () => {
+  setCampaignImage(null);
+  setImagePreview('');
+  if (imagePreview) {
+    URL.revokeObjectURL(imagePreview);
+  }
+};
+
 
   // Wallet signature function
   const signWalletOwnership = async (campaignId) => {
@@ -267,99 +337,106 @@ By signing this message, I confirm that I am the creator of this campaign and th
     setCurrentStep(prev => Math.max(prev - 1, 1));
   };
 
-  const handleSubmit = async () => {
-    if (!validateStep(currentStep)) return;
+const handleSubmit = async () => {
+  if (!validateStep(currentStep)) return;
 
-    setSaving(true);
-    try {
-      if (!isConnected) {
-        toast({
-          title: "Wallet Required",
-          description: "Please connect your wallet to verify campaign ownership",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // Prepare campaign data
-      const campaignData = {
-        ...formData,
-        farmerId: userProfile.uid,
-        farmerName: `${userProfile.firstName} ${userProfile.lastName}`,
-        farmName: userProfile.farmInfo?.farmName || userProfile.farmName,
-        farmerEmail: userProfile.email,
-        status: 'pending_wallet_verification',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        currentAmount: 0,
-        backerCount: 0,
-        walletVerified: false,
-        blockchainDeployment: {
-          status: 'pending',
-          contractAddress: null,
-          transactionHash: null,
-          deployedAt: null,
-          deployedBy: null
-        },
-        web3Data: {
-          goalAmountEth: parseFloat(formData.goalAmount) / 4000, // PLN to ETH conversion
-          durationDays: formData.duration,
-          campaignType: getCampaignTypeIndex(formData.type)
-        }
-      };
-
-      console.log('Creating campaign with wallet verification...');
-      
-      // Create campaign in Firebase first
-      const { createCampaign } = await import('../../firebase/crowdfunding');
-      const campaignId = await createCampaign(campaignData);
-      
-      // Sign wallet ownership
-      const signatureData = await signWalletOwnership(campaignId);
-      
-      // Update campaign with wallet verification
-      const { updateCampaign } = await import('../../firebase/crowdfunding');
-      await updateCampaign(campaignId, {
-        walletVerification: {
-          address: signatureData.address,
-          signature: signatureData.signature,
-          message: signatureData.message,
-          timestamp: signatureData.timestamp,
-          verified: true
-        },
-        status: 'draft',
-        walletVerified: true,
-        farmerWallet: signatureData.address,
-        updatedAt: new Date()
-      });
-      
+  setSaving(true);
+  try {
+    if (!isConnected) {
       toast({
-        title: "Success!",
-        description: `Campaign created and wallet verified! Address: ${signatureData.address.slice(0, 10)}...`,
+        title: "Wallet Required",
+        description: "Please connect your wallet to verify campaign ownership",
+        variant: "destructive"
       });
-      
-      window.location.href = '/campaigns/manage';
-      
-    } catch (error) {
-      console.error('Error creating verified campaign:', error);
-      
-      if (error.message.includes('user rejected')) {
-        toast({
-          title: "Signature Required",
-          description: "Please sign the message to verify wallet ownership",
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Error",
-          description: error.message || "Failed to create campaign",
-          variant: "destructive"
-        });
-      }
-    } finally {
-      setSaving(false);
+      return;
     }
-  };
+
+    // Upload image if selected
+    let imageUrl = '';
+    if (campaignImage) {
+      imageUrl = await uploadCampaignImage(campaignImage);
+    }
+
+    // Prepare campaign data
+    const campaignData = {
+      ...formData,
+      imageUrl, // Add the uploaded image URL here
+      farmerId: userProfile.uid,
+      farmerName: `${userProfile.firstName} ${userProfile.lastName}`,
+      farmName: userProfile.farmInfo?.farmName || userProfile.farmName,
+      farmerEmail: userProfile.email,
+      status: 'pending_wallet_verification',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      currentAmount: 0,
+      backerCount: 0,
+      walletVerified: false,
+      blockchainDeployment: {
+        status: 'pending',
+        contractAddress: null,
+        transactionHash: null,
+        deployedAt: null,
+        deployedBy: null
+      },
+      web3Data: {
+        goalAmountEth: parseFloat(formData.goalAmount) / 4000,
+        durationDays: formData.duration,
+        campaignType: getCampaignTypeIndex(formData.type)
+      }
+    };
+
+    console.log('Creating campaign with wallet verification...');
+    
+    // Rest of your existing code remains the same...
+    const { createCampaign } = await import('../../firebase/crowdfunding');
+    const campaignId = await createCampaign(campaignData);
+    
+    // Sign wallet ownership
+    const signatureData = await signWalletOwnership(campaignId);
+    
+    // Update campaign with wallet verification
+    const { updateCampaign } = await import('../../firebase/crowdfunding');
+    await updateCampaign(campaignId, {
+      walletVerification: {
+        address: signatureData.address,
+        signature: signatureData.signature,
+        message: signatureData.message,
+        timestamp: signatureData.timestamp,
+        verified: true
+      },
+      status: 'draft',
+      walletVerified: true,
+      farmerWallet: signatureData.address,
+      updatedAt: new Date()
+    });
+    
+    toast({
+      title: "Success!",
+      description: `Campaign created and wallet verified! Address: ${signatureData.address.slice(0, 10)}...`,
+    });
+    
+    window.location.href = '/campaigns/manage';
+    
+  } catch (error) {
+    console.error('Error creating verified campaign:', error);
+    
+    if (error.message.includes('user rejected')) {
+      toast({
+        title: "Signature Required",
+        description: "Please sign the message to verify wallet ownership",
+        variant: "destructive"
+      });
+    } else {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create campaign",
+        variant: "destructive"
+      });
+    }
+  } finally {
+    setSaving(false);
+  }
+};
 
   const renderStepIndicator = () => (
     <div className="flex items-center justify-center space-x-4 mb-8">
@@ -642,19 +719,70 @@ By signing this message, I confirm that I am the creator of this campaign and th
                 </div>
               </div>
 
-              <div>
-                <Label htmlFor="images">Campaign Images</Label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                  <Camera className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600">
-                    Upload images to showcase your project
-                  </p>
-                  <Button variant="outline" className="mt-2">
-                    <Upload className="w-4 h-4 mr-2" />
-                    Choose Images
-                  </Button>
-                </div>
-              </div>
+<div className="space-y-4">
+  <Label htmlFor="campaignImage">Campaign Image</Label>
+  
+  {/* Image Upload Area */}
+  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+    {!imagePreview ? (
+      <div className="text-center">
+        <div className="mx-auto h-12 w-12 text-gray-400">
+          <Camera className="h-full w-full" />
+        </div>
+        <div className="mt-4">
+          <Label htmlFor="campaignImage" className="cursor-pointer">
+            <span className="mt-2 block text-sm font-medium text-gray-900">
+              Upload campaign image
+            </span>
+            <span className="mt-1 block text-sm text-gray-500">
+              PNG, JPG, GIF up to 5MB
+            </span>
+          </Label>
+          <Input
+            id="campaignImage"
+            type="file"
+            accept="image/*"
+            onChange={handleImageUpload}
+            className="sr-only"
+          />
+        </div>
+      </div>
+    ) : (
+      <div className="relative">
+        <img
+          src={imagePreview}
+          alt="Campaign preview"
+          className="mx-auto h-64 w-full object-cover rounded-lg"
+        />
+        <Button
+          type="button"
+          variant="destructive"
+          size="sm"
+          className="absolute top-2 right-2"
+          onClick={removeImage}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+    )}
+  </div>
+  
+  {/* Image Error */}
+  {imageError && (
+    <Alert variant="destructive">
+      <AlertCircle className="h-4 w-4" />
+      <AlertDescription>{imageError}</AlertDescription>
+    </Alert>
+  )}
+</div>
+
+{/* Upload Progress */}
+{imageUploading && (
+  <Alert>
+    <Loader2 className="h-4 w-4 animate-spin" />
+    <AlertDescription>Uploading image...</AlertDescription>
+  </Alert>
+)}
             </div>
           )}
 
