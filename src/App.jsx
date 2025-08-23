@@ -12,6 +12,7 @@ import CampaignCreator from './pages/campaigns/CampaignCreator';
 import CampaignViewer from './pages/campaigns/CampaignViewer';
 import CampaignManager from './pages/campaigns/CampaignManager';
 import CampaignDetail from './pages/campaigns/CampaignDetail';
+import CampaignEdit from './pages/campaigns/CampaignEdit';
 
 // FIXED: Correct import paths for search components
 import SearchWithMap from './components/search/SearchWithMap';
@@ -344,6 +345,14 @@ const AppRoutes = () => {
           <ProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
             <MainLayout>
               <CampaignCreator />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/campaigns/edit/:id" element={
+          <ProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
+            <MainLayout>
+              <CampaignEdit />
             </MainLayout>
           </ProtectedRoute>
         } />

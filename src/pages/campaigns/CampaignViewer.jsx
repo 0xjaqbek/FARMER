@@ -101,47 +101,50 @@ const CampaignViewer = () => {
     }
   };
 
-  const filterAndSortCampaigns = () => {
-    let filtered = campaigns.filter(campaign => {
-      const matchesSearch = campaign.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           campaign.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           campaign.farmName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           campaign.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
-      
-      const matchesCategory = selectedCategory === 'all' || 
-                             campaign.category === selectedCategory;
-      
-      return matchesSearch && matchesCategory && campaign.status === 'active';
-    });
+const filterAndSortCampaigns = () => {
+  let filtered = campaigns.filter(campaign => {
+    const matchesSearch = campaign.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         campaign.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         campaign.farmName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         campaign.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    const matchesCategory = selectedCategory === 'all' || 
+                           campaign.category === selectedCategory;
+    
+    // Only show campaigns that are active AND verified
+    return matchesSearch && matchesCategory && 
+           campaign.status === 'active' && 
+           campaign.verified === true;
+  });
 
-    // Sort campaigns
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'newest':
-          return new Date(b.createdAt) - new Date(a.createdAt);
-        case 'ending_soon': {
-          // Calculate days left from endDate
-          const aDaysLeft = a.endDate ? Math.ceil((new Date(a.endDate) - new Date()) / (1000 * 60 * 60 * 24)) : 999;
-          const bDaysLeft = b.endDate ? Math.ceil((new Date(b.endDate) - new Date()) / (1000 * 60 * 60 * 24)) : 999;
-          return aDaysLeft - bDaysLeft;
-        }
-        case 'most_backed':
-          return (b.backerCount || 0) - (a.backerCount || 0);
-        case 'most_funded': {
-          const aProgress = (a.currentAmount || 0) / (a.goalAmount || 1);
-          const bProgress = (b.currentAmount || 0) / (b.goalAmount || 1);
-          return bProgress - aProgress;
-        }
-        default:
-          return 0;
+  // Sort campaigns
+  filtered.sort((a, b) => {
+    switch (sortBy) {
+      case 'newest':
+        return new Date(b.createdAt) - new Date(a.createdAt);
+      case 'ending_soon': {
+        // Calculate days left from endDate
+        const aDaysLeft = a.endDate ? Math.ceil((new Date(a.endDate) - new Date()) / (1000 * 60 * 60 * 24)) : 999;
+        const bDaysLeft = b.endDate ? Math.ceil((new Date(b.endDate) - new Date()) / (1000 * 60 * 60 * 24)) : 999;
+        return aDaysLeft - bDaysLeft;
       }
-    });
+      case 'most_backed':
+        return (b.backerCount || 0) - (a.backerCount || 0);
+      case 'most_funded': {
+        const aProgress = (a.currentAmount || 0) / (a.goalAmount || 1);
+        const bProgress = (b.currentAmount || 0) / (b.goalAmount || 1);
+        return bProgress - aProgress;
+      }
+      default:
+        return 0;
+    }
+  });
 
-    // Featured campaigns first
-    filtered.sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
+  // Featured campaigns first
+  filtered.sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
 
-    setFilteredCampaigns(filtered);
-  };
+  setFilteredCampaigns(filtered);
+};
 
   const getProgressPercentage = (current, goal) => {
     return Math.min((current / goal) * 100, 100);
@@ -260,7 +263,7 @@ const CampaignViewer = () => {
       <Card className="overflow-hidden hover:shadow-lg transition-shadow">
         <div className="relative">
           <img
-            src={campaign.image || '/api/placeholder/400/250'}
+            src={campaign.imageUrl || '/api/placeholder/400/250'}
             alt={campaign.title}
             className="w-full h-48 object-cover"
           />

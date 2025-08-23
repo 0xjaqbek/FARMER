@@ -647,57 +647,7 @@ const AdminDashboard = () => {
         </div>
       </div>
 
-      {/* Overview Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Users</p>
-                <p className="text-3xl font-bold text-gray-900">{systemStats.totalUsers}</p>
-              </div>
-              <Users className="h-8 w-8 text-blue-600" />
-            </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Verified Farmers</p>
-                <p className="text-3xl font-bold text-green-600">{systemStats.verifiedFarmers}</p>
-                <p className="text-xs text-gray-500">of {systemStats.totalFarmers} farmers</p>
-              </div>
-              <UserCheck className="h-8 w-8 text-green-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Pending Verifications</p>
-                <p className="text-3xl font-bold text-yellow-600">{systemStats.pendingVerifications}</p>
-              </div>
-              <Clock className="h-8 w-8 text-yellow-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Campaign Funds Raised</p>
-                <p className="text-3xl font-bold text-purple-600">{campaignStats.totalRaised?.toLocaleString() || 0} PLN</p>
-              </div>
-              <DollarSign className="h-8 w-8 text-purple-600" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
 
       {/* Responsive Tab Navigation */}
       <ResponsiveAdminTabs 
@@ -922,6 +872,46 @@ const AdminDashboard = () => {
               <CardTitle className="flex items-center gap-2">
                 <Shield className="h-5 w-5" />
                 Farmer Verification Queue
+
+                      {/* Overview Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Total Users</p>
+                <p className="text-3xl font-bold text-gray-900">{systemStats.totalUsers}</p>
+              </div>
+              <Users className="h-8 w-8 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Verified Farmers</p>
+                <p className="text-3xl font-bold text-green-600">{systemStats.verifiedFarmers}</p>
+                <p className="text-xs text-gray-500">of {systemStats.totalFarmers} farmers</p>
+              </div>
+              <UserCheck className="h-8 w-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Pending Verifications</p>
+                <p className="text-3xl font-bold text-yellow-600">{systemStats.pendingVerifications}</p>
+              </div>
+              <Clock className="h-8 w-8 text-yellow-600" />
+            </div>
+          </CardContent>
+        </Card>
+        </div>
               </CardTitle>
             </CardHeader>
             <CardContent>

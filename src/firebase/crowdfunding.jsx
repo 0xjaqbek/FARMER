@@ -63,9 +63,10 @@ export const createCampaign = async (campaignData) => {
 // Get all active campaigns
 export const getActiveCampaigns = async () => {
   try {
-    console.log('🔥 Fetching active campaigns...');
+    console.log('🔥 Fetching active verified campaigns...');
     
     const campaignsRef = collection(db, 'campaigns');
+    // Use single where clause to avoid composite index requirement
     const q = query(
       campaignsRef, 
       where('status', '==', 'active'),
@@ -77,17 +78,20 @@ export const getActiveCampaigns = async () => {
     
     snapshot.forEach((doc) => {
       const data = doc.data();
-      campaigns.push({
-        id: doc.id,
-        ...data,
-        createdAt: safeToDate(data.createdAt),
-        updatedAt: safeToDate(data.updatedAt),
-        startDate: safeToDate(data.startDate),
-        endDate: safeToDate(data.endDate)
-      });
+      // Filter for verified campaigns client-side
+      if (data.verified === true) {
+        campaigns.push({
+          id: doc.id,
+          ...data,
+          createdAt: safeToDate(data.createdAt),
+          updatedAt: safeToDate(data.updatedAt),
+          startDate: safeToDate(data.startDate),
+          endDate: safeToDate(data.endDate)
+        });
+      }
     });
     
-    console.log(`✅ Found ${campaigns.length} active campaigns`);
+    console.log(`✅ Found ${campaigns.length} active verified campaigns`);
     return campaigns;
     
   } catch (error) {
