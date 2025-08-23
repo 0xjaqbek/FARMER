@@ -14,6 +14,7 @@ import {
   DollarSign,
   Target,
   Users,
+  Shield,
   Heart,
   Share,
   MapPin,
@@ -39,10 +40,6 @@ const CampaignViewer = () => {
   const [sortBy, setSortBy] = useState('newest');
   const [loading, setLoading] = useState(true);
   const [savedCampaigns, setSavedCampaigns] = useState(new Set());
-  const [showBackingModal, setShowBackingModal] = useState(false);
-  const [selectedCampaignForBacking, setSelectedCampaignForBacking] = useState(null);
-  const [backingAmount, setBackingAmount] = useState('');
-  const [selectedReward, setSelectedReward] = useState(null);
 
   const categories = [
     'All Categories',
@@ -181,207 +178,134 @@ const filterAndSortCampaigns = () => {
     // await saveCampaignToUser(userProfile.uid, campaignId, isSaved);
   };
 
-  const handleBackCampaign = (campaign) => {
-    // Check if user is logged in before showing backing modal
-    if (!userProfile) {
-      toast({
-        title: "Login Required",
-        description: "Please log in to back campaigns",
-        variant: "destructive"
-      });
-      return;
-    }
+const CampaignCard = ({ campaign }) => {
+  const progressPercentage = getProgressPercentage(campaign.currentAmount || 0, campaign.goalAmount || 1);
+  const isSaved = savedCampaigns.has(campaign.id);
+  
+  // Calculate days left from endDate
+  const daysLeft = campaign.endDate ? 
+    Math.max(0, Math.ceil((new Date(campaign.endDate) - new Date()) / (1000 * 60 * 60 * 24))) : 0;
 
-    setSelectedCampaignForBacking(campaign);
-    setShowBackingModal(true);
-    setBackingAmount('');
-    setSelectedReward(null);
-  };
+  const hasImage = campaign.imageUrl || campaign.images?.[0];
 
-  const submitBacking = async () => {
-    try {
-      if (!userProfile) {
-        toast({
-          title: "Login Required",
-          description: "Please log in to back campaigns",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      if (!backingAmount || parseFloat(backingAmount) <= 0) {
-        toast({
-          title: "Invalid Amount",
-          description: "Please enter a valid backing amount",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // Import and call the actual backing function
-      const { backCampaign } = await import('../../firebase/crowdfunding');
-      
-      await backCampaign(
-        selectedCampaignForBacking.id, 
-        userProfile.uid, 
-        parseFloat(backingAmount),
-        selectedReward
-      );
-
-      toast({
-        title: "Backing Successful!",
-        description: `You've backed ${selectedCampaignForBacking.title} with ${backingAmount} PLN`,
-      });
-
-      setShowBackingModal(false);
-      setSelectedCampaignForBacking(null);
-      setBackingAmount('');
-      setSelectedReward(null);
-
-      // Refresh campaigns to show updated data
-      loadCampaigns();
-
-    } catch (error) {
-      console.error('Error backing campaign:', error);
-      toast({
-        title: "Error",
-        description: "Failed to back campaign",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const CampaignCard = ({ campaign }) => {
-    const progressPercentage = getProgressPercentage(campaign.currentAmount || 0, campaign.goalAmount || 1);
-    const isSaved = savedCampaigns.has(campaign.id);
-    
-    // Calculate days left from endDate
-    const daysLeft = campaign.endDate ? 
-      Math.max(0, Math.ceil((new Date(campaign.endDate) - new Date()) / (1000 * 60 * 60 * 24))) : 0;
-
-    return (
-      <Card className="overflow-hidden hover:shadow-lg transition-shadow">
-        <div className="relative">
+  return (
+    <Card className="overflow-hidden hover:shadow-lg transition-shadow">
+      <div className="relative">
+        {hasImage ? (
           <img
-            src={campaign.imageUrl || '/api/placeholder/400/250'}
+            src={campaign.imageUrl || campaign.images?.[0]}
             alt={campaign.title}
             className="w-full h-48 object-cover"
+            onError={(e) => {
+              // Replace with placeholder on error
+              e.target.style.display = 'none';
+              const placeholder = e.target.parentNode.querySelector('.image-placeholder');
+              if (placeholder) placeholder.style.display = 'flex';
+            }}
           />
-          <div className="absolute top-2 right-2 flex gap-2">
-            {campaign.featured && (
-              <Badge className="bg-yellow-500 text-yellow-900">
-                <Star className="w-3 h-3 mr-1" />
-                Featured
-              </Badge>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => toggleSaveCampaign(campaign.id)}
-              className="bg-white/90 hover:bg-white"
-            >
-              {isSaved ? (
-                <BookmarkCheck className="w-4 h-4" />
-              ) : (
-                <Bookmark className="w-4 h-4" />
-              )}
-            </Button>
+        ) : null}
+        
+        {/* No image placeholder */}
+        <div 
+          className={`w-full h-48 bg-gray-100 flex items-center justify-center text-gray-400 ${hasImage ? 'hidden' : 'flex'} image-placeholder`}
+          style={hasImage ? { display: 'none' } : { display: 'flex' }}
+        >
+          <div className="text-center">
+            <svg className="mx-auto h-12 w-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+            </svg>
+            <p className="text-sm font-medium">No image</p>
           </div>
         </div>
 
-        <CardContent className="p-4">
-          <div className="space-y-3">
-            <div>
-              <h3 className="font-semibold text-lg line-clamp-2">
-                {campaign.title}
-              </h3>
-              <p className="text-sm text-gray-600 line-clamp-2">
-                {campaign.description}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <User className="w-4 h-4" />
-              <span>{campaign.farmerName || 'Unknown Farmer'}</span>
-              {campaign.location && (
-                <>
-                  <span>•</span>
-                  <MapPin className="w-4 h-4" />
-                  <span>{campaign.location}</span>
-                </>
+        {/* Badges overlay */}
+        <div className="absolute top-2 right-2 flex gap-2">
+          {campaign.featured && (
+            <Badge className="bg-yellow-500 text-yellow-900">
+              <Star className="w-3 h-3 mr-1" />
+              Featured
+            </Badge>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => toggleSaveCampaign(campaign.id)}
+            className="bg-white/90 hover:bg-white"
+          >
+            {isSaved ? <BookmarkCheck className="w-3 h-3" /> : <Bookmark className="w-3 h-3" />}
+          </Button>
+        </div>
+      </div>
+      <CardContent className="p-4">
+        <div className="space-y-3">
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <Badge variant="secondary">{campaign.category}</Badge>
+              {campaign.verified && (
+                <Badge className="bg-green-100 text-green-800">
+                  <Shield className="w-3 h-3 mr-1" />
+                  Verified
+                </Badge>
               )}
             </div>
+            <h3 className="font-semibold text-lg line-clamp-2">{campaign.title}</h3>
+            <p className="text-gray-600 text-sm line-clamp-3 mt-1">{campaign.description}</p>
+          </div>
 
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium">
-                  {(campaign.currentAmount || 0).toLocaleString()} PLN raised
-                </span>
-                <span className="text-sm text-gray-500">
-                  {progressPercentage.toFixed(0)}%
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className="bg-green-600 h-2 rounded-full transition-all"
-                  style={{ width: `${progressPercentage}%` }}
-                ></div>
-              </div>
-              <div className="flex justify-between items-center mt-2 text-sm text-gray-600">
-                <span className="flex items-center gap-1">
-                  <Target className="w-4 h-4" />
-                  Goal: {(campaign.goalAmount || 0).toLocaleString()} PLN
-                </span>
-              </div>
-            </div>
-
-            <div className="flex justify-between text-sm text-gray-600">
-              <span className="flex items-center gap-1">
-                <Users className="w-4 h-4" />
-                {campaign.backerCount || 0} backers
-              </span>
-              <span className="flex items-center gap-1">
-                <Clock className="w-4 h-4" />
-                {daysLeft} days left
-              </span>
-            </div>
-
-            {campaign.tags && campaign.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {campaign.tags.slice(0, 3).map((tag) => (
-                  <Badge key={tag} variant="outline" className="text-xs">
-                    {tag}
-                  </Badge>
-                ))}
-                {campaign.tags.length > 3 && (
-                  <Badge variant="outline" className="text-xs">
-                    +{campaign.tags.length - 3}
-                  </Badge>
-                )}
-              </div>
+          {/* Farmer Info */}
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <User className="w-4 h-4" />
+            <span>{campaign.farmerName}</span>
+            {campaign.location && (
+              <>
+                <MapPin className="w-4 h-4 ml-2" />
+                <span>{campaign.location}</span>
+              </>
             )}
+          </div>
 
-            <div className="flex gap-2 pt-2">
-              <Button
-                className="flex-1"
-                onClick={() => window.location.href = `/campaigns/${campaign.id}`}
-              >
-                <Eye className="w-4 h-4 mr-2" />
-                View Details
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => handleBackCampaign(campaign)}
-              >
-                <Heart className="w-4 h-4 mr-2" />
-                Back Project
-              </Button>
+          {/* Progress Bar */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="font-medium">{progressPercentage.toFixed(0)}% funded</span>
+              <span className="text-gray-600">{daysLeft} days left</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div 
+                className="bg-green-600 h-2 rounded-full transition-all duration-300" 
+                style={{ width: `${Math.min(progressPercentage, 100)}%` }}
+              ></div>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="font-bold">{(campaign.currentAmount || 0).toLocaleString()} PLN</span>
+              <span className="text-gray-600">of {campaign.goalAmount.toLocaleString()} PLN</span>
+            </div>
+            <div className="flex justify-between text-xs text-gray-500">
+              <span>{campaign.backerCount || 0} backers</span>
+              {campaign.tags && campaign.tags.length > 0 && (
+                <div className="flex gap-1">
+                  {campaign.tags.slice(0, 2).map((tag, index) => (
+                    <Badge key={index} variant="outline" className="text-xs">{tag}</Badge>
+                  ))}
+                  {campaign.tags.length > 2 && <span>+{campaign.tags.length - 2}</span>}
+                </div>
+              )}
             </div>
           </div>
-        </CardContent>
-      </Card>
-    );
-  };
+
+          {/* Single button - only View Details */}
+          <Button
+            className="w-full"
+            onClick={() => window.location.href = `/campaigns/${campaign.id}`}
+          >
+            <Eye className="w-4 h-4 mr-2" />
+            View Details
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
 
   if (loading) { 
     return (
@@ -557,140 +481,6 @@ const filterAndSortCampaigns = () => {
         </CardContent>
       </Card>
       
-      {/* Backing Modal */}
-      {showBackingModal && selectedCampaignForBacking && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <Card className="w-full max-w-2xl">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Back This Project</CardTitle>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowBackingModal(false)}
-                >
-                  <XCircle className="w-4 h-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Campaign Info */}
-              <div>
-                <h3 className="font-semibold text-lg">{selectedCampaignForBacking.title}</h3>
-                <p className="text-gray-600">{selectedCampaignForBacking.description}</p>
-                
-                <div className="mt-4 grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-sm text-gray-500">Current Progress</Label>
-                    <p className="font-semibold">
-                      {selectedCampaignForBacking.currentAmount.toLocaleString()} PLN / {selectedCampaignForBacking.goalAmount.toLocaleString()} PLN
-                    </p>
-                  </div>
-                  <div>
-                    <Label className="text-sm text-gray-500">Days Left</Label>
-                    <p className="font-semibold">{selectedCampaignForBacking.daysLeft} days</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Backing Amount */}
-              <div>
-                <Label htmlFor="backing-amount">Your Contribution (PLN)</Label>
-                <Input
-                  id="backing-amount"
-                  type="number"
-                  placeholder="Enter amount..."
-                  value={backingAmount}
-                  onChange={(e) => setBackingAmount(e.target.value)}
-                  min="1"
-                />
-              </div>
-
-              {/* Rewards */}
-              {selectedCampaignForBacking.rewards && selectedCampaignForBacking.rewards.length > 0 && (
-                <div>
-                  <Label>Choose a reward (optional)</Label>
-                  <div className="space-y-2 mt-2">
-                    {selectedCampaignForBacking.rewards.map((reward, index) => {
-                      const isSelected = selectedReward?.amount === reward.amount;
-                      const canAfford = backingAmount && parseFloat(backingAmount) >= reward.amount;
-                      
-                      return (
-                        <div
-                          key={index}
-                          className={`border rounded-lg p-3 cursor-pointer transition-all ${
-                            isSelected ? 'border-green-600 bg-green-50' : 
-                            canAfford ? 'border-gray-300 hover:border-green-300' : 
-                            'border-gray-200 opacity-50'
-                          }`}
-                          onClick={() => {
-                            if (canAfford) {
-                              setSelectedReward(isSelected ? null : reward);
-                              if (!isSelected && (!backingAmount || parseFloat(backingAmount) < reward.amount)) {
-                                setBackingAmount(reward.amount.toString());
-                              }
-                            }
-                          }}
-                        >
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <p className="font-medium">{reward.title}</p>
-                                {isSelected && <CheckCircle className="w-4 h-4 text-green-600" />}
-                              </div>
-                              <p className="text-sm text-gray-600 mt-1">
-                                Minimum pledge: {reward.amount} PLN
-                              </p>
-                              <p className="text-xs text-gray-500 mt-1">
-                                {reward.backers} backers
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <p className="font-bold text-green-600">{reward.amount} PLN</p>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Summary */}
-              <div className="border-t pt-4">
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Your contribution:</span>
-                  <span className="text-xl font-bold text-green-600">{backingAmount || '0'} PLN</span>
-                </div>
-                {selectedReward && (
-                  <div className="flex justify-between items-center mt-2">
-                    <span className="text-sm text-gray-600">Reward:</span>
-                    <span className="text-sm font-medium">{selectedReward.title}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-4">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowBackingModal(false)}
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={submitBacking}
-                  disabled={!backingAmount || parseFloat(backingAmount) <= 0}
-                  className="flex-1 bg-green-600 hover:bg-green-700"
-                >
-                  <Heart className="w-4 h-4 mr-2" />
-                  Back This Project
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   );
 };
