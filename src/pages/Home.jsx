@@ -835,7 +835,76 @@ const Home = () => {
         </div>
         
         <div className="container mx-auto px-4 relative z-10">
-          <div className="grid md:grid-cols-3 gap-12">
+          {/* Mobile and Small Screen Layout */}
+          <div className="block md:hidden">
+            {/* Company Info - Full Width on Top */}
+            <div className="mb-12 text-center">
+              <h3 className="text-2xl font-bold mb-6 flex items-center justify-center group">
+                <Leaf className="mr-3 h-7 w-7 text-green-500 group-hover:animate-spin transition-all duration-300" />
+                <span className="group-hover:text-green-400 transition-colors">Farm Direct</span>
+              </h3>
+              <p className="text-gray-400 text-lg leading-relaxed mb-6">
+                Connecting communities through fresh, local food. Supporting farmers, delighting customers, building a sustainable future.
+              </p>
+              <div className="flex justify-center space-x-4">
+                {['f', '@', 'in'].map((social, index) => (
+                  <div key={index} className="w-10 h-10 bg-gray-700 rounded-full flex items-center justify-center hover:bg-green-600 transition-all duration-300 cursor-pointer hover:scale-110 hover:rotate-12">
+                    <span className="text-sm font-bold">{social}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Two Column Layout for Customers and Farmers */}
+            <div className="grid grid-cols-2 gap-8">
+              {/* For Customers */}
+              <div>
+                <h4 className="text-lg font-semibold mb-6 text-blue-400 flex items-center">
+                  <ShoppingCart className="mr-2 h-5 w-5" />
+                  For Customers
+                </h4>
+                <ul className="space-y-3 text-gray-400">
+                  {[
+                    { to: "/register", text: "Browse Fresh Produce" },
+                    { to: "/campaigns", text: "Support Farm Projects" },
+                    { to: "/login", text: "Track Your Orders" },
+                    { to: "/about", text: "Why Choose Local" }
+                  ].map((link, index) => (
+                    <li key={index}>
+                      <Link to={link.to} className="hover:text-white hover:translate-x-1 transition-all duration-300 text-sm inline-block">
+                        {link.text}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* For Farmers */}
+              <div>
+                <h4 className="text-lg font-semibold mb-6 text-green-400 flex items-center">
+                  <Tractor className="mr-2 h-5 w-5" />
+                  For Farmers
+                </h4>
+                <ul className="space-y-3 text-gray-400">
+                  {[
+                    { to: "/register", text: "Start Selling Today" },
+                    { to: "/campaigns/create", text: "Launch a Campaign" },
+                    { to: "/login", text: "Farmer Dashboard" },
+                    { to: "/about", text: "Success Stories" }
+                  ].map((link, index) => (
+                    <li key={index}>
+                      <Link to={link.to} className="hover:text-white hover:translate-x-1 transition-all duration-300 text-sm inline-block">
+                        {link.text}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Desktop Layout - 3 Columns (unchanged) */}
+          <div className="hidden md:grid md:grid-cols-3 gap-12">
             {/* Company Info */}
             <div className="scroll-animate">
               <h3 className="text-2xl font-bold mb-6 flex items-center group">
@@ -898,7 +967,6 @@ const Home = () => {
               </ul>
             </div>
           </div>
-
           <div className="border-t border-gray-700 mt-12 pt-8 text-center text-gray-400">
             <p className="text-lg animate-fade-in-up">
               &copy; 2025 Farm Direct. 
@@ -1265,7 +1333,7 @@ const Home = () => {
 
 /* Mobile click activation animations (temporary) */
 .mobile-click-active {
-  animation: cardClickPulse 0.6s ease-out;
+  animation: cardClickPulse 1s ease-out;
 }
 
 @keyframes cardClickPulse {
