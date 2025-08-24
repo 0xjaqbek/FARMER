@@ -27,31 +27,10 @@ import {
 
 const Home = () => {
   const heroCanvasRef = useRef(null);
-  const _cardCanvasRefs = useRef([]);
-  const _floatingIconsRef = useRef(null);
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const [scrollY, setScrollY] = useState(0);
-  const [_hoveredCard, setHoveredCard] = useState(null);
 
-  // Mouse tracking for interactive effects
-  useEffect(() => {
-    const handleMouseMove = (e) => {
-      setMousePosition({ x: e.clientX, y: e.clientY });
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, []);
-
-  // Scroll tracking
-  useEffect(() => {
-    const handleScroll = () => {
-      setScrollY(window.pageYOffset);
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  const [hoveredCard, setHoveredCard] = useState(null);
+  const [clickedCard, setClickedCard] = useState(null);
+  const [triggeredCards, setTriggeredCards] = useState(new Set()); // Track which cards have been triggered
 
   // Enhanced Three.js background with interactive elements
   useEffect(() => {
@@ -199,18 +178,13 @@ const Home = () => {
 
         camera.position.z = 8;
 
-        // Enhanced animation with mouse interaction
+        // Static animation loop without mouse/scroll interaction
         const animate = () => {
           animationId = requestAnimationFrame(animate);
           
           const time = Date.now() * 0.001;
           
-          // Mouse influence on camera
-          const mouseInfluence = 0.0002;
-          camera.rotation.x += (mousePosition.y * mouseInfluence - camera.rotation.x) * 0.1;
-          camera.rotation.y += (mousePosition.x * mouseInfluence - camera.rotation.y) * 0.1;
-          
-          // Animate particle layers
+          // Animate particle layers with consistent movement only
           [particles1, particles2, particles3].forEach((particleSystem, layerIndex) => {
             const geometry = particleSystem.geometry;
             const positions = geometry.attributes.position.array;
@@ -218,20 +192,13 @@ const Home = () => {
             const speed = geometry.userData.speed;
             
             for (let i = 0; i < positions.length; i += 3) {
-              // Organic movement with mouse influence
-              positions[i] += velocities[i] + Math.sin(time + i * 0.01) * speed * 2;
-              positions[i + 1] += velocities[i + 1] + Math.cos(time + i * 0.02) * speed * 2;
-              positions[i + 2] += velocities[i + 2] + Math.sin(time * 0.5 + i * 0.01) * speed;
+              // Smooth organic movement only
+              const baseSpeed = speed * 60; // Normalize for 60fps
+              positions[i] += velocities[i] * baseSpeed + Math.sin(time * 0.5 + i * 0.01) * 0.002;
+              positions[i + 1] += velocities[i + 1] * baseSpeed + Math.cos(time * 0.3 + i * 0.02) * 0.002;
+              positions[i + 2] += velocities[i + 2] * baseSpeed + Math.sin(time * 0.2 + i * 0.01) * 0.001;
               
-              // Mouse attraction effect
-              const mouseInfluenceStrength = 0.001;
-              const dx = (mousePosition.x / window.innerWidth - 0.5) * 20 - positions[i];
-              const dy = -(mousePosition.y / window.innerHeight - 0.5) * 20 - positions[i + 1];
-              
-              positions[i] += dx * mouseInfluenceStrength;
-              positions[i + 1] += dy * mouseInfluenceStrength;
-              
-              // Boundary wrapping
+              // Smooth boundary wrapping
               if (positions[i] > 15) positions[i] = -15;
               if (positions[i] < -15) positions[i] = 15;
               if (positions[i + 1] > 15) positions[i + 1] = -15;
@@ -240,31 +207,27 @@ const Home = () => {
             
             geometry.attributes.position.needsUpdate = true;
             
-            // Layer rotation
-            particleSystem.rotation.x += 0.0003 * (layerIndex + 1);
-            particleSystem.rotation.y += 0.0005 * (layerIndex + 1);
+            // Smooth layer rotation
+            particleSystem.rotation.x += 0.0001 * (layerIndex + 1);
+            particleSystem.rotation.y += 0.0002 * (layerIndex + 1);
           });
           
-          // Animate floating shapes
+          // Animate floating shapes smoothly
           floatingShapes.forEach((shape, index) => {
-            shape.rotation.x += 0.01 + index * 0.002;
-            shape.rotation.y += 0.008 + index * 0.001;
-            shape.position.y += Math.sin(time + index) * 0.01;
+            shape.rotation.x += 0.003 + index * 0.0005;
+            shape.rotation.y += 0.002 + index * 0.0003;
+            shape.position.y += Math.sin(time * 0.5 + index) * 0.003;
             
-            // Pulsing effect
-            const scale = 1 + Math.sin(time * 2 + index) * 0.3;
+            // Smooth pulsing effect
+            const scale = 1 + Math.sin(time + index) * 0.1;
             shape.scale.setScalar(scale);
           });
           
-          // Animate light beams
+          // Animate light beams smoothly
           lightBeams.forEach((beam, index) => {
-            beam.rotation.z += 0.002;
-            beam.material.opacity = 0.05 + Math.sin(time * 3 + index) * 0.1;
+            beam.rotation.z += 0.0008;
+            beam.material.opacity = 0.08 + Math.sin(time * 2 + index) * 0.05;
           });
-          
-          // Parallax effect based on scroll
-          const scrollInfluence = scrollY * 0.0005;
-          scene.rotation.y = scrollInfluence;
           
           renderer.render(scene, camera);
         };
@@ -295,42 +258,52 @@ const Home = () => {
         cancelAnimationFrame(animationId);
       }
     };
-  }, [mousePosition, scrollY]);
+  }, );
 
-  // Enhanced parallax scroll effect
+  // Smooth parallax scroll effect
   useEffect(() => {
+    let ticking = false;
+    
     const handleScroll = () => {
-      const scrolled = window.pageYOffset;
-      
-      // Multi-layer parallax
-      const parallaxElements = document.querySelectorAll('.parallax-bg');
-      parallaxElements.forEach((element, index) => {
-        const speed = (index + 1) * 0.15;
-        const yPos = scrolled * speed;
-        element.style.transform = `translate3d(0, ${yPos}px, 0)`;
-      });
-      
-      // Hero content parallax
-      const heroContent = document.querySelector('.hero-content');
-      if (heroContent) {
-        const rate = scrolled * -0.3;
-        heroContent.style.transform = `translate3d(0, ${rate}px, 0)`;
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          const scrolled = window.pageYOffset;
+          
+          // Multi-layer parallax with smooth transforms
+          const parallaxElements = document.querySelectorAll('.parallax-bg');
+          parallaxElements.forEach((element, index) => {
+            const speed = (index + 1) * 0.1; // Reduced speed for smoothness
+            const yPos = scrolled * speed;
+            element.style.transform = `translate3d(0, ${yPos}px, 0)`;
+          });
+          
+          // Hero content parallax
+          const heroContent = document.querySelector('.hero-content');
+          if (heroContent) {
+            const rate = scrolled * -0.2; // Reduced intensity
+            heroContent.style.transform = `translate3d(0, ${rate}px, 0)`;
+          }
+          
+          // Floating elements with smooth movement
+          const floatingElements = document.querySelectorAll('.floating-element');
+          floatingElements.forEach((element, index) => {
+            const speed = 0.05 + (index * 0.02); // Much gentler movement
+            const yPos = Math.sin(scrolled * 0.001 + index) * 10 + scrolled * speed;
+            const rotation = scrolled * 0.05; // Reduced rotation
+            element.style.transform = `translateY(${yPos}px) rotate(${rotation}deg)`;
+          });
+          
+          ticking = false;
+        });
+        ticking = true;
       }
-      
-      // Floating elements
-      const floatingElements = document.querySelectorAll('.floating-element');
-      floatingElements.forEach((element, index) => {
-        const speed = 0.1 + (index * 0.05);
-        const yPos = Math.sin(scrolled * 0.002 + index) * 20 + scrolled * speed;
-        element.style.transform = `translateY(${yPos}px) rotate(${scrolled * 0.1}deg)`;
-      });
     };
 
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Advanced intersection observer for staggered animations
+  // Advanced intersection observer for staggered animations and mobile click detection
   useEffect(() => {
     const observerOptions = {
       threshold: 0.1,
@@ -350,21 +323,73 @@ const Home = () => {
     const animateElements = document.querySelectorAll('.scroll-animate');
     animateElements.forEach((el) => observer.observe(el));
 
-    return () => observer.disconnect();
-  }, []);
+    // Mobile click activation when cards are in viewport center (once only)
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+    
+    if (isMobile) {
+      const centerObserverOptions = {
+        threshold: 0.5,
+        rootMargin: '-40% 0px -40% 0px'
+      };
 
-  // Magnetic button effect
+      const centerObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.target.classList.contains('mobile-click-card')) {
+            if (entry.isIntersecting) {
+              const cardIndex = parseInt(entry.target.dataset.cardIndex);
+              
+              // Only trigger if card hasn't been triggered before
+              if (!isNaN(cardIndex) && !triggeredCards.has(cardIndex)) {
+                setTriggeredCards(prev => new Set([...prev, cardIndex]));
+                setClickedCard(cardIndex);
+                
+                // Clear clicked state after animation
+                setTimeout(() => {
+                  setClickedCard(null);
+                }, 600);
+              }
+            }
+          }
+        });
+      }, centerObserverOptions);
+
+      const mobileClickCards = document.querySelectorAll('.mobile-click-card');
+      mobileClickCards.forEach((card) => centerObserver.observe(card));
+
+      return () => {
+        observer.disconnect();
+        centerObserver.disconnect();
+      };
+    }
+
+    return () => observer.disconnect();
+  }, [triggeredCards]);
+
+  // Mobile click animation handler
+  // Mobile click animation handler (one-time only)
+  const handleCardClick = (index) => {
+    if (!triggeredCards.has(index)) {
+      setTriggeredCards(prev => new Set([...prev, index]));
+      setClickedCard(index);
+    }
+  };
+
+  // Smooth magnetic button effect
   const handleButtonMouseMove = (e) => {
     const button = e.currentTarget;
     const rect = button.getBoundingClientRect();
-    const x = e.clientX - rect.left - rect.width / 2;
-    const y = e.clientY - rect.top - rect.height / 2;
+    const x = (e.clientX - rect.left - rect.width / 2) * 0.1;
+    const y = (e.clientY - rect.top - rect.height / 2) * 0.1;
     
-    button.style.transform = `translate(${x * 0.1}px, ${y * 0.1}px) scale(1.05)`;
+    // Use transform with translate3d for hardware acceleration
+    button.style.transform = `translate3d(${x}px, ${y}px, 0) scale(1.02)`;
+    button.style.transition = 'none'; // Remove transition during mouse move
   };
 
   const handleButtonMouseLeave = (e) => {
-    e.currentTarget.style.transform = 'translate(0, 0) scale(1)';
+    const button = e.currentTarget;
+    button.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+    button.style.transform = 'translate3d(0, 0, 0) scale(1)';
   };
 
   return (
@@ -412,41 +437,41 @@ const Home = () => {
         <div className="absolute top-1/3 left-1/3 w-16 h-16 bg-gradient-to-r from-green-400/30 to-emerald-300/30 rounded-lg rotate-45 animate-morph"></div>
         <div className="absolute bottom-1/3 right-1/3 w-12 h-12 bg-gradient-to-r from-white/20 to-green-200/20 rounded-full animate-morph-delayed"></div>
         
-        <div className="relative text-center px-4 max-w-5xl mx-auto hero-content" style={{ zIndex: 3 }}>
-          <h1 className="text-6xl md:text-7xl font-extrabold mb-6 leading-tight animate-fade-in-up">
-            <span className="inline-block animate-text-glow">Farm Fresh,</span>
-            <span className="block gradient-text-hero animate-text-shimmer">Direct to You</span>
-          </h1>
-          <p className="text-xl md:text-2xl mb-8 opacity-95 animate-fade-in-up max-w-3xl mx-auto leading-relaxed animate-type-writer" style={{ animationDelay: '0.2s' }}>
-            Skip the grocery store. Connect with local farmers, get the freshest produce, and support your community—all while earning rewards for sustainable choices.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-6 justify-center animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
-            <Link to="/register">
-              <Button 
-                size="lg" 
-                className="magnetic-button bg-white text-green-700 hover:bg-green-50 transition-all duration-300 px-8 py-4 text-lg font-semibold"
-                onMouseMove={handleButtonMouseMove}
-                onMouseLeave={handleButtonMouseLeave}
-              >
-                <ShoppingCart className="mr-3 h-6 w-6" />
-                Start Shopping Fresh
-              </Button>
-            </Link>
-            <Link to="/register">
-              <Button 
-                size="lg" 
-                className="magnetic-button bg-green-800 text-white hover:bg-green-900 transition-all duration-300 px-8 py-4 text-lg font-semibold border-2 border-green-700"
-                onMouseMove={handleButtonMouseMove}
-                onMouseLeave={handleButtonMouseLeave}
-              >
-                <Tractor className="mr-3 h-6 w-6" />
-                List Your Farm
-              </Button>
-            </Link>
-          </div>
+<div className="relative text-center lg:text-center px-4 max-w-5xl mx-auto hero-content mt-40" style={{ zIndex: 3 }}>
+  <h1 className="text-7xl sm:text-4xl md:text-8xl font-extrabold mb-6 leading-tight animate-fade-in-up">
+    <span className="inline-block animate-text-glow">Farm Fresh,</span>
+    <span className="block gradient-text-hero animate-text-shimmer">Direct to You</span>
+  </h1>
+  <p className="text-xl md:text-2xl mb-8 opacity-95 animate-fade-in-up max-w-3xl mx-auto leading-relaxed animate-type-writer" style={{ animationDelay: '0.2s' }}>
+    Skip the grocery store. Connect with local farmers, get the freshest produce, and support your community—all while earning rewards for sustainable choices.
+  </p>
+  <div className="flex flex-col sm:flex-row gap-6 justify-center animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
+    <Link to="/register">
+      <Button 
+        size="lg" 
+        className="magnetic-button bg-white text-green-700 hover:bg-green-50 transition-all duration-300 px-8 py-4 text-lg font-semibold"
+        onMouseMove={handleButtonMouseMove}
+        onMouseLeave={handleButtonMouseLeave}
+      >
+        <ShoppingCart className="mr-3 h-6 w-6" />
+        Start Shopping Fresh
+      </Button>
+    </Link>
+    <Link to="/register">
+      <Button 
+        size="lg" 
+        className="magnetic-button bg-green-800 text-white hover:bg-green-900 transition-all duration-300 px-8 py-4 text-lg font-semibold border-2 border-green-700"
+        onMouseMove={handleButtonMouseMove}
+        onMouseLeave={handleButtonMouseLeave}
+      >
+        <Tractor className="mr-3 h-6 w-6" />
+        List Your Farm
+      </Button>
+    </Link>
+  </div>
           
           {/* Enhanced trust indicators with animations */}
-          <div className="mt-12 flex flex-wrap justify-center items-center gap-8 text-green-100 animate-fade-in-up" style={{ animationDelay: '0.6s' }}>
+          <div className="mt-12 flex flex-wrap justify-center items-center gap-4 lg:flex-row md:flex-row flex-col text-green-100 animate-fade-in-up" style={{ animationDelay: '0.6s' }}>
             {[
               { icon: CheckCircle, text: "Direct Farm Connections" },
               { icon: CheckCircle, text: "Real-Time Order Tracking" },
@@ -513,26 +538,32 @@ const Home = () => {
                 color: "indigo"
               }
             ].map((item, index) => (
-              <Card 
-                key={index}
-                className="group hover:shadow-2xl transition-all duration-700 hover:-translate-y-4 border-2 hover:border-green-300 bg-gradient-to-br from-white to-green-50/30 scroll-animate card-hover-effect"
-                onMouseEnter={() => setHoveredCard(index)}
-                onMouseLeave={() => setHoveredCard(null)}
-              >
+                <Card 
+                  key={index}
+                  className={`group mobile-click-card transition-all duration-500 ease-out hover:shadow-2xl border-2 hover:border-green-300 bg-gradient-to-br from-white to-green-50/30 scroll-animate will-change-transform ${triggeredCards.has(index) ? 'mobile-triggered' : ''} ${triggeredCards.has(index) && clickedCard === index ? 'mobile-click-active' : ''}`}
+                  data-card-index={index}
+                  style={{ 
+                    transform: (hoveredCard === index || triggeredCards.has(index)) ? 'translateY(-12px)' : 'translateY(0)',
+                    transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)'
+                  }}
+                  onMouseEnter={() => setHoveredCard(index)}
+                  onMouseLeave={() => setHoveredCard(null)}
+                  onClick={() => handleCardClick(index)}
+                >
                 <CardHeader className="pb-4">
-                  <div className="mx-auto mb-4 p-4 bg-green-100 rounded-2xl w-fit group-hover:bg-green-200 transition-all duration-500 group-hover:scale-125 group-hover:rotate-12">
-                    <item.icon className={`w-10 h-10 text-${item.color}-600 group-hover:animate-pulse`} />
+                  <div className="mx-auto mb-4 p-4 bg-green-100 rounded-2xl w-fit transition-all duration-300 group-hover:bg-green-200 group-hover:scale-110">
+                    <item.icon className={`w-10 h-10 text-${item.color}-600`} />
                   </div>
-                  <CardTitle className="text-green-800 text-xl group-hover:text-green-900 transition-colors">{item.title}</CardTitle>
+                  <CardTitle className="text-green-800 text-xl transition-colors duration-300 group-hover:text-green-900">{item.title}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <CardDescription className="text-base text-gray-700 leading-relaxed group-hover:text-gray-800 transition-colors">
+                  <CardDescription className="text-base text-gray-700 leading-relaxed transition-colors duration-300 group-hover:text-gray-800">
                     {item.description}
                   </CardDescription>
                 </CardContent>
                 
-                {/* Card glow effect */}
-                <div className="absolute inset-0 bg-gradient-to-r from-green-400/0 via-green-400/5 to-green-400/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-lg pointer-events-none"></div>
+                {/* Smooth card glow effect */}
+                <div className="absolute inset-0 bg-gradient-to-r from-green-400/0 via-green-400/10 to-green-400/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-lg pointer-events-none"></div>
               </Card>
             ))}
           </div>
@@ -667,7 +698,16 @@ const Home = () => {
                 gradient: "from-yellow-400 to-amber-400"
               }
             ].map((item, index) => (
-              <Card key={index} className="group p-6 border-2 hover:shadow-2xl transition-all duration-700 hover:-translate-y-3 hover:border-green-300 scroll-animate card-3d-hover relative overflow-hidden">
+                <Card key={index} className={`group mobile-click-card p-6 border-2 transition-all duration-500 ease-out hover:shadow-2xl hover:border-green-300 scroll-animate relative overflow-hidden will-change-transform ${triggeredCards.has(index + 10) ? 'mobile-triggered' : ''} ${triggeredCards.has(index + 10) && clickedCard === (index + 10) ? 'mobile-click-active' : ''}`}
+                  data-card-index={index + 10}
+                  style={{ 
+                    transform: (hoveredCard === (index + 10) || triggeredCards.has(index + 10)) ? 'translateY(-8px)' : 'translateY(0)',
+                    transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
+                  }}
+                  onMouseEnter={() => setHoveredCard(index + 10)}
+                  onMouseLeave={() => setHoveredCard(null)}
+                  onClick={() => handleCardClick(index + 10)}
+                >
                 {/* Card background glow */}
                 <div className={`absolute inset-0 bg-gradient-to-r ${item.gradient} opacity-0 group-hover:opacity-10 transition-opacity duration-500`}></div>
                 
@@ -728,7 +768,7 @@ const Home = () => {
         <div className="container mx-auto px-4 text-center relative z-10">
           <h2 className="text-5xl font-bold mb-6 animate-text-glow">Ready to Taste the Difference?</h2>
           <p className="text-2xl mb-8 max-w-3xl mx-auto opacity-95 leading-relaxed animate-fade-in-up">
-            Join to those who've already discovered fresher food, stronger communities, and a more sustainable way to eat.
+            Join those who've already discovered fresher food, stronger communities, and a more sustainable way to eat.
           </p>
           
           <div className="flex flex-col sm:flex-row gap-6 justify-center mb-12">
@@ -876,61 +916,57 @@ const Home = () => {
           to { opacity: 1; transform: translateY(0); }
         }
 
+        /* Enhanced animations with better performance */
         @keyframes float {
           0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-20px); }
+          50% { transform: translateY(-10px); }
         }
 
         @keyframes float-delayed {
-          0%, 100% { transform: translateY(-10px); }
-          50% { transform: translateY(-30px); }
+          0%, 100% { transform: translateY(-5px); }
+          50% { transform: translateY(-15px); }
         }
 
         @keyframes float-slow {
           0%, 100% { transform: translateY(0px) rotate(0deg); }
-          50% { transform: translateY(-15px) rotate(5deg); }
+          50% { transform: translateY(-8px) rotate(2deg); }
         }
 
         @keyframes bounce-slow {
           0%, 100% { transform: translateY(0) scale(1); }
-          50% { transform: translateY(-10px) scale(1.1); }
+          50% { transform: translateY(-5px) scale(1.02); }
         }
 
         @keyframes bounce-gentle {
           0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-5px); }
+          50% { transform: translateY(-3px); }
         }
 
         @keyframes bounce-subtle {
           0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-2px); }
+          50% { transform: translateY(-1px); }
         }
 
         @keyframes morph {
           0%, 100% { transform: rotate(45deg) scale(1); border-radius: 20%; }
-          50% { transform: rotate(225deg) scale(1.2); border-radius: 50%; }
+          50% { transform: rotate(135deg) scale(1.1); border-radius: 40%; }
         }
 
         @keyframes morph-delayed {
           0%, 100% { transform: scale(1) rotate(0deg); border-radius: 50%; }
-          50% { transform: scale(1.3) rotate(180deg); border-radius: 20%; }
+          50% { transform: scale(1.1) rotate(90deg); border-radius: 30%; }
         }
 
         @keyframes text-glow {
           0%, 100% { text-shadow: 0 0 5px rgba(255, 255, 255, 0.5); }
-          50% { text-shadow: 0 0 20px rgba(255, 255, 255, 0.8); }
-        }
-
-        @keyframes text-shimmer {
-          0% { background-position: -200% 0; }
-          100% { background-position: 200% 0; }
+          50% { text-shadow: 0 0 15px rgba(255, 255, 255, 0.7); }
         }
 
         @keyframes text-reveal {
           from { 
             opacity: 0; 
-            transform: translateY(50px); 
-            filter: blur(10px); 
+            transform: translateY(20px); 
+            filter: blur(5px); 
           }
           to { 
             opacity: 1; 
@@ -940,13 +976,13 @@ const Home = () => {
         }
 
         @keyframes pulse-slow {
-          0%, 100% { opacity: 0.4; }
-          50% { opacity: 0.8; }
+          0%, 100% { opacity: 0.6; }
+          50% { opacity: 0.9; }
         }
 
         @keyframes pulse-gentle {
           0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.05); }
+          50% { transform: scale(1.02); }
         }
 
         @keyframes spin-slow {
@@ -954,64 +990,36 @@ const Home = () => {
           to { transform: rotate(360deg); }
         }
 
-        @keyframes spin-reverse {
-          from { transform: rotate(360deg); }
-          to { transform: rotate(0deg); }
-        }
-
         @keyframes twinkle {
           0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.3; transform: scale(0.8); }
+          50% { opacity: 0.5; transform: scale(0.9); }
         }
 
         @keyframes rain {
           to { transform: translateY(100vh); }
         }
 
-        @keyframes grid-fade {
-          0%, 100% { opacity: 0; }
-          50% { opacity: 1; }
-        }
-
-        @keyframes draw-line {
-          to { stroke-dashoffset: 0; }
-        }
-
-        @keyframes count-up {
-          from { transform: scale(0.5); opacity: 0; }
-          to { transform: scale(1); opacity: 1; }
-        }
-
-        @keyframes type-writer {
-          from { width: 0; }
-          to { width: 100%; }
-        }
-
-        /* Animation Classes */
+        /* Optimized animation classes */
         .animate-fade-in-up {
           animation: fade-in-up 1s ease-out forwards;
           opacity: 0;
         }
 
-        .animate-float { animation: float 3s ease-in-out infinite; }
-        .animate-float-delayed { animation: float-delayed 4s ease-in-out infinite; }
-        .animate-float-slow { animation: float-slow 5s ease-in-out infinite; }
-        .animate-bounce-slow { animation: bounce-slow 2s ease-in-out infinite; }
-        .animate-bounce-gentle { animation: bounce-gentle 2s ease-in-out infinite; }
-        .animate-bounce-subtle { animation: bounce-subtle 3s ease-in-out infinite; }
-        .animate-morph { animation: morph 6s ease-in-out infinite; }
-        .animate-morph-delayed { animation: morph-delayed 7s ease-in-out infinite; }
-        .animate-text-glow { animation: text-glow 2s ease-in-out infinite; }
-        .animate-text-shimmer { 
-          background: linear-gradient(45deg, #ffffff, #d1fae5, #ffffff);
-          background-size: 400% 400%;
-          animation: text-shimmer 3s ease-in-out infinite;
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-        }
-        .animate-text-reveal { animation: text-reveal 1.5s ease-out forwards; }
-        .animate-pulse-slow { animation: pulse-slow 3s ease-in-out infinite; }
-        .animate-pulse-gentle { animation: pulse-gentle 2s ease-in-out infinite; }
+        .animate-float { animation: float 4s ease-in-out infinite; }
+        .animate-float-delayed { animation: float-delayed 5s ease-in-out infinite; }
+        .animate-float-slow { animation: float-slow 6s ease-in-out infinite; }
+        .animate-bounce-slow { animation: bounce-slow 3s ease-in-out infinite; }
+        .animate-bounce-gentle { animation: bounce-gentle 2.5s ease-in-out infinite; }
+        .animate-bounce-subtle { animation: bounce-subtle 4s ease-in-out infinite; }
+        .animate-morph { animation: morph 8s ease-in-out infinite; }
+        .animate-morph-delayed { animation: morph-delayed 9s ease-in-out infinite; }
+        .animate-text-glow { animation: text-glow 3s ease-in-out infinite; }
+        .animate-text-reveal { animation: text-reveal 1s ease-out forwards; }
+        .animate-pulse-slow { animation: pulse-slow 4s ease-in-out infinite; }
+        .animate-pulse-gentle { animation: pulse-gentle 3s ease-in-out infinite; }
+        .animate-spin-slow { animation: spin-slow 12s linear infinite; }
+        .animate-twinkle { animation: twinkle 2s ease-in-out infinite; }
+        .animate-rain { animation: rain linear infinite; } 2s ease-in-out infinite; }
         .animate-spin-slow { animation: spin-slow 8s linear infinite; }
         .animate-spin-reverse { animation: spin-reverse 6s linear infinite; }
         .animate-twinkle { animation: twinkle 1.5s ease-in-out infinite; }
@@ -1029,75 +1037,34 @@ const Home = () => {
           overflow: hidden;
         }
 
-        /* Enhanced gradient text */
-        .gradient-text {
-          background: linear-gradient(135deg, #16a34a, #059669, #047857);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-        }
-
-        .gradient-text-hero {
-          background: linear-gradient(135deg, #ffffff, #d1fae5, #bbf7d0);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-        }
-
-        /* Parallax and 3D effects */
+        /* Performance optimizations */
         .parallax-bg,
         .hero-content,
         .floating-element {
           will-change: transform;
-        }
-
-        .floating-element {
-          animation: float 4s ease-in-out infinite;
-        }
-
-        /* Interactive effects */
-        .magnetic-button {
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .card-hover-effect:hover {
-          transform: translateY(-16px) rotateX(5deg);
-          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-        }
-
-        .card-3d-hover {
-          perspective: 1000px;
+          backface-visibility: hidden;
           transform-style: preserve-3d;
         }
 
-        .card-3d-hover:hover {
-          transform: rotateY(5deg) rotateX(5deg) translateZ(20px);
+        .floating-element {
+          animation: float 6s ease-in-out infinite;
         }
 
-        /* Scroll-triggered animations */
-        .scroll-animate {
-          opacity: 0;
-          transform: translateY(50px);
-          transition: all 1s cubic-bezier(0.4, 0, 0.2, 1);
+        /* Smooth interactive effects */
+        .magnetic-button {
+          will-change: transform;
+          backface-visibility: hidden;
         }
 
-        .scroll-animate.animate-in {
-          opacity: 1;
-          transform: translateY(0);
-        }
-
-        .step-animation {
-          transition-delay: var(--animation-delay, 0s);
-        }
-
-        .counter-animation {
-          transition-delay: var(--animation-delay, 0s);
-        }
-
-        /* Performance optimizations */
+        /* Hardware acceleration for all transforms */
         * {
-          transition-property: transform, background-color, border-color, color, fill, stroke, opacity, box-shadow;
-          transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+          transform-style: preserve-3d;
+          backface-visibility: hidden;
+        }
+
+        /* Smooth transitions */
+        .transition-smooth {
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         /* Smooth scroll */
@@ -1105,7 +1072,7 @@ const Home = () => {
           scroll-behavior: smooth;
         }
 
-        /* Enhanced focus states for accessibility */
+        /* Enhanced focus states */
         button:focus,
         a:focus {
           outline: 2px solid #16a34a;
@@ -1118,32 +1085,202 @@ const Home = () => {
           .text-7xl { font-size: 3.5rem; }
           .text-5xl { font-size: 2.5rem; }
           
-          .card-hover-effect:hover,
-          .card-3d-hover:hover {
-            transform: translateY(-8px);
+          /* Reduce motion for mobile */
+          .animate-float,
+          .animate-bounce-slow,
+          .animate-morph {
+            animation-duration: 8s;
           }
         }
 
-        /* Loading states */
-        .loading {
-          position: relative;
-          overflow: hidden;
+        /* Reduce motion for users who prefer it */
+        @media (prefers-reduced-motion: reduce) {
+          *,
+          *::before,
+          *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+          }
         }
 
-        .loading::after {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: -100%;
-          width: 100%;
-          height: 100%;
-          background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
-          animation: loading-shimmer 2s infinite;
+        /* Mobile hover simulation */
+        .mobile-hover-card.mobile-hover-active .group-hover:shadow-2xl {
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
         }
 
-        @keyframes loading-shimmer {
-          to { left: 100%; }
+        .mobile-hover-card.mobile-hover-active .group-hover:border-green-300 {
+          border-color: rgb(134 239 172);
         }
+
+        .mobile-hover-card.mobile-hover-active .group-hover:bg-green-200 {
+          background-color: rgb(187 247 208);
+        }
+
+        .mobile-hover-card.mobile-hover-active .group-hover:scale-110 {
+          transform: scale(1.1);
+        }
+
+        .mobile-hover-card.mobile-hover-active .group-hover:scale-125 {
+          transform: scale(1.25);
+        }
+
+        .mobile-hover-card.mobile-hover-active .group-hover:rotate-12 {
+          transform: rotate(12deg) scale(1.25);
+        }
+
+        .mobile-hover-card.mobile-hover-active .group-hover:text-green-800 {
+          color: rgb(22 101 52);
+        }
+
+        .mobile-hover-card.mobile-hover-active .group-hover:text-green-900 {
+          color: rgb(20 83 45);
+        }
+
+        .mobile-hover-card.mobile-hover-active .group-hover:text-gray-800 {
+          color: rgb(31 41 55);
+        }
+
+        .mobile-hover-card.mobile-hover-active .group-hover:text-green-600 {
+          color: rgb(22 163 74);
+        }
+
+        .mobile-hover-card.mobile-hover-active .group-hover:opacity-100 {
+          opacity: 1;
+        }
+
+        .mobile-hover-card.mobile-hover-active .group-hover:scale-x-100 {
+          transform: scaleX(1);
+        }
+
+        /* Mobile-specific adjustments */
+        @media (max-width: 768px) {
+          .mobile-hover-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          }
+
+          .mobile-hover-card.mobile-hover-active {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            border-color: rgb(134 239 172);
+          }
+
+          /* Simulate all group-hover states on mobile */
+          .mobile-hover-card.mobile-hover-active .group-hover:bg-green-200,
+          .mobile-hover-card.mobile-hover-active *:hover {
+            background-color: rgb(187 247 208) !important;
+          }
+        }
+          /* Mobile click activation animations */
+          .mobile-click-active {
+            animation: cardClickPulse 0.6s ease-out;
+          }
+
+          @keyframes cardClickPulse {
+            0% { 
+              transform: translateY(0) scale(1); 
+              box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            }
+            50% { 
+              transform: translateY(-12px) scale(1.05); 
+              box-shadow: 0 20px 25px -5px rgba(34, 197, 94, 0.3);
+              border-color: rgb(134 239 172);
+            }
+            100% { 
+              transform: translateY(-12px) scale(1); 
+              box-shadow: 0 25px 50px -12px rgba(34, 197, 94, 0.25);
+            }
+          }
+
+          .mobile-click-active .group-hover:bg-green-200,
+          .mobile-click-active [class*="group-hover"] {
+            background-color: rgb(187 247 208) !important;
+            color: rgb(22 101 52) !important;
+          }
+
+          .mobile-click-active .group-hover:scale-110 {
+            transform: scale(1.1);
+            animation: iconBounce 0.4s ease-out;
+          }
+
+          @keyframes iconBounce {
+            0%, 100% { transform: scale(1.1); }
+            50% { transform: scale(1.25); }
+          }
+
+          /* Color wave animation */
+          .mobile-click-active::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(45deg, 
+              rgba(34, 197, 94, 0.1) 0%, 
+              rgba(134, 239, 172, 0.2) 25%, 
+              rgba(34, 197, 94, 0.1) 50%, 
+              rgba(134, 239, 172, 0.2) 75%, 
+              rgba(34, 197, 94, 0.1) 100%);
+            animation: colorWave 0.6s ease-out;
+            border-radius: 0.5rem;
+            pointer-events: none;
+          }
+
+          /* Persistent triggered state */
+.mobile-triggered {
+  box-shadow: 0 20px 25px -5px rgba(34, 197, 94, 0.15);
+  border-color: rgb(134 239 172);
+}
+
+.mobile-triggered .group-hover:bg-green-200 {
+  background-color: rgb(187 247 208);
+}
+
+.mobile-triggered .group-hover:scale-110 {
+  transform: scale(1.1);
+}
+
+.mobile-triggered .group-hover:scale-125 {
+  transform: scale(1.25);
+}
+
+.mobile-triggered .group-hover:rotate-12 {
+  transform: rotate(12deg) scale(1.25);
+}
+
+.mobile-triggered .group-hover:text-green-800 {
+  color: rgb(22 101 52);
+}
+
+.mobile-triggered .group-hover:text-green-900 {
+  color: rgb(20 83 45);
+}
+
+.mobile-triggered .group-hover:text-gray-800 {
+  color: rgb(31 41 55);
+}
+
+.mobile-triggered .group-hover:text-green-600 {
+  color: rgb(22 163 74);
+}
+
+/* Mobile click activation animations (temporary) */
+.mobile-click-active {
+  animation: cardClickPulse 0.6s ease-out;
+}
+
+@keyframes cardClickPulse {
+  0% { 
+    transform: translateY(-12px) scale(1); 
+  }
+  50% { 
+    transform: translateY(-12px) scale(1.05); 
+    box-shadow: 0 25px 30px -5px rgba(34, 197, 94, 0.4);
+  }
+  100% { 
+    transform: translateY(-12px) scale(1); 
+  }
+}
+
       `}</style>
     </div>
   );
