@@ -88,7 +88,7 @@ const PublicRoute = ({ children }) => {
   const { currentUser } = useAuth();
   
   if (currentUser) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/home" replace />;
   }
   
   return children;
@@ -110,10 +110,9 @@ const AppRoutes = () => {
     <Router>
       <Routes>
         <Route path="/" element={
-
             <Home />
-
         } />
+        
         {/* Public Routes */}
         <Route path="/login" element={
           <PublicRoute>
