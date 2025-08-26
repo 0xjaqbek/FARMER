@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import MainLayout from './components/layout/MainLayout';
 import Home from './pages/Home';
+import About from './pages/About';
 
 
 // Legal Pages - NEW IMPORTS
@@ -21,6 +22,7 @@ import CampaignViewer from './pages/campaigns/CampaignViewer';
 import CampaignManager from './pages/campaigns/CampaignManager';
 import CampaignDetail from './pages/campaigns/CampaignDetail';
 import CampaignEdit from './pages/campaigns/CampaignEdit';
+import AboutCampaigns from './pages/campaigns/AboutCampaigns';
 import SearchWithMap from './components/search/SearchWithMap';
 import EnhancedLocationPicker from './components/location/EnhancedLocationPicker';
 import FarmersDirectory from './pages/farmers/FarmersDirectory';
@@ -112,6 +114,9 @@ const AppRoutes = () => {
         <Route path="/" element={
             <Home />
         } />
+        
+        {/* About Page - Public Route */}
+        <Route path="/about" element={<About />} />
         
         {/* Public Routes */}
         <Route path="/login" element={
@@ -340,6 +345,9 @@ const AppRoutes = () => {
             </MainLayout>
           </ProtectedRoute>
         } />
+
+        {/* About Campaigns - Public Route */}
+        <Route path="/campaigns/about" element={<AboutCampaigns />} />
 
         {/* Campaign Routes */}
         <Route path="/campaigns" element={

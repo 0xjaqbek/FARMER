@@ -22,7 +22,8 @@ import {
   CheckCircle,
   Sparkles,
   Sun,
-  Moon
+  Moon,
+  Network
 } from 'lucide-react';
 
 const Home = () => {
@@ -437,53 +438,57 @@ const Home = () => {
         <div className="absolute top-1/3 left-1/3 w-16 h-16 bg-gradient-to-r from-green-400/30 to-emerald-300/30 rounded-lg rotate-45 animate-morph"></div>
         <div className="absolute bottom-1/3 right-1/3 w-12 h-12 bg-gradient-to-r from-white/20 to-green-200/20 rounded-full animate-morph-delayed"></div>
         
-<div className="relative text-center lg:text-center px-4 max-w-5xl mx-auto hero-content mt-40" style={{ zIndex: 3 }}>
-  <h1 className="text-7xl sm:text-4xl md:text-8xl font-extrabold mb-6 leading-tight animate-fade-in-up">
+<div className="relative text-center lg:text-center px-4 max-w-5xl mx-auto hero-content mt-20 md:mt-40" style={{ zIndex: 3 }}>
+  <h1 className="text-5xl sm:text-6xl md:text-8xl font-extrabold mb-6 leading-tight animate-fade-in-up">
     <span className="inline-block animate-text-glow">Farm Fresh,</span>
     <span className="block gradient-text-hero animate-text-shimmer">Direct to You</span>
   </h1>
-  <p className="text-xl md:text-2xl mb-8 opacity-95 animate-fade-in-up max-w-3xl mx-auto leading-relaxed animate-type-writer" style={{ animationDelay: '0.2s' }}>
-    Skip the grocery store. Connect with local farmers, get the freshest produce, and support your community—all while earning rewards for sustainable choices.
+  <p className="text-lg md:text-2xl mb-6 md:mb-8 opacity-95 animate-fade-in-up max-w-3xl mx-auto leading-relaxed animate-text-reveal" style={{ animationDelay: '0.2s' }}>
+    Skip the grocery store. Connect with local farmers, get the freshest produce, and support your community—built from the ground up by farmers and neighbors, with complete transparency in every transaction.
   </p>
-  <div className="flex flex-col sm:flex-row gap-6 justify-center animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
+  <div className="flex flex-col sm:flex-row gap-4 md:gap-6 justify-center animate-fade-in-up mb-6 md:mb-10" style={{ animationDelay: '0.4s' }}>
     <Link to="/register">
       <Button 
         size="lg" 
-        className="magnetic-button bg-white text-green-700 hover:bg-green-50 transition-all duration-300 px-8 py-4 text-lg font-semibold"
+        className="magnetic-button bg-white text-green-700 hover:bg-green-50 transition-all duration-300 px-6 md:px-8 py-3 md:py-4 text-base md:text-lg font-semibold"
         onMouseMove={handleButtonMouseMove}
         onMouseLeave={handleButtonMouseLeave}
       >
-        <ShoppingCart className="mr-3 h-6 w-6" />
+        <ShoppingCart className="mr-2 md:mr-3 h-5 md:h-6 w-5 md:w-6" />
         Start Shopping Fresh
       </Button>
     </Link>
     <Link to="/register">
       <Button 
         size="lg" 
-        className="magnetic-button bg-green-800 text-white hover:bg-green-900 transition-all duration-300 px-8 py-4 text-lg font-semibold border-2 border-green-700"
+        className="magnetic-button bg-green-800 text-white hover:bg-green-900 transition-all duration-300 px-6 md:px-8 py-3 md:py-4 text-base md:text-lg font-semibold border-2 border-green-700"
         onMouseMove={handleButtonMouseMove}
         onMouseLeave={handleButtonMouseLeave}
       >
-        <Tractor className="mr-3 h-6 w-6" />
+        <Tractor className="mr-2 md:mr-3 h-5 md:h-6 w-5 md:w-6" />
         List Your Farm
       </Button>
     </Link>
   </div>
-          
-          {/* Enhanced trust indicators with animations */}
-          <div className="mt-12 flex flex-wrap justify-center items-center gap-4 lg:flex-row md:flex-row flex-col text-green-100 animate-fade-in-up" style={{ animationDelay: '0.6s' }}>
-            {[
-              { icon: CheckCircle, text: "Direct Farm Connections" },
-              { icon: CheckCircle, text: "Real-Time Order Tracking" },
-              { icon: CheckCircle, text: "Blockchain Transparency" }
-            ].map((item, index) => (
-              <div key={index} className="flex items-center gap-2 animate-bounce-subtle" style={{ animationDelay: `${index * 0.2}s` }}>
-                <item.icon className="h-5 w-5 animate-pulse" />
-                <span className="text-sm font-medium">{item.text}</span>
-              </div>
-            ))}
-          </div>
+</div>
+
+{/* Trust indicators positioned at bottom of hero section */}
+<div className="absolute bottom-1 md:bottom-6 left-0 right-0 z-10">
+  <div className="container mx-auto px-4">
+    <div className="flex flex-wrap justify-center items-center gap-3 md:gap-6 text-green-100 animate-fade-in-up" style={{ animationDelay: '0.6s' }}>
+      {[
+        { icon: CheckCircle, text: "Direct Farm Connections" },
+        { icon: CheckCircle, text: "Real-Time Order Tracking" },
+        { icon: CheckCircle, text: "Blockchain Transparency" }
+      ].map((item, index) => (
+        <div key={index} className="flex items-center gap-1 md:gap-2 animate-bounce-subtle" style={{ animationDelay: `${index * 0.2}s` }}>
+          <item.icon className="h-4 md:h-5 w-4 md:w-5 animate-pulse" />
+          <span className="text-xs md:text-sm font-medium">{item.text}</span>
         </div>
+      ))}
+    </div>
+  </div>
+</div>
       </section>
 
       {/* Enhanced Value Propositions */}
@@ -522,7 +527,7 @@ const Home = () => {
               {
                 icon: MessageSquare,
                 title: "Chat With Your Farmers",
-                description: "Ask about growing methods, get cooking tips, or request specific items. Build real relationships with the people growing your food.",
+                description: "Connect directly with small-scale farmers in your area who grow amazing produce but lack the marketing reach of big operations. Discover family farms, specialty growers, and artisan producers right in your backyard.",
                 color: "blue"
               },
               {
@@ -537,7 +542,7 @@ const Home = () => {
                 description: "Support crowdfunding campaigns for new equipment, sustainable practices, or farm expansion. Be part of agriculture's future.",
                 color: "indigo"
               }
-            ].map((item, index) => (
+              ].map((item, index) => (
                 <Card 
                   key={index}
                   className={`group mobile-click-card transition-all duration-500 ease-out hover:shadow-2xl border-2 hover:border-green-300 bg-gradient-to-br from-white to-green-50/30 scroll-animate will-change-transform ${triggeredCards.has(index) ? 'mobile-triggered' : ''} ${triggeredCards.has(index) && clickedCard === index ? 'mobile-click-active' : ''}`}
@@ -674,30 +679,37 @@ const Home = () => {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mt-16">
-            {[
-              {
-                icon: Star,
-                title: "Build Trust & Transparency",
-                description: "Know exactly where your food comes from, how it's grown, and who grows it. Chat directly with farmers about their methods and practices.",
-                accent: "⭐",
-                gradient: "from-yellow-400 to-orange-400"
-              },
-              {
-                icon: Heart,
-                title: "Strengthen Your Community",
-                description: "Every purchase supports local farming families and keeps agricultural traditions alive in your area. Your money stays local and creates jobs.",
-                accent: "💚",
-                gradient: "from-red-400 to-pink-400"
-              },
-              {
-                icon: Award,
-                title: "Quality You Can Taste",
-                description: "Experience the difference that fresh, locally-grown produce makes. No more bland supermarket vegetables - taste food as it's meant to be.",
-                accent: "🏆",
-                gradient: "from-yellow-400 to-amber-400"
-              }
-            ].map((item, index) => (
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 mt-16">
+{[
+  {
+    icon: Star,
+    title: "Build Trust & Transparency",
+    description: "Know exactly where your food comes from, how it's grown, and who grows it. Chat directly with farmers about their methods and practices.",
+    accent: "⭐",
+    gradient: "from-yellow-400 to-orange-400"
+  },
+  {
+    icon: Heart,
+    title: "Strengthen Your Community",
+    description: "Every purchase supports local farming families and keeps agricultural traditions alive in your area. Your money stays local and creates jobs.",
+    accent: "💚",
+    gradient: "from-red-400 to-pink-400"
+  },
+  {
+    icon: Award,
+    title: "Quality You Can Taste",
+    description: "Experience the difference that fresh, locally-grown produce makes. No more bland supermarket vegetables - taste food as it's meant to be.",
+    accent: "🏆",
+    gradient: "from-yellow-400 to-amber-400"
+  },
+  {
+    icon: Network,
+    title: "Truly Decentralized",
+    description: "Works in any community, from city centers to countryside. Gives voice to farmers who can't access traditional markets and connects neighbors who didn't know they lived near amazing local producers.",
+    accent: "🌐",
+    gradient: "from-blue-400 to-indigo-400"
+  }
+].map((item, index) => (
                 <Card key={index} className={`group mobile-click-card p-6 border-2 transition-all duration-500 ease-out hover:shadow-2xl hover:border-green-300 scroll-animate relative overflow-hidden will-change-transform ${triggeredCards.has(index + 10) ? 'mobile-triggered' : ''} ${triggeredCards.has(index + 10) && clickedCard === (index + 10) ? 'mobile-click-active' : ''}`}
                   data-card-index={index + 10}
                   style={{ 
@@ -767,9 +779,9 @@ const Home = () => {
         
         <div className="container mx-auto px-4 text-center relative z-10">
           <h2 className="text-5xl font-bold mb-6 animate-text-glow">Ready to Taste the Difference?</h2>
-          <p className="text-2xl mb-8 max-w-3xl mx-auto opacity-95 leading-relaxed animate-fade-in-up">
-            Join those who've already discovered fresher food, stronger communities, and a more sustainable way to eat.
-          </p>
+<p className="text-2xl mb-8 max-w-3xl mx-auto opacity-95 leading-relaxed animate-fade-in-up">
+  Join a growing decentralized movement where small farmers thrive, communities discover hidden local treasures, and fresh food connects neighbors across every corner of the region.
+</p>
           
           <div className="flex flex-col sm:flex-row gap-6 justify-center mb-12">
             <Link to="/register">
@@ -868,7 +880,7 @@ const Home = () => {
                     { to: "/register", text: "Browse Fresh Produce" },
                     { to: "/campaigns", text: "Support Farm Projects" },
                     { to: "/login", text: "Track Your Orders" },
-                    { to: "/about", text: "Why Choose Local" }
+                    { to: "/about", text: "Why Choose Decentralized" }
                   ].map((link, index) => (
                     <li key={index}>
                       <Link to={link.to} className="hover:text-white hover:translate-x-1 transition-all duration-300 text-sm inline-block">
@@ -890,7 +902,7 @@ const Home = () => {
                     { to: "/register", text: "Start Selling Today" },
                     { to: "/campaigns/create", text: "Launch a Campaign" },
                     { to: "/login", text: "Farmer Dashboard" },
-                    { to: "/about", text: "Success Stories" }
+                    { to: "/about", text: "Why Choose Local" }
                   ].map((link, index) => (
                     <li key={index}>
                       <Link to={link.to} className="hover:text-white hover:translate-x-1 transition-all duration-300 text-sm inline-block">
@@ -911,9 +923,9 @@ const Home = () => {
                 <Leaf className="mr-3 h-7 w-7 text-green-500 group-hover:animate-spin transition-all duration-300" />
                 <span className="group-hover:text-green-400 transition-colors">Farm Direct</span>
               </h3>
-              <p className="text-gray-400 text-lg leading-relaxed mb-6">
-                Connecting communities through fresh, local food. Supporting farmers, delighting customers, building a sustainable future.
-              </p>
+<p className="text-gray-400 text-lg leading-relaxed mb-6">
+  Empowering small farmers everywhere through direct community connections. Our decentralized network ensures that passionate local growers—from urban rooftops to rural fields—can reach customers who value fresh, authentic food, building stronger, more resilient local food systems.
+</p>
               <div className="flex space-x-4">
                 {['f', '@', 'in'].map((social, index) => (
                   <div key={index} className="w-10 h-10 bg-gray-700 rounded-full flex items-center justify-center hover:bg-green-600 transition-all duration-300 cursor-pointer hover:scale-110 hover:rotate-12">
@@ -932,9 +944,10 @@ const Home = () => {
               <ul className="space-y-3 text-gray-400">
                 {[
                   { to: "/register", text: "Browse Fresh Produce" },
-                  { to: "/campaigns", text: "Support Farm Projects" },
+                  { to: "/campaigns/about", text: "Support Farm Projects" },
                   { to: "/login", text: "Track Your Orders" },
-                  { to: "/about", text: "Why Choose Local" }
+                  { to: "/about", text: "Why Choose Decentralized" }
+                  
                 ].map((link, index) => (
                   <li key={index}>
                     <Link to={link.to} className="hover:text-white hover:translate-x-2 transition-all duration-300 text-base inline-block">
@@ -954,9 +967,9 @@ const Home = () => {
               <ul className="space-y-3 text-gray-400">
                 {[
                   { to: "/register", text: "Start Selling Today" },
-                  { to: "/campaigns/create", text: "Launch a Campaign" },
+                  { to: "/campaigns/about", text: "Launch a Campaign" },
                   { to: "/login", text: "Farmer Dashboard" },
-                  { to: "/about", text: "Success Stories" }
+                  { to: "/about", text: "Why Choose Local" }
                 ].map((link, index) => (
                   <li key={index}>
                     <Link to={link.to} className="hover:text-white hover:translate-x-2 transition-all duration-300 text-base inline-block">
