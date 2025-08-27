@@ -5,6 +5,7 @@ import { Toaster } from '@/components/ui/toaster';
 
 // NEW: Civic Auth Components
 import CivicAuthWrapper from './components/auth/CivicAuthProvider';
+import CivicAuthProvider from './components/auth/CivicAuthProvider';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 
@@ -509,13 +510,13 @@ const AppRoutes = () => {
 // UPDATED: Root App component with Civic Auth Wrapper
 const App = () => {
   return (
-    <CivicAuthWrapper>
+    <CivicAuthProvider>
       <AuthProvider>
         <CartProvider>
           <AppRoutes />
         </CartProvider>
       </AuthProvider>
-    </CivicAuthWrapper>
+    </CivicAuthProvider>
   );
 };
 
