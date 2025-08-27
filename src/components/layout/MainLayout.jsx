@@ -1,20 +1,10 @@
-// src/components/layout/MainLayout.jsx - Updated with Farmer Navigation
+// src/components/layout/MainLayout.jsx - Updated for Civic Auth
 import { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
-import { logoutUser } from '../../firebase/auth';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { Avatar, AvatarFallback } from '../ui/avatar';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel 
-} from '../ui/dropdown-menu';
 import { 
   Home, 
   Search, 
@@ -22,68 +12,33 @@ import {
   ShoppingBag,
   Package, 
   MessageSquare, 
-  User, 
-  LogOut, 
   Menu,
   X,
   Shield,
-  Settings,
   Plus,
   Bell,
-  ChevronDown,
   Target,
   Heart,
   MapPin,
-  Users // NEW: Added Users icon for farmers
+  Users
 } from 'lucide-react';
 
-// Import NotificationBell component
-import NotificationBell from '../notifications/NotificationBell';
+// Import Civic Auth components
+import CivicUserButton from '../../components/layout/CivicUserButton';
+import NotificationBell from '../../components/notifications/NotificationBell';
 
 const MainLayout = ({ children }) => {
   const { currentUser, userProfile } = useAuth();
   const { cartCount } = useCart();
   const location = useLocation();
-  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const isAuthenticated = !!currentUser;
   const isRolnik = userProfile?.role === 'rolnik' || userProfile?.role === 'farmer';
   const isKlient = userProfile?.role === 'klient' || userProfile?.role === 'customer';
-  const isAdmin = userProfile?.role === 'admin';
+  const isAdmin = userProfile?.isAdmin || userProfile?.role === 'admin';
 
-  const handleLogout = async () => {
-    try {
-      await logoutUser();
-      navigate('/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
-
-  const getInitials = () => {
-    if (!userProfile) return 'U';
-    const first = userProfile.firstName?.[0] || '';
-    const last = userProfile.lastName?.[0] || '';
-    return (first + last).toUpperCase() || 'U';
-  };
-
-  const getRoleDisplayName = () => {
-    switch (userProfile?.role) {
-      case 'rolnik':
-      case 'farmer':
-        return 'Farmer';
-      case 'klient':
-      case 'customer':
-        return 'Customer';
-      case 'admin':
-        return 'Administrator';
-      default:
-        return 'User';
-    }
-  };
-
-  // UPDATED: Enhanced navigation items with farmer directory
+  // Navigation items configuration
   const navigationItems = [
     {
       name: 'Dashboard',
@@ -97,7 +52,7 @@ const MainLayout = ({ children }) => {
       name: 'Find Farmers',
       href: '/farmers',
       icon: Users,
-      show: isKlient ,
+      show: isKlient || isAdmin,
       description: 'Browse local farmers and their specialties'
     },
     // SEARCH: Show for customers and admins
@@ -105,7 +60,7 @@ const MainLayout = ({ children }) => {
       name: 'Search & Map',
       href: '/search',
       icon: Search,
-      show: isKlient ,
+      show: isKlient || isAdmin,
       description: 'Find local farm products with location-based search'
     },
     // BROWSE: Show for customers and admins
@@ -121,7 +76,7 @@ const MainLayout = ({ children }) => {
       name: 'My Products',
       href: '/products/manage',
       icon: Package,
-      show: isRolnik ,
+      show: isRolnik || isAdmin,
       description: 'Manage your product listings'
     },
     {
@@ -218,7 +173,7 @@ const MainLayout = ({ children }) => {
                 <span className="text-xl font-bold text-green-600">Farm Direct</span>
               </Link>
               
-              {/* Desktop navigation - Shows on 1024px+ (unchanged) */}
+              {/* Desktop navigation - Shows on 1024px+ */}
               <div className="hidden lg:ml-8 lg:flex lg:space-x-1">
                 {visibleNavItems.map((item) => {
                   const Icon = item.icon;
@@ -244,7 +199,7 @@ const MainLayout = ({ children }) => {
               </div>
             </div>
 
-            {/* Right side navigation - Shows on 1024px+ (unchanged) */}
+            {/* Right side navigation - Shows on 1024px+ */}
             <div className="hidden lg:ml-6 lg:flex lg:items-center space-x-3">
               
               {/* Quick Access Buttons for customers */}
@@ -274,7 +229,7 @@ const MainLayout = ({ children }) => {
               <NotificationBell />
               
               {/* Cart for clients */}
-              {isKlient && (
+              {(isKlient || isAdmin) && (
                 <Link 
                   to="/cart" 
                   className="relative p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-md hover:bg-gray-100"
@@ -292,152 +247,11 @@ const MainLayout = ({ children }) => {
                 </Link>
               )}
 
-              {/* User menu */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="relative h-9 w-auto px-3 rounded-md">
-                    <div className="flex items-center space-x-2">
-                      <Avatar className="h-7 w-7">
-                        <AvatarFallback className="bg-green-600 text-white text-sm">
-                          {getInitials()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="hidden xl:block text-left">
-                        <p className="text-sm font-medium text-gray-900">
-                          {userProfile?.firstName || 'User'}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {getRoleDisplayName()}
-                        </p>
-                      </div>
-                      <ChevronDown className="h-4 w-4 text-gray-400" />
-                    </div>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-64" align="end">
-                  <DropdownMenuLabel>
-                    <div className="flex items-center space-x-3 p-2">
-                      <Avatar className="h-10 w-10">
-                        <AvatarFallback className="bg-green-600 text-white">
-                          {getInitials()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-900">
-                          {userProfile?.firstName} {userProfile?.lastName}
-                        </p>
-                        <p className="text-sm text-gray-500 truncate">
-                          {userProfile?.email}
-                        </p>
-                        <Badge variant="secondary" className="text-xs mt-1">
-                          {getRoleDisplayName()}
-                        </Badge>
-                      </div>
-                    </div>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  
-                  <DropdownMenuItem asChild>
-                    <Link to="/profile" className="cursor-pointer">
-                      <User className="mr-3 h-4 w-4" />
-                      <div>
-                        <p className="font-medium">Profile Settings</p>
-                        <p className="text-xs text-gray-500">Manage your account</p>
-                      </div>
-                    </Link>
-                  </DropdownMenuItem>
-                  
-                  <DropdownMenuItem asChild>
-                    <Link to="/notifications" className="cursor-pointer">
-                      <Bell className="mr-3 h-4 w-4" />
-                      <div>
-                        <p className="font-medium">Notifications</p>
-                        <p className="text-xs text-gray-500">View all notifications</p>
-                      </div>
-                    </Link>
-                  </DropdownMenuItem>
-                  
-                  {/* NEW: Customer-specific menu items */}
-                  {(isKlient || isAdmin) && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
-                        <Link to="/farmers" className="cursor-pointer">
-                          <Users className="mr-3 h-4 w-4" />
-                          <div>
-                            <p className="font-medium">Find Farmers</p>
-                            <p className="text-xs text-gray-500">Browse local farmers</p>
-                          </div>
-                        </Link>
-                      </DropdownMenuItem>
-                      
-                      <DropdownMenuItem asChild>
-                        <Link to="/search" className="cursor-pointer">
-                          <Search className="mr-3 h-4 w-4" />
-                          <div>
-                            <p className="font-medium">Search & Map</p>
-                            <p className="text-xs text-gray-500">Find products near you</p>
-                          </div>
-                        </Link>
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                  
-                  {/* Farmer-specific menu items */}
-                  {(isRolnik || isAdmin) && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
-                        <Link to="/notifications/create" className="cursor-pointer">
-                          <MessageSquare className="mr-3 h-4 w-4" />
-                          <div>
-                            <p className="font-medium">Send Notifications</p>
-                            <p className="text-xs text-gray-500">Notify your customers</p>
-                          </div>
-                        </Link>
-                      </DropdownMenuItem>
-                      
-                      <DropdownMenuItem asChild>
-                        <Link to="/farmer/location" className="cursor-pointer">
-                          <MapPin className="mr-3 h-4 w-4" />
-                          <div>
-                            <p className="font-medium">Set Farm Location</p>
-                            <p className="text-xs text-gray-500">Update your farm address</p>
-                          </div>
-                        </Link>
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                  
-                  {/* Admin menu items */}
-                  {isAdmin && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
-                        <Link to="/admin" className="cursor-pointer">
-                          <Shield className="mr-3 h-4 w-4" />
-                          <div>
-                            <p className="font-medium">Admin Panel</p>
-                            <p className="text-xs text-gray-500">System administration</p>
-                          </div>
-                        </Link>
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                  
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-600 focus:text-red-600">
-                    <LogOut className="mr-3 h-4 w-4" />
-                    <div>
-                      <p className="font-medium">Sign Out</p>
-                      <p className="text-xs">Sign out of your account</p>
-                    </div>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {/* UPDATED: Use Civic User Button */}
+              <CivicUserButton />
             </div>
 
-            {/* Mobile menu button - CHANGED: lg:hidden instead of sm:hidden (shows on <1024px instead of <640px) */}
+            {/* Mobile menu button - Shows on <1024px */}
             <div className="lg:hidden flex items-center space-x-2">
               
               {/* Mobile Quick Actions */}
@@ -456,7 +270,7 @@ const MainLayout = ({ children }) => {
               <NotificationBell />
               
               {/* Mobile cart for clients */}
-              {isKlient && (
+              {(isKlient || isAdmin) && (
                 <Link to="/cart" className="relative p-2 text-gray-400">
                   <ShoppingCart className="h-6 w-6" />
                   {cartCount > 0 && (
@@ -485,7 +299,7 @@ const MainLayout = ({ children }) => {
           </div>
         </div>
 
-        {/* Mobile navigation menu - CHANGED: lg:hidden instead of sm:hidden (shows on <1024px instead of <640px) */}
+        {/* Mobile navigation menu - Shows on <1024px */}
         {mobileMenuOpen && (
           <div className="lg:hidden bg-white border-t">
             <div className="pt-2 pb-3 space-y-1">
@@ -551,9 +365,9 @@ const MainLayout = ({ children }) => {
                   </Link>
                   
                   <Link
-                    to="/farmer/location"
+                    to="/location-picker"
                     className={`flex items-center pl-3 pr-4 py-3 sm:py-2 border-l-4 text-base sm:text-sm font-medium transition-colors ${
-                      location.pathname === '/farmer/location'
+                      location.pathname === '/location-picker'
                         ? 'bg-green-50 border-green-500 text-green-700'
                         : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
                     }`}
@@ -569,69 +383,29 @@ const MainLayout = ({ children }) => {
               )}
             </div>
             
-            {/* Mobile user section with Profile Settings button */}
+            {/* UPDATED: Mobile user section - Simplified since CivicUserButton handles the user menu */}
             <div className="pt-4 pb-3 border-t border-gray-200">
-              <div className="px-3 py-3 sm:py-2 bg-gray-50 mx-3 rounded-lg">
+              <div className="px-4">
+                {/* UPDATED: Use Civic User Button in mobile view */}
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center flex-1">
-                    <div className="flex-shrink-0">
-                      <Avatar className="h-10 w-10 sm:h-8 sm:w-8">
-                        <AvatarFallback className="bg-green-600 text-white">
-                          {getInitials()}
-                        </AvatarFallback>
-                      </Avatar>
+                  <div className="flex items-center space-x-3">
+                    <div className="flex-shrink-0 text-sm text-gray-600">
+                      {userProfile?.displayName || currentUser?.email || 'User'}
                     </div>
-                    <div className="ml-3 sm:ml-2 flex-1">
-                      <div className="text-sm sm:text-xs font-medium text-gray-800">
-                        {userProfile?.firstName} {userProfile?.lastName}
-                      </div>
-                      <div className="text-xs sm:text-[11px] font-medium text-gray-500">
-                        {userProfile?.email}
-                      </div>
-                      <Badge variant="secondary" className="text-xs sm:text-[10px] mt-1">
-                        {getRoleDisplayName()}
-                      </Badge>
-                    </div>
+                    {userProfile?.isAdmin && (
+                      <Badge variant="destructive" className="text-xs">Admin</Badge>
+                    )}
+                    {userProfile?.role === 'rolnik' && (
+                      <Badge variant="default" className="text-xs">Farmer</Badge>
+                    )}
+                    {userProfile?.role === 'klient' && (
+                      <Badge variant="secondary" className="text-xs">Customer</Badge>
+                    )}
                   </div>
                   
-                  {/* Profile Settings Button */}
-                  <Link
-                    to="/profile"
-                    className="flex items-center px-3 py-2 sm:px-2 sm:py-1 rounded-md bg-white hover:bg-gray-100 transition-colors shadow-sm border"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <User className="w-4 h-4 sm:w-3 sm:h-3 mr-2 sm:mr-1 text-gray-600" />
-                    <div>
-                      <p className="text-sm sm:text-xs font-medium text-gray-700">Profile</p>
-                      <p className="text-xs sm:text-[10px] text-gray-500">Manage account</p>
-                    </div>
-                  </Link>
+                  {/* Mobile Civic User Button */}
+                  <CivicUserButton />
                 </div>
-              </div>
-              
-              <div className="space-y-1 mt-3">
-                
-                {isAdmin && (
-                  <Link
-                    to="/admin"
-                    className="flex items-center px-4 py-2 sm:py-1 text-base sm:text-sm font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <Shield className="mr-3 sm:mr-2 h-5 w-5 sm:h-4 sm:w-4" />
-                    Admin Panel
-                  </Link>
-                )}
-                
-                <button
-                  onClick={() => {
-                    handleLogout();
-                    setMobileMenuOpen(false);
-                  }}
-                  className="flex items-center w-full px-4 py-2 sm:py-1 text-base sm:text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors"
-                >
-                  <LogOut className="mr-3 sm:mr-2 h-5 w-5 sm:h-4 sm:w-4" />
-                  Sign Out
-                </button>
               </div>
             </div>
           </div>
