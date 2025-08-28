@@ -1,5 +1,5 @@
 // src/services/civicAuthService.js
-// REAL Civic Auth implementation using the correct @civic/auth React API
+// Compatibility bridge for Civic Auth - updated to work properly with React hooks
 
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -10,98 +10,142 @@ class CivicAuthService {
     this.authStateListeners = new Set();
     this.initialized = false;
     this.clientId = 'b2c9fa1e-d978-4e3d-9a3d-4a36d2ef49e6';
-    this.civicHooks = null;
   }
 
-  // Initialize with REAL @civic/auth React hooks
+  // Initialize - now just logs helpful info
   async initialize() {
     if (this.initialized) return;
 
+    console.log('🚀 Civic Auth Service initialized as compatibility bridge');
+    console.log('✅ Use @civic/auth React hooks in components instead of service methods');
+    console.log('📖 Client ID:', this.clientId);
+    
+    this.initialized = true;
+  }
+
+  // Helper method to create Firebase-compatible user from Civic user
+  static createFirebaseCompatibleUser(civicUser) {
+    if (!civicUser) return null;
+    
+    // Helper function to safely handle undefined values
+    const safeValue = (value, defaultValue = null) => {
+      return value !== undefined ? value : defaultValue;
+    };
+    
+    const user = {
+      uid: civicUser.id,
+      email: safeValue(civicUser.email, ''),
+      displayName: civicUser.name || `${civicUser.given_name || ''} ${civicUser.family_name || ''}`.trim() || 'Anonymous User',
+      photoURL: safeValue(civicUser.picture),
+      emailVerified: !!civicUser.email_verified,
+      authProvider: 'civic',
+      civicId: civicUser.id,
+      createdAt: new Date()
+    };
+
+    // Only add optional fields if they exist (avoid undefined values)
+    if (civicUser.given_name !== undefined) {
+      user.given_name = civicUser.given_name;
+    }
+    if (civicUser.family_name !== undefined) {
+      user.family_name = civicUser.family_name;
+    }
+    if (civicUser.picture !== undefined) {
+      user.picture = civicUser.picture;
+    }
+    if (civicUser.sid !== undefined) {
+      user.sid = civicUser.sid;
+    }
+    if (civicUser.jti !== undefined) {
+      user.jti = civicUser.jti;
+    }
+    
+    return user;
+  }
+
+  // Save Civic user to Firestore
+  static async saveCivicUserToFirestore(civicUser) {
     try {
-      console.log('🚀 Initializing REAL @civic/auth React implementation');
-      console.log('Client ID:', this.clientId);
+      console.log('💾 Saving Civic user to Firestore:', civicUser);
+
+      const firebaseUser = CivicAuthService.createFirebaseCompatibleUser(civicUser);
+      const userRef = doc(db, 'users', firebaseUser.uid);
       
-      // Import the real @civic/auth React hooks
-      const civicModule = await import('@civic/auth/react');
-      console.log('✅ @civic/auth/react loaded, exports:', Object.keys(civicModule));
+      // Check if user already exists
+      const userDoc = await getDoc(userRef);
       
-      // Store the hooks for use
-      this.civicHooks = civicModule;
-      this.initialized = true;
-      
-      console.log('✅ REAL Civic Auth React hooks ready');
-      console.log('📖 Note: Full integration requires CivicAuthProvider in your React app');
-      
+      if (userDoc.exists()) {
+        // Update existing user
+        await setDoc(userRef, {
+          ...firebaseUser,
+          lastLoginAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+        console.log('✅ Existing Civic user updated in Firestore');
+      } else {
+        // Create new user
+        await setDoc(userRef, {
+          ...firebaseUser,
+          createdAt: serverTimestamp(),
+          lastLoginAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          role: 'customer', // Default role
+          profileComplete: false
+        });
+        console.log('✅ New Civic user created in Firestore');
+      }
+
+      return firebaseUser;
     } catch (error) {
-      console.error('❌ REAL Civic Auth React initialization failed:', error);
-      throw new Error(`Failed to load @civic/auth/react: ${error.message}`);
+      console.error('❌ Error saving Civic user:', error);
+      throw error;
     }
   }
 
-  // Bridge method to work with React hooks
-  // This service now acts as a bridge between React hooks and Firebase Auth compatibility
+  // Deprecated methods that guide developers to use React hooks
   async signInWithCivic() {
-    if (!this.initialized) await this.initialize();
-
-    return new Promise((resolve, reject) => {
-      const errorMessage = `
-🚨 CIVIC AUTH INTEGRATION REQUIRED 🚨
-
-The real @civic/auth uses React Provider pattern, not service methods.
-
-TO PROPERLY INTEGRATE:
-
-1. Wrap your app with CivicAuthProvider:
-   import { CivicAuthProvider } from '@civic/auth/react';
-   
-   <CivicAuthProvider clientId="${this.clientId}">
-     <YourApp />
-   </CivicAuthProvider>
-
-2. Use the useUser hook in components:
-   import { useUser } from '@civic/auth/react';
-   
-   function LoginButton() {
-     const { user, signIn, signOut } = useUser();
-     return (
-       <div>
-         {!user && <button onClick={signIn}>Sign In</button>}
-         {user && <button onClick={signOut}>Sign Out</button>}
-       </div>
-     );
-   }
-
-3. Update your auth service to work with Civic's React pattern.
-
-CURRENT ISSUE:
-You're trying to use service-based auth, but @civic/auth is React-hook based.
-`;
+    console.warn('⚠️ civicAuthService.signInWithCivic() is deprecated');
+    console.log('✅ Use the useUser hook from @civic/auth/react instead:');
+    console.log(`
+    import { useUser } from '@civic/auth/react';
+    
+    function LoginComponent() {
+      const { user, signIn, signOut } = useUser();
       
-      console.error(errorMessage);
-      reject(new Error('Civic Auth requires React Provider integration. See console for details.'));
-    });
+      return (
+        <button onClick={signIn}>
+          Sign In with Civic
+        </button>
+      );
+    }
+    `);
+    
+    throw new Error('Use useUser hook from @civic/auth/react instead of service methods');
   }
 
-  // Compatibility methods that explain the required changes
   async signUpWithCivic() {
     return this.signInWithCivic();
   }
 
   async signOut() {
-    console.log('⚠️ signOut should be called from useUser hook, not service');
+    console.warn('⚠️ civicAuthService.signOut() is deprecated');
+    console.log('✅ Use signOut from useUser hook instead');
     throw new Error('Use signOut from useUser hook instead of service method');
   }
 
   getCurrentUser() {
-    console.log('⚠️ getCurrentUser should be accessed from useUser hook');
+    console.warn('⚠️ civicAuthService.getCurrentUser() is deprecated');
+    console.log('✅ Use user from useUser hook instead');
     return this.currentUser;
   }
 
   isSignedIn() {
+    console.warn('⚠️ civicAuthService.isSignedIn() is deprecated');
+    console.log('✅ Check user from useUser hook instead');
     return !!this.currentUser;
   }
 
-  // Compatibility methods
+  // Compatibility methods - all redirect to proper React hook usage
   isAuthenticated() {
     return this.isSignedIn();
   }
@@ -126,7 +170,7 @@ You're trying to use service-based auth, but @civic/auth is React-hook based.
     return this.signUpWithCivic();
   }
 
-  // Auth state management (for compatibility)
+  // Auth state management (for compatibility with existing code)
   onAuthStateChanged(callback) {
     this.authStateListeners.add(callback);
     callback(this.currentUser);
@@ -152,120 +196,10 @@ You're trying to use service-based auth, but @civic/auth is React-hook based.
     this.notifyAuthStateChange(this.currentUser);
   }
 
-  // Helper method to create Firebase-compatible user from Civic user
-  static createFirebaseCompatibleUser(civicUser) {
-    return {
-      uid: civicUser.id,
-      email: civicUser.email || '',
-      displayName: civicUser.name || `${civicUser.given_name || ''} ${civicUser.family_name || ''}`.trim(),
-      photoURL: civicUser.picture || null,
-      emailVerified: !!civicUser.email,
-      phoneNumber: '',
-      isAnonymous: false,
-      metadata: {
-        creationTime: civicUser.updated_at || new Date().toISOString(),
-        lastSignInTime: new Date().toISOString()
-      },
-      providerData: [{
-        providerId: 'civic',
-        uid: civicUser.id,
-        email: civicUser.email || '',
-        displayName: civicUser.name || '',
-        photoURL: civicUser.picture || null
-      }],
-      civicData: {
-        ...civicUser,
-        provider: 'civic_real_react',
-        integratedAt: new Date().toISOString()
-      }
-    };
-  }
-
-  // Helper method to save Civic user to Firestore
-  static async saveUserToFirestore(civicUser) {
-    try {
-      const firebaseUser = this.createFirebaseCompatibleUser(civicUser);
-      const userDocRef = doc(db, 'users', firebaseUser.uid);
-      const existingDoc = await getDoc(userDocRef);
-
-      const baseUserData = {
-        id: firebaseUser.uid,
-        email: firebaseUser.email,
-        displayName: firebaseUser.displayName,
-        authProvider: 'civic_real_react',
-        isVerified: true,
-        updatedAt: serverTimestamp(),
-        lastLogin: serverTimestamp()
-      };
-
-      if (existingDoc.exists()) {
-        await setDoc(userDocRef, baseUserData, { merge: true });
-        console.log('✅ REAL Civic user updated in Firestore');
-      } else {
-        const newUserData = {
-          ...baseUserData,
-          firstName: civicUser.given_name || '',
-          lastName: civicUser.family_name || '',
-          role: 'klient',
-          profileImage: civicUser.picture || '',
-          createdAt: serverTimestamp(),
-
-          location: {
-            address: '',
-            coordinates: { lat: 0, lng: 0 },
-            geoHash: '',
-            city: '',
-            region: '',
-            country: '',
-            deliveryAddresses: []
-          },
-
-          verification: {
-            provider: 'civic_real_react',
-            civicId: civicUser.id,
-            verifiedAt: new Date().toISOString()
-          },
-
-          notificationPreferences: {
-            email: {
-              orderUpdates: true,
-              newMessages: true,
-              lowStock: false,
-              reviews: true,
-              marketing: false
-            },
-            sms: {
-              orderUpdates: false,
-              newMessages: false,
-              lowStock: false,
-              reviews: false
-            },
-            inApp: {
-              orderUpdates: true,
-              newMessages: true,
-              lowStock: true,
-              reviews: true,
-              marketing: true
-            }
-          },
-
-          customerInfo: {
-            preferredCategories: [],
-            dietaryRestrictions: [],
-            averageOrderValue: 0,
-            totalOrders: 0
-          }
-        };
-
-        await setDoc(userDocRef, newUserData);
-        console.log('✅ REAL Civic user created in Firestore');
-      }
-
-      return firebaseUser;
-    } catch (error) {
-      console.error('❌ Error saving real Civic user:', error);
-      throw error;
-    }
+  // Set current user (called by CivicAuthProvider bridge)
+  setCurrentUser(user) {
+    this.currentUser = user;
+    this.notifyAuthStateChange(user);
   }
 }
 
@@ -276,31 +210,26 @@ const civicAuthService = new CivicAuthService();
 export const auth = {
   currentUser: null,
   onAuthStateChanged: (callback) => civicAuthService.onAuthStateChanged(callback),
-  signOut: () => civicAuthService.signOut(),
+  signOut: () => {
+    console.warn('⚠️ auth.signOut() should be replaced with useUser hook');
+    throw new Error('Use signOut from useUser hook instead');
+  },
   updateCurrentUser: (user) => {
     auth.currentUser = user;
+    civicAuthService.setCurrentUser(user);
     return Promise.resolve();
   }
 };
 
-civicAuthService.onAuthStateChanged((user) => {
-  auth.currentUser = user;
-});
-
 // Initialize
 civicAuthService.initialize().catch(error => {
-  console.error('🚨 REAL Civic Auth React initialization failed:', error.message);
+  console.error('Civic Auth Service initialization failed:', error.message);
 });
 
-// Export service for compatibility
+// Export service for compatibility (but methods will guide to proper usage)
 export { civicAuthService };
 export default civicAuthService;
 
-// Export individual methods (they will show integration guidance)
-export const isAuthenticated = () => civicAuthService.isAuthenticated();
-export const loginUser = () => civicAuthService.loginUser();
-export const registerUser = () => civicAuthService.registerUser();
-export const signInWithCivic = () => civicAuthService.signInWithCivic();
-export const signUpWithCivic = () => civicAuthService.signUpWithCivic();
-export const signOut = () => civicAuthService.signOut();
-export const getCurrentUser = () => civicAuthService.getCurrentUser();
+// Export helper methods that still work
+export const createFirebaseCompatibleUser = CivicAuthService.createFirebaseCompatibleUser;
+export const saveCivicUserToFirestore = CivicAuthService.saveCivicUserToFirestore;

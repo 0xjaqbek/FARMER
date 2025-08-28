@@ -1,7 +1,8 @@
-// src/components/auth/CivicRegisterForm.jsx
-import { useState } from 'react';
+// src/components/auth/CivicRegisterForm.jsx - Updated for Civic Auth React hooks
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { civicAuthService } from '../../services/civicAuthService';
+import { useUser } from '@civic/auth/react'; // Use Civic Auth hook directly
+import { updateUserProfile } from '../../services/authService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,10 +30,12 @@ import {
 } from 'lucide-react';
 
 const CivicRegisterForm = () => {
+  // Use Civic Auth React hook instead of service
+  const { user: civicUser, signIn, isLoading: civicLoading, error: civicError } = useUser();
+  
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [civicUser, setCivicUser] = useState(null);
   const navigate = useNavigate();
   
   // Form data for additional profile info
@@ -68,33 +71,44 @@ const CivicRegisterForm = () => {
     { number: 4, title: 'Confirmation', description: 'Review and submit' }
   ];
 
-  const handleCivicAuth = async () => {
-    try {
-      setLoading(true);
-      setError('');
-      
-      console.log('Starting Civic registration...');
-      
-      // First, authenticate with Civic
-      const result = await civicAuthService.loginUser();
-      console.log('Civic auth successful:', result);
-      
-      setCivicUser(result.user);
+  // Handle Civic user authentication success
+  useEffect(() => {
+    if (civicUser && !civicLoading) {
+      console.log('✅ Civic user authenticated:', civicUser.email);
       
       // Pre-fill form with Civic data
       setFormData(prev => ({
         ...prev,
-        firstName: result.user.given_name || '',
-        lastName: result.user.family_name || '',
+        firstName: civicUser.given_name || '',
+        lastName: civicUser.family_name || '',
       }));
       
+      // Move to next step
       setCurrentStep(2);
+    }
+  }, [civicUser, civicLoading]);
+
+  // Handle Civic errors
+  useEffect(() => {
+    if (civicError) {
+      console.error('Civic Auth Error:', civicError);
+      setError(civicError.message || 'Authentication failed. Please try again.');
+    }
+  }, [civicError]);
+
+  const handleCivicAuth = async () => {
+    try {
+      setError('');
+      console.log('Starting Civic registration...');
+      
+      // Use the signIn method from the useUser hook
+      await signIn();
+      
+      // The useEffect above will handle moving to the next step
       
     } catch (error) {
       console.error('Civic auth error:', error);
       setError(error.message || 'Authentication failed. Please try again.');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -165,24 +179,25 @@ const CivicRegisterForm = () => {
 
     try {
       setLoading(true);
+      setError('');
       
-      // Complete registration with additional profile data
-      const result = await civicAuthService.registerUser(
-        civicUser.email,
-        null, // No password needed with Civic
-        {
-          ...formData,
-          displayName: `${formData.firstName} ${formData.lastName}`
-        }
-      );
+      console.log('🚀 Completing registration with profile data...');
       
-      console.log('Registration complete:', result);
+      // Update user profile in Firestore with additional data
+      await updateUserProfile(civicUser.id, {
+        ...formData,
+        displayName: `${formData.firstName} ${formData.lastName}`,
+        profileComplete: true,
+        registrationCompleted: true
+      });
+      
+      console.log('✅ Registration complete');
       
       // Navigate to dashboard
       navigate('/dashboard');
       
     } catch (error) {
-      console.error('Registration completion error:', error);
+      console.error('❌ Registration completion error:', error);
       setError(error.message || 'Failed to complete registration');
     } finally {
       setLoading(false);
@@ -197,7 +212,7 @@ const CivicRegisterForm = () => {
             <div className="text-center space-y-2">
               <h3 className="text-xl font-semibold">Create Your Account</h3>
               <p className="text-gray-600">
-                Sign in with your preferred method to get started
+                Sign in with Civic Auth to get started securely
               </p>
             </div>
 
@@ -210,9 +225,9 @@ const CivicRegisterForm = () => {
             <Button 
               onClick={handleCivicAuth}
               className="w-full h-12 text-lg font-semibold bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700"
-              disabled={loading}
+              disabled={civicLoading || loading}
             >
-              {loading ? (
+              {(civicLoading || loading) ? (
                 <div className="flex items-center gap-2">
                   <Loader2 className="w-5 h-5 animate-spin" />
                   Connecting...
@@ -261,47 +276,62 @@ const CivicRegisterForm = () => {
             <div className="text-center space-y-2">
               <h3 className="text-xl font-semibold">Choose Your Account Type</h3>
               <p className="text-gray-600">
-                Select how you'll use Farm Direct
+                This helps us customize your experience
               </p>
             </div>
 
-            <RadioGroup 
-              value={formData.role} 
+            {civicUser && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-center gap-2">
+                  <Check className="w-5 h-5 text-green-600" />
+                  <span className="font-medium text-green-800">
+                    Authenticated as {civicUser.email}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {errors.role && (
+              <Alert variant="destructive">
+                <AlertDescription>{errors.role}</AlertDescription>
+              </Alert>
+            )}
+
+            <RadioGroup
+              value={formData.role}
               onValueChange={(value) => handleInputChange('role', value)}
               className="space-y-4"
             >
-              <div className={`border rounded-lg p-4 ${formData.role === 'klient' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
-                <div className="flex items-start gap-3">
-                  <RadioGroupItem value="klient" id="klient" className="mt-1" />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
+              <div className="flex items-start space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                <RadioGroupItem value="klient" id="klient" className="mt-1" />
+                <div className="flex-1">
+                  <Label htmlFor="klient" className="cursor-pointer">
+                    <div className="flex items-center gap-2 mb-2">
                       <ShoppingCart className="w-5 h-5 text-blue-600" />
-                      <Label htmlFor="klient" className="font-semibold">Customer</Label>
+                      <span className="font-semibold">Customer</span>
                     </div>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Browse and buy fresh products from local farmers. Support farming projects through crowdfunding.
+                    <p className="text-sm text-gray-600">
+                      I want to buy fresh produce directly from local farmers
                     </p>
-                  </div>
+                  </Label>
                 </div>
               </div>
 
-              <div className={`border rounded-lg p-4 ${formData.role === 'rolnik' ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}>
-                <div className="flex items-start gap-3">
-                  <RadioGroupItem value="rolnik" id="rolnik" className="mt-1" />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
+              <div className="flex items-start space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                <RadioGroupItem value="rolnik" id="rolnik" className="mt-1" />
+                <div className="flex-1">
+                  <Label htmlFor="rolnik" className="cursor-pointer">
+                    <div className="flex items-center gap-2 mb-2">
                       <Sprout className="w-5 h-5 text-green-600" />
-                      <Label htmlFor="rolnik" className="font-semibold">Farmer</Label>
+                      <span className="font-semibold">Farmer</span>
                     </div>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Sell your products directly to customers. Create crowdfunding campaigns for your farming projects.
+                    <p className="text-sm text-gray-600">
+                      I'm a farmer who wants to sell products and run campaigns
                     </p>
-                  </div>
+                  </Label>
                 </div>
               </div>
             </RadioGroup>
-
-            {errors.role && <p className="text-red-500 text-sm">{errors.role}</p>}
           </div>
         );
 
@@ -311,36 +341,42 @@ const CivicRegisterForm = () => {
             <div className="text-center space-y-2">
               <h3 className="text-xl font-semibold">Complete Your Profile</h3>
               <p className="text-gray-600">
-                Tell us more about yourself
+                Tell us a bit more about yourself
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="firstName">First Name *</Label>
+                <Label htmlFor="firstName">First Name</Label>
                 <Input
                   id="firstName"
                   value={formData.firstName}
                   onChange={(e) => handleInputChange('firstName', e.target.value)}
+                  placeholder="Your first name"
                   className={errors.firstName ? 'border-red-500' : ''}
                 />
-                {errors.firstName && <p className="text-red-500 text-sm mt-1">{errors.firstName}</p>}
+                {errors.firstName && (
+                  <p className="text-sm text-red-600 mt-1">{errors.firstName}</p>
+                )}
               </div>
-              
+
               <div>
-                <Label htmlFor="lastName">Last Name *</Label>
+                <Label htmlFor="lastName">Last Name</Label>
                 <Input
                   id="lastName"
                   value={formData.lastName}
                   onChange={(e) => handleInputChange('lastName', e.target.value)}
+                  placeholder="Your last name"
                   className={errors.lastName ? 'border-red-500' : ''}
                 />
-                {errors.lastName && <p className="text-red-500 text-sm mt-1">{errors.lastName}</p>}
+                {errors.lastName && (
+                  <p className="text-sm text-red-600 mt-1">{errors.lastName}</p>
+                )}
               </div>
             </div>
 
             <div>
-              <Label htmlFor="phone">Phone Number</Label>
+              <Label htmlFor="phone">Phone Number (Optional)</Label>
               <Input
                 id="phone"
                 value={formData.phone}
@@ -349,25 +385,28 @@ const CivicRegisterForm = () => {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="city">City *</Label>
+                <Label htmlFor="city">City</Label>
                 <Input
                   id="city"
                   value={formData.address.city}
                   onChange={(e) => handleInputChange('address.city', e.target.value)}
+                  placeholder="Your city"
                   className={errors['address.city'] ? 'border-red-500' : ''}
                 />
-                {errors['address.city'] && <p className="text-red-500 text-sm mt-1">{errors['address.city']}</p>}
+                {errors['address.city'] && (
+                  <p className="text-sm text-red-600 mt-1">{errors['address.city']}</p>
+                )}
               </div>
-              
+
               <div>
-                <Label htmlFor="state">State/Region</Label>
+                <Label htmlFor="state">State/Province</Label>
                 <Input
                   id="state"
                   value={formData.address.state}
                   onChange={(e) => handleInputChange('address.state', e.target.value)}
-                  placeholder="Pomerania"
+                  placeholder="Your state"
                 />
               </div>
             </div>
@@ -377,18 +416,21 @@ const CivicRegisterForm = () => {
                 <h4 className="font-semibold text-green-800">Farm Information</h4>
                 
                 <div>
-                  <Label htmlFor="farmName">Farm Name *</Label>
+                  <Label htmlFor="farmName">Farm Name</Label>
                   <Input
                     id="farmName"
                     value={formData.farmInfo.farmName}
                     onChange={(e) => handleInputChange('farmInfo.farmName', e.target.value)}
+                    placeholder="Your farm name"
                     className={errors['farmInfo.farmName'] ? 'border-red-500' : ''}
                   />
-                  {errors['farmInfo.farmName'] && <p className="text-red-500 text-sm mt-1">{errors['farmInfo.farmName']}</p>}
+                  {errors['farmInfo.farmName'] && (
+                    <p className="text-sm text-red-600 mt-1">{errors['farmInfo.farmName']}</p>
+                  )}
                 </div>
 
                 <div>
-                  <Label htmlFor="farmSize">Farm Size</Label>
+                  <Label htmlFor="farmSize">Farm Size (Optional)</Label>
                   <Input
                     id="farmSize"
                     value={formData.farmInfo.farmSize}
@@ -400,15 +442,12 @@ const CivicRegisterForm = () => {
             )}
 
             <div>
-              <Label htmlFor="bio">About You</Label>
+              <Label htmlFor="bio">Bio (Optional)</Label>
               <Textarea
                 id="bio"
                 value={formData.bio}
                 onChange={(e) => handleInputChange('bio', e.target.value)}
-                placeholder={formData.role === 'rolnik' 
-                  ? "Tell customers about your farming practices and values..."
-                  : "Tell us about your interest in local food and farming..."
-                }
+                placeholder="Tell us about yourself..."
                 rows={3}
               />
             </div>
@@ -419,70 +458,30 @@ const CivicRegisterForm = () => {
         return (
           <div className="space-y-6">
             <div className="text-center space-y-2">
-              <h3 className="text-xl font-semibold">Review Your Information</h3>
+              <h3 className="text-xl font-semibold">Review & Confirm</h3>
               <p className="text-gray-600">
-                Please review your details before creating your account
+                Please review your information and accept our terms
               </p>
             </div>
 
-            <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
+            <div className="bg-gray-50 p-4 rounded-lg space-y-3">
               <div>
-                <h4 className="font-semibold">Account Information</h4>
-                <p className="text-sm text-gray-600">
-                  {formData.firstName} {formData.lastName} • {civicUser?.email}
-                </p>
-                <p className="text-sm text-gray-600">
-                  Role: {formData.role === 'klient' ? 'Customer' : 'Farmer'}
-                </p>
+                <strong>Name:</strong> {formData.firstName} {formData.lastName}
               </div>
-
+              <div>
+                <strong>Email:</strong> {civicUser?.email}
+              </div>
+              <div>
+                <strong>Role:</strong> {formData.role === 'rolnik' ? 'Farmer' : 'Customer'}
+              </div>
+              <div>
+                <strong>Location:</strong> {formData.address.city}, {formData.address.state}
+              </div>
               {formData.role === 'rolnik' && formData.farmInfo.farmName && (
                 <div>
-                  <h4 className="font-semibold">Farm Information</h4>
-                  <p className="text-sm text-gray-600">
-                    {formData.farmInfo.farmName}
-                  </p>
+                  <strong>Farm:</strong> {formData.farmInfo.farmName}
                 </div>
               )}
-
-              <div>
-                <h4 className="font-semibold">Location</h4>
-                <p className="text-sm text-gray-600">
-                  {formData.address.city}, {formData.address.state}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="terms"
-                  checked={formData.termsAccepted}
-                  onCheckedChange={(checked) => handleInputChange('termsAccepted', checked)}
-                />
-                <Label htmlFor="terms" className="text-sm">
-                  I accept the{' '}
-                  <button className="text-blue-600 hover:underline">
-                    Terms of Service
-                  </button>{' '}
-                  and{' '}
-                  <button className="text-blue-600 hover:underline">
-                    Privacy Policy
-                  </button>
-                </Label>
-              </div>
-              {errors.termsAccepted && <p className="text-red-500 text-sm">{errors.termsAccepted}</p>}
-
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="marketing"
-                  checked={formData.marketingConsent}
-                  onCheckedChange={(checked) => handleInputChange('marketingConsent', checked)}
-                />
-                <Label htmlFor="marketing" className="text-sm">
-                  Send me updates about new features and local farming news
-                </Label>
-              </div>
             </div>
 
             {error && (
@@ -490,6 +489,43 @@ const CivicRegisterForm = () => {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
+
+            <div className="space-y-4">
+              <div className="flex items-start space-x-2">
+                <Checkbox
+                  id="terms"
+                  checked={formData.termsAccepted}
+                  onCheckedChange={(checked) => handleInputChange('termsAccepted', checked)}
+                  className={errors.termsAccepted ? 'border-red-500' : ''}
+                />
+                <div>
+                  <Label htmlFor="terms" className="text-sm">
+                    I accept the{' '}
+                    <a href="/terms" className="text-blue-600 hover:underline" target="_blank">
+                      Terms of Service
+                    </a>{' '}
+                    and{' '}
+                    <a href="/privacy" className="text-blue-600 hover:underline" target="_blank">
+                      Privacy Policy
+                    </a>
+                  </Label>
+                  {errors.termsAccepted && (
+                    <p className="text-sm text-red-600 mt-1">{errors.termsAccepted}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-start space-x-2">
+                <Checkbox
+                  id="marketing"
+                  checked={formData.marketingConsent}
+                  onCheckedChange={(checked) => handleInputChange('marketingConsent', checked)}
+                />
+                <Label htmlFor="marketing" className="text-sm text-gray-600">
+                  I'd like to receive updates about new features and promotions (optional)
+                </Label>
+              </div>
+            </div>
           </div>
         );
 
@@ -499,112 +535,77 @@ const CivicRegisterForm = () => {
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-center">
-            Join Farm Direct
-          </CardTitle>
-          
-          {/* Progress Indicator */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              {steps.map((step) => {
-                const isCompleted = currentStep > step.number;
-                const isActive = currentStep === step.number;
-                
-                return (
-                  <div key={step.number} className="flex flex-col items-center flex-1">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${
-                      isCompleted ? 'bg-green-500 border-green-500 text-white' :
-                      isActive ? 'bg-blue-500 border-blue-500 text-white' :
-                      'bg-gray-200 border-gray-300 text-gray-500'
-                    }`}>
-                      {isCompleted ? <Check className="w-5 h-5" /> : step.number}
-                    </div>
-                    <div className="text-center mt-2">
-                      <p className={`text-sm font-medium ${isActive ? 'text-blue-600' : 'text-gray-500'}`}>
-                        {step.title}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <Progress value={(currentStep / steps.length) * 100} className="h-2" />
+    <Card className="w-full max-w-2xl mx-auto">
+      <CardHeader>
+        <div className="flex justify-between items-center mb-4">
+          <CardTitle className="text-2xl">Create Account</CardTitle>
+          <div className="text-sm text-gray-500">
+            Step {currentStep} of {steps.length}
           </div>
-        </CardHeader>
+        </div>
         
-        <CardContent>
-          <div className="min-h-96">
-            {renderStepContent()}
-          </div>
-          
-          {/* Navigation Buttons */}
-          {currentStep > 1 && (
-            <div className="flex justify-between pt-6 border-t mt-6">
-              <Button
-                variant="outline"
-                onClick={prevStep}
-                disabled={loading}
-                className="flex items-center gap-2"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Previous
-              </Button>
-              
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-500">
-                  Step {currentStep} of {steps.length}
-                </span>
-              </div>
-              
-              {currentStep < 4 ? (
-                <Button
-                  onClick={nextStep}
-                  disabled={loading}
-                  className="flex items-center gap-2"
-                >
-                  Next
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              ) : (
-                <Button
-                  onClick={handleSubmit}
-                  disabled={loading}
-                  className="flex items-center gap-2"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Creating Account...
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-4 h-4" />
-                      Create Account
-                    </>
-                  )}
-                </Button>
-              )}
+        <Progress value={(currentStep / steps.length) * 100} className="mb-4" />
+        
+        <div className="flex justify-between text-xs text-gray-500">
+          {steps.map((step) => (
+            <div
+              key={step.number}
+              className={`text-center ${
+                currentStep >= step.number ? 'text-green-600' : 'text-gray-400'
+              }`}
+            >
+              <div className="font-medium">{step.title}</div>
+              <div className="hidden sm:block">{step.description}</div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          ))}
+        </div>
+      </CardHeader>
 
-      {/* Already have account */}
-      <div className="text-center mt-6">
-        <p className="text-sm text-gray-600">
-          Already have an account?{' '}
-          <button
-            onClick={() => navigate('/login')}
-            className="text-blue-600 hover:underline font-medium"
+      <CardContent>
+        {renderStepContent()}
+
+        <div className="flex justify-between mt-8">
+          <Button
+            variant="outline"
+            onClick={prevStep}
+            disabled={currentStep === 1 || loading}
+            className="flex items-center gap-2"
           >
-            Sign in here
-          </button>
-        </p>
-      </div>
-    </div>
+            <ArrowLeft className="w-4 h-4" />
+            Previous
+          </Button>
+
+          {currentStep < steps.length ? (
+            <Button
+              onClick={nextStep}
+              disabled={!civicUser || loading}
+              className="flex items-center gap-2"
+            >
+              Next
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSubmit}
+              disabled={loading || !civicUser}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Creating Account...
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  Complete Registration
+                </>
+              )}
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 

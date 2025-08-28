@@ -1,7 +1,7 @@
 // src/components/auth/CivicLoginForm.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { civicAuthService } from '../../services/civicAuthService';
+import { useUser } from '@civic/auth/react'; // Use the actual Civic Auth hook
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -20,176 +20,177 @@ import {
 } from 'lucide-react';
 
 const CivicLoginForm = () => {
-  const [loading, setLoading] = useState(false);
+  // Use the actual Civic Auth React hook instead of service
+  const { user, signIn, signOut, isLoading, error: civicError } = useUser();
   const [error, setError] = useState('');
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [hasRedirected, setHasRedirected] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   
-  // Check if user is already authenticated
+  // Check if user is already authenticated and redirect (only once)
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const auth = await civicAuthService.isAuthenticated();
-        if (auth) {
-          setIsAuthenticated(true);
-          // Redirect to dashboard or intended page
-          const from = location.state?.from?.pathname || '/dashboard';
-          navigate(from);
-        }
-      } catch (error) {
-        console.error('Auth check error:', error);
-      }
-    };
+    if (user && !isLoading && !hasRedirected) {
+      console.log('✅ User authenticated, redirecting...');
+      setHasRedirected(true);
+      const from = location.state?.from?.pathname || '/dashboard';
+      navigate(from, { replace: true });
+    }
+  }, [user, isLoading, hasRedirected, navigate, location.state?.from?.pathname]);
 
-    checkAuth();
-  }, [navigate, location]);
+  // Handle Civic Auth errors
+  useEffect(() => {
+    if (civicError) {
+      console.error('Civic Auth Error:', civicError);
+      setError(civicError.message || 'Authentication failed. Please try again.');
+    }
+  }, [civicError]);
   
   const handleCivicLogin = async () => {
     try {
-      setLoading(true);
       setError('');
-      
       console.log('Starting Civic authentication...');
       
-      // Civic Auth handles the entire authentication flow
-      const result = await civicAuthService.loginUser();
-      console.log('Civic login successful:', result);
+      // Use the signIn method from the useUser hook
+      await signIn();
       
-      // Navigate to dashboard or intended page
-      const from = location.state?.from?.pathname || '/dashboard';
-      navigate(from);
+      // The useEffect above will handle navigation after successful auth
       
     } catch (error) {
       console.error('Civic login error:', error);
       setError(error.message || 'Authentication failed. Please try again.');
-    } finally {
-      setLoading(false);
     }
   };
 
-  if (isAuthenticated) {
+  const handleCivicLogout = async () => {
+    try {
+      setError('');
+      await signOut();
+      console.log('✅ Successfully signed out');
+    } catch (error) {
+      console.error('Civic logout error:', error);
+      setError(error.message || 'Sign out failed. Please try again.');
+    }
+  };
+
+  // Show loading state
+  if (isLoading) {
     return (
       <Card className="w-full max-w-md mx-auto">
-        <CardContent className="pt-6">
-          <div className="text-center space-y-4">
-            <CheckCircle className="w-12 h-12 text-green-500 mx-auto" />
-            <h3 className="text-lg font-semibold">Already Logged In</h3>
-            <p className="text-gray-600">Redirecting to dashboard...</p>
-          </div>
+        <CardContent className="flex flex-col items-center justify-center p-8">
+          <Loader2 className="w-8 h-8 animate-spin mb-4" />
+          <p className="text-sm text-gray-600">Checking authentication...</p>
         </CardContent>
       </Card>
     );
   }
-  
-  return (
-    <div className="w-full max-w-md mx-auto space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl font-bold text-center">
-            Welcome to Farm Direct
+
+  // If user is already authenticated, show logout option
+  if (user) {
+    return (
+      <Card className="w-full max-w-md mx-auto">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl font-bold text-gray-900">
+            Welcome Back!
           </CardTitle>
-          <p className="text-center text-gray-600">
-            Sign in to access your account
-          </p>
+          <div className="flex items-center justify-center mt-4">
+            <CheckCircle className="w-6 h-6 text-green-500 mr-2" />
+            <span className="text-sm text-gray-600">Authenticated as {user.email}</span>
+          </div>
         </CardHeader>
-        
-        <CardContent className="space-y-6">
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {/* Main Civic Auth Button */}
-          <Button 
-            onClick={handleCivicLogin}
-            className="w-full h-12 text-lg font-semibold bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-            disabled={loading}
+        <CardContent className="space-y-4">
+          <Button
+            onClick={() => navigate('/dashboard')}
+            className="w-full bg-green-600 hover:bg-green-700"
           >
-            {loading ? (
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Connecting...
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5" />
-                Sign in with Civic Auth
-              </div>
-            )}
+            Go to Dashboard
           </Button>
-
-          <Separator className="my-6" />
-
-          {/* Login Options Info */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-center text-gray-700">
-              Choose your preferred sign-in method:
-            </h3>
-            
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex items-center gap-2 p-3 rounded-lg border bg-gray-50">
-                <Mail className="w-4 h-4 text-blue-600" />
-                <span className="text-sm">Email</span>
-              </div>
-              
-              <div className="flex items-center gap-2 p-3 rounded-lg border bg-gray-50">
-                <Chrome className="w-4 h-4 text-red-600" />
-                <span className="text-sm">Google</span>
-              </div>
-              
-              <div className="flex items-center gap-2 p-3 rounded-lg border bg-gray-50">
-                <Wallet className="w-4 h-4 text-purple-600" />
-                <span className="text-sm">Wallet</span>
-              </div>
-              
-              <div className="flex items-center gap-2 p-3 rounded-lg border bg-gray-50">
-                <Github className="w-4 h-4 text-gray-800" />
-                <span className="text-sm">GitHub</span>
-              </div>
-            </div>
-            
-            <div className="text-center">
-              <p className="text-xs text-gray-500">
-                Don't have a wallet? We'll create one for you automatically!
-              </p>
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Registration Link */}
-          <div className="text-center">
-            <p className="text-sm text-gray-600">
-              New to Farm Direct?{' '}
-              <button
-                onClick={() => navigate('/register')}
-                className="text-blue-600 hover:underline font-medium"
-              >
-                Create an account
-              </button>
-            </p>
-          </div>
+          <Button
+            onClick={handleCivicLogout}
+            variant="outline"
+            className="w-full"
+          >
+            Sign Out
+          </Button>
         </CardContent>
       </Card>
+    );
+  }
 
-      {/* Security Info */}
-      <Card className="bg-blue-50 border-blue-200">
-        <CardContent className="pt-6">
-          <div className="flex items-start gap-3">
-            <Shield className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-            <div>
-              <h4 className="font-semibold text-blue-900">Secure & Private</h4>
-              <p className="text-sm text-blue-700 mt-1">
-                Your login is protected by advanced encryption and blockchain security.
-                Choose any sign-in method you prefer.
-              </p>
-            </div>
+  // Show login form
+  return (
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader className="text-center">
+        <CardTitle className="text-2xl font-bold text-gray-900">
+          Welcome to Farm Direct
+        </CardTitle>
+        <p className="text-gray-600 mt-2">
+          Connect directly with local farmers and fresh produce
+        </p>
+      </CardHeader>
+      
+      <CardContent className="space-y-6">
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Main Civic Login Button */}
+        <Button
+          onClick={handleCivicLogin}
+          disabled={isLoading}
+          className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-base font-medium"
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+              Authenticating...
+            </>
+          ) : (
+            <>
+              <Shield className="w-5 h-5 mr-2" />
+              Sign in with Civic
+            </>
+          )}
+        </Button>
+
+        <div className="text-center">
+          <Separator className="my-4" />
+          <p className="text-xs text-gray-500 mb-4">
+            Sign in securely with Civic's identity verification
+          </p>
+        </div>
+
+        {/* Features showcase */}
+        <div className="space-y-3 text-sm text-gray-600">
+          <div className="flex items-center">
+            <Shield className="w-4 h-4 mr-2 text-blue-500" />
+            <span>Secure identity verification</span>
           </div>
-        </CardContent>
-      </Card>
-    </div>
+          <div className="flex items-center">
+            <Wallet className="w-4 h-4 mr-2 text-green-500" />
+            <span>Crypto wallet integration</span>
+          </div>
+          <div className="flex items-center">
+            <Smartphone className="w-4 h-4 mr-2 text-purple-500" />
+            <span>Mobile-first experience</span>
+          </div>
+        </div>
+
+        <div className="text-center">
+          <p className="text-xs text-gray-500">
+            By signing in, you agree to our{' '}
+            <a href="/terms" className="text-blue-600 hover:underline">
+              Terms of Service
+            </a>{' '}
+            and{' '}
+            <a href="/privacy" className="text-blue-600 hover:underline">
+              Privacy Policy
+            </a>
+          </p>
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 
