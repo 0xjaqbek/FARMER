@@ -35,7 +35,7 @@ const CivicLoginForm = () => {
       const from = location.state?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });
     }
-  }, [user, isLoading, hasRedirected, navigate, location.state?.from?.pathname]);
+  }, [user, isLoading, hasRedirected]);
 
   // Handle Civic Auth errors
   useEffect(() => {

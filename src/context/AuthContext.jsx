@@ -68,7 +68,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     handleCivicUser();
-  }, [civicUser, civicLoading]);
+  }, [civicUser?.email, civicLoading]); // Only depend on email and loading state
 
   // Get user profile from Firestore
   const getUserProfile = async (userId) => {

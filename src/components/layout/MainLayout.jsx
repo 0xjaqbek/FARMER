@@ -53,17 +53,17 @@ const MainLayout = ({ children }) => {
   const isKlient = userProfile?.role === 'klient' || userProfile?.role === 'customer';
   const isAdmin = userProfile?.role === 'admin';
 
-  // UPDATED: Now using Civic Auth signOut method
+  // Updated: Now using Civic Auth signOut method and redirects to /home
   const handleLogout = async () => {
     try {
       console.log('🚀 Signing out with Civic Auth...');
       await signOut();
-      navigate('/login');
+      navigate('/home');
       console.log('✅ Successfully signed out');
     } catch (error) {
       console.error('❌ Civic logout error:', error);
       // Still navigate even if logout fails to avoid stuck state
-      navigate('/login');
+      navigate('/home');
     }
   };
 

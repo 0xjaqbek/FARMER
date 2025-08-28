@@ -163,16 +163,13 @@ const CivicProtectedRoute = ({
 
 // UPDATED: Public Route Component (for auth pages)
 const PublicRoute = ({ children }) => {
-  const { currentUser, loading } = useAuth();
+  const { loading } = useAuth();
   
   if (loading) {
     return <LoadingSpinner />;
   }
   
-  if (currentUser) {
-    return <Navigate to="/dashboard" replace />;
-  }
-  
+ 
   return children;
 };
 
@@ -189,6 +186,7 @@ const AppRoutes = () => {
       <Routes>
         {/* Home Route */}
         <Route path="/" element={<Home />} />
+        <Route path="/home" element={<Home />} />
         
         {/* About Page - Public Route */}
         <Route path="/about" element={<About />} />
