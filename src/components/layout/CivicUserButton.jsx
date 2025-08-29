@@ -1,6 +1,6 @@
 // src/components/auth/CivicUserButton.jsx - FIXED ICON IMPORTS
 import React from 'react';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth, signOut } from '../../context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { 
   DropdownMenu,
@@ -22,7 +22,6 @@ import {
   Shield
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import civicAuthService from '../../services/civicAuthService';
 
 const CivicUserButton = () => {
   const { currentUser, userProfile } = useAuth();
@@ -41,14 +40,14 @@ const CivicUserButton = () => {
     );
   }
 
-  const handleLogout = async () => {
-    try {
-      await civicAuthService.logoutUser();
-      navigate('/');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
+const handleLogout = async () => {
+  try {
+    await signOut();
+    window.location.href = '/home'; // Force hard redirect
+  } catch {
+    window.location.href = '/home';
+  }
+};
 
   const getUserInitials = () => {
     if (userProfile?.firstName && userProfile?.lastName) {

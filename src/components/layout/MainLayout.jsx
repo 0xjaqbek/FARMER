@@ -1,6 +1,6 @@
 // src/components/layout/MainLayout.jsx - Updated with Civic Auth
 import { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 // REMOVED: import { logoutUser } from '../../firebase/auth'; - Now using Civic Auth
@@ -45,7 +45,6 @@ const MainLayout = ({ children }) => {
   const { currentUser, userProfile, signOut } = useAuth();
   const { cartCount } = useCart();
   const location = useLocation();
-  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const isAuthenticated = !!currentUser;
@@ -54,18 +53,14 @@ const MainLayout = ({ children }) => {
   const isAdmin = userProfile?.role === 'admin';
 
   // Updated: Now using Civic Auth signOut method and redirects to /home
-  const handleLogout = async () => {
-    try {
-      console.log('🚀 Signing out with Civic Auth...');
-      await signOut();
-      navigate('/home');
-      console.log('✅ Successfully signed out');
-    } catch (error) {
-      console.error('❌ Civic logout error:', error);
-      // Still navigate even if logout fails to avoid stuck state
-      navigate('/home');
-    }
-  };
+const handleLogout = async () => {
+  try {
+    await signOut();
+    window.location.href = '/home'; // Force hard redirect
+  } catch  {
+    window.location.href = '/home';
+  }
+};
 
   const getInitials = () => {
     if (!userProfile) return 'U';

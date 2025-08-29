@@ -185,8 +185,8 @@ const AppRoutes = () => {
     <Router>
       <Routes>
         {/* Home Route */}
-        <Route path="/" element={<Home />} />
-        <Route path="/home" element={<Home />} />
+        <Route path="/" element={<PublicRoute><Home /></PublicRoute>} />
+        <Route path="/home" element={<PublicRoute><Home /></PublicRoute>} />
         
         {/* About Page - Public Route */}
         <Route path="/about" element={<About />} />
