@@ -240,22 +240,13 @@ const ResponsiveAdminTabs = ({ activeTab, setActiveTab, systemStats = {}, campai
 };
 
 const AdminDashboard = () => {
-  
-  // COMPREHENSIVE DEBUG
-  useEffect(() => {
-    console.log('=== ADMIN DEBUG ===');
-    console.log('Raw userProfile:', userProfile);
-    console.log('Role value:', userProfile?.role);
-    console.log('Role type:', typeof userProfile?.role);
-    console.log('Admin check result:', userProfile?.role === 'admin');
-    console.log('==================');
-  }, [userProfile]);
-
-  const isAdmin = userProfile?.role === 'admin';
-  const { isConnected, connect, disconnect, account, network } = useWeb3();
-
-  const { userProfile } = useAuth();
+    const { userProfile } = useAuth();
   const { toast } = useToast();
+  
+  const web3Data = useWeb3();
+  const { isConnected = false, connect = () => {}, disconnect = () => {}, account = null, network = null } = web3Data || {};
+
+const isAdmin = userProfile?.role === 'admin';
   
   const [activeTab, setActiveTab] = useState('overview');
   const [users, setUsers] = useState([]);
@@ -296,41 +287,50 @@ const AdminDashboard = () => {
     filterCampaigns();
   }, [campaigns, campaignSearchTerm, campaignFilterStatus]);
 
-  const loadDashboardData = async () => {
-    try {
-      setLoading(true);
-      
-      console.log('🔥 Loading admin dashboard data...');
-      
-      const [usersData, statsData, activityData, campaignsData, campaignStatsData] = await Promise.all([
-        getAllUsers(),
-        getSystemStats(),
-        getRecentActivity(10),
-        getAllCampaignsForAdmin(), // Changed from getActiveCampaigns(true)
-        getCampaignStats()
-      ]);
-      
-      // Debug the campaign data
-      console.log('📊 Campaign data received:', campaignsData);
-      console.log('📊 Number of campaigns:', campaignsData?.length || 0);
-      
-      setUsers(usersData);
-      setSystemStats(statsData);
-      setRecentActivity(activityData);
-      setCampaigns(campaignsData);
-      setCampaignStats(campaignStatsData);
-      
-    } catch (error) {
-      console.error('Error loading dashboard data:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load dashboard data",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+const loadDashboardData = async () => {
+  try {
+    setLoading(true);
+    
+    console.log('🔥 Loading admin dashboard data...');
+    
+    // Use Promise.allSettled instead of Promise.all to handle partial failures
+    const results = await Promise.allSettled([
+      getAllUsers(),
+      getSystemStats(),
+      getRecentActivity(10),
+      getAllCampaignsForAdmin(),
+      getCampaignStats()
+    ]);
+    
+    // Extract successful results
+    const [usersResult, statsResult, activityResult, campaignsResult, campaignStatsResult] = results;
+    
+    // Set data from successful calls, use defaults for failed ones
+    setUsers(usersResult.status === 'fulfilled' ? usersResult.value : []);
+    setSystemStats(statsResult.status === 'fulfilled' ? statsResult.value : {});
+    setRecentActivity(activityResult.status === 'fulfilled' ? activityResult.value : []);
+    setCampaigns(campaignsResult.status === 'fulfilled' ? campaignsResult.value : []);
+    setCampaignStats(campaignStatsResult.status === 'fulfilled' ? campaignStatsResult.value : {});
+    
+    // Log any errors
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        const names = ['users', 'stats', 'activity', 'campaigns', 'campaignStats'];
+        console.error(`Failed to load ${names[index]}:`, result.reason);
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error loading dashboard data:', error);
+    toast({
+      title: "Partial Loading Error",
+      description: "Some dashboard data could not be loaded. Check console for details.",
+      variant: "destructive"
+    });
+  } finally {
+    setLoading(false);
+  }
+};
 
   const filterUsers = () => {
     let filtered = [...users];
@@ -596,43 +596,44 @@ const AdminDashboard = () => {
   }
 
   const AdminWalletStatus = () => (
-  <Card className={`mb-6 ${isConnected ? 'border-green-200 bg-green-50' : 'border-orange-200 bg-orange-50'}`}>
-    <CardContent className="p-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Wallet className={`h-5 w-5 ${isConnected ? 'text-green-600' : 'text-orange-600'}`} />
-          <div>
-            <p className="font-medium">
-              {isConnected ? 'Admin Wallet Connected' : 'Admin Wallet Required'}
-            </p>
-            <p className="text-sm text-gray-600">
-              {isConnected ? (
-                <>
-                  {account?.slice(0, 6)}...{account?.slice(-4)} 
-                  {network && <span className="ml-2">• {network.name}</span>}
-                  <span className="text-green-600"> • Ready for Blockchain Operations</span>
-                </>
-              ) : (
-                'Connect your admin wallet to deploy campaigns to blockchain'
-              )}
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          {isConnected ? (
-            <Button onClick={disconnect} variant="outline" size="sm">
-              Disconnect
-            </Button>
-          ) : (
-            <Button onClick={connect} variant="outline" size="sm">
-              <Wallet className="w-4 h-4 mr-2" />
-              Connect Admin Wallet
-            </Button>
-          )}
+<Card className={`border-2 ${isConnected ? 
+  'border-green-200 bg-green-50' : 'border-orange-200 bg-orange-50'}`}>
+  <CardContent className="p-4">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <Wallet className={`h-5 w-5 ${isConnected ? 'text-green-600' : 'text-orange-600'}`} />
+        <div>
+          <p className="font-medium">
+            {isConnected ? 'Admin Wallet Connected' : 'Admin Wallet Required'}
+          </p>
+          <p className="text-sm text-gray-600">
+            {isConnected ? (
+              <>
+                {account?.slice(0, 6)}...{account?.slice(-4)} 
+                {network && <span className="ml-2">• {network.name}</span>}
+                <span className="text-green-600"> • Ready for Blockchain Operations</span>
+              </>
+            ) : (
+              'Connect your admin wallet to deploy campaigns to blockchain'
+            )}
+          </p>
         </div>
       </div>
-    </CardContent>
-  </Card>
+      <div className="flex gap-2">
+        {isConnected ? (
+          <Button onClick={disconnect || (() => {})} variant="outline" size="sm">
+            Disconnect
+          </Button>
+        ) : (
+          <Button onClick={connect || (() => {})} variant="outline" size="sm">
+            <Wallet className="w-4 h-4 mr-2" />
+            Connect Admin Wallet
+          </Button>
+        )}
+      </div>
+    </div>
+  </CardContent>
+</Card>
 );
 
 

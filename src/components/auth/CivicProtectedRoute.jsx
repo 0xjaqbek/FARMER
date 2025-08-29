@@ -29,7 +29,7 @@ const CivicProtectedRoute = ({
   }
 
   // Check role-based access
-  if (requireAdmin && !userProfile?.isAdmin) {
+  if (requireAdmin && !(userProfile?.isAdmin || userProfile?.role === 'admin')) {
     return <Navigate to="/dashboard" replace />;
   }
 

@@ -119,7 +119,7 @@ const MainLayout = ({ children }) => {
       name: 'Browse Products',
       href: '/browse',
       icon: ShoppingBag,
-      show: isKlient || isAdmin,
+      show: isKlient,
       description: 'Browse all available products'
     },
     // FARMER: Product management
@@ -142,7 +142,7 @@ const MainLayout = ({ children }) => {
       name: 'Orders',
       href: '/orders',
       icon: ShoppingCart,
-      show: isAuthenticated,
+      show: isKlient || isRolnik,
       description: 'View your orders'
     },
     // CAMPAIGNS: Crowdfunding features
@@ -232,19 +232,18 @@ const MainLayout = ({ children }) => {
                     (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
                   
                   return (
-                    <Link
-                      key={item.name}
-                      to={item.href}
-                      className={`inline-flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                        isActive
-                          ? 'bg-green-100 text-green-700 border border-green-200'
-                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                      }`}
-                      title={item.description}
-                    >
-                      <Icon className="w-4 h-4 mr-2" />
-                      {item.name}
-                    </Link>
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    className={`flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium transition-colors min-w-[140px] ${
+                      isActive
+                        ? 'bg-green-50 text-green-700 border border-green-200'
+                        : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 mr-2 flex-shrink-0" />
+                    <span>{item.name}</span>
+                  </Link>
                   );
                 })}
               </div>
@@ -252,30 +251,7 @@ const MainLayout = ({ children }) => {
 
             {/* Right side navigation - Shows on 1024px+ */}
             <div className="hidden lg:ml-6 lg:flex lg:items-center space-x-3">
-              
-              {/* Quick Access Buttons for customers */}
-              {(isKlient || isAdmin) && (
-                <div className="flex items-center space-x-2">
-                  {/* Quick Farmers Button */}
-                  <Link 
-                    to="/farmers" 
-                    className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-md hover:bg-gray-100"
-                    title="Find Local Farmers"
-                  >
-                    <Users className="h-5 w-5" />
-                  </Link>
-                  
-                  {/* Quick Search Button */}
-                  <Link 
-                    to="/search" 
-                    className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-md hover:bg-gray-100"
-                    title="Search Products & Map"
-                  >
-                    <Search className="h-5 w-5" />
-                  </Link>
-                </div>
-              )}
-              
+                           
               {/* Notification Bell */}
               <NotificationBell />
               
@@ -363,34 +339,8 @@ const MainLayout = ({ children }) => {
                     </Link>
                   </DropdownMenuItem>
                   
-                  {/* Customer-specific menu items */}
-                  {(isKlient || isAdmin) && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
-                        <Link to="/farmers" className="cursor-pointer">
-                          <Users className="mr-3 h-4 w-4" />
-                          <div>
-                            <p className="font-medium">Find Farmers</p>
-                            <p className="text-xs text-gray-500">Browse local farmers</p>
-                          </div>
-                        </Link>
-                      </DropdownMenuItem>
-                      
-                      <DropdownMenuItem asChild>
-                        <Link to="/search" className="cursor-pointer">
-                          <Search className="mr-3 h-4 w-4" />
-                          <div>
-                            <p className="font-medium">Search & Map</p>
-                            <p className="text-xs text-gray-500">Find products near you</p>
-                          </div>
-                        </Link>
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                  
                   {/* Farmer-specific menu items */}
-                  {(isRolnik || isAdmin) && (
+                  {(isRolnik ) && (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>
@@ -420,6 +370,15 @@ const MainLayout = ({ children }) => {
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>
+                        <Link to="/notifications/create" className="cursor-pointer">
+                          <MessageSquare className="mr-3 h-4 w-4" />
+                          <div>
+                            <p className="font-medium">Send Notifications</p>
+                            <p className="text-xs text-gray-500">Notify your customers</p>
+                          </div>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
                         <Link to="/admin" className="cursor-pointer">
                           <Shield className="mr-3 h-4 w-4" />
                           <div>
@@ -447,7 +406,7 @@ const MainLayout = ({ children }) => {
             <div className="lg:hidden flex items-center space-x-2">
               
               {/* Mobile Quick Actions */}
-              {(isKlient || isAdmin) && (
+              {(isKlient ) && (
                 <>
                   <Link to="/farmers" className="p-2 text-gray-400" title="Find Farmers">
                     <Users className="h-5 w-5" />
@@ -538,7 +497,7 @@ const MainLayout = ({ children }) => {
               </Link>
 
               {/* Farmer-specific mobile menu items */}
-              {(isRolnik || isAdmin) && (
+              {(isRolnik ) && (
                 <>
                   <Link
                     to="/notifications/create"
@@ -573,8 +532,28 @@ const MainLayout = ({ children }) => {
                   </Link>
                 </>
               )}
+                
+                {isAdmin && (
+                  
+                  <Link
+                    to="/notifications/create"
+                    className={`flex items-center pl-3 pr-4 py-3 sm:py-2 border-l-4 text-base sm:text-sm font-medium transition-colors ${
+                      location.pathname === '/notifications/create'
+                        ? 'bg-green-50 border-green-500 text-green-700'
+                        : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
+                    }`}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <MessageSquare className="w-5 h-5 sm:w-4 sm:h-4 mr-3 sm:mr-2" />
+                    <div>
+                      <p className="font-medium">Send Notifications</p>
+                      <p className="text-xs sm:text-[11px] text-gray-500 leading-tight">Notify your customers</p>
+                    </div>
+                  </Link>
+                  
+                )}
             </div>
-            
+           
             {/* Mobile user section with Profile Settings button */}
             <div className="pt-4 pb-3 border-t border-gray-200">
               <div className="px-3 py-3 sm:py-2 bg-gray-50 mx-3 rounded-lg">
@@ -617,16 +596,7 @@ const MainLayout = ({ children }) => {
               
               <div className="space-y-1 mt-3">
                 
-                {isAdmin && (
-                  <Link
-                    to="/admin"
-                    className="flex items-center px-4 py-2 sm:py-1 text-base sm:text-sm font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <Shield className="mr-3 sm:mr-2 h-5 w-5 sm:h-4 sm:w-4" />
-                    Admin Panel
-                  </Link>
-                )}
+
                 
                 <button
                   onClick={() => {
