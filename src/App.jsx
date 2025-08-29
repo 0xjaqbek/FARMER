@@ -412,7 +412,7 @@ const AppRoutes = () => {
         } />
 
         <Route path="/notifications/create" element={
-          <CivicProtectedRoute requireFarmer>
+          <CivicProtectedRoute allowedRoles={[ 'farmer', 'admin']}>
             <MainLayout>
               <NotificationCreator />
             </MainLayout>

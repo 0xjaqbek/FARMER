@@ -1,5 +1,7 @@
 // src/components/notifications/NotificationCreator.jsx
 import React, { useState, useEffect } from 'react';
+import { runNotificationTests } from '../../utils/testNotifications';
+
 import { 
   Bell, 
   Send, 
@@ -543,6 +545,10 @@ const NotificationCreator = () => {
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Customer Notifications</h2>
           <p className="text-gray-600">Send updates and announcements to your customers</p>
+
+<button onClick={runNotificationTests}>
+  🧪 Test Notifications
+</button>
         </div>
         
         <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>

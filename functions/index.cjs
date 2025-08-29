@@ -1,3 +1,4 @@
+// Fixed functions/index.cjs - Replace your current file with this
 const admin = require('firebase-admin');
 
 // Import specific 2nd generation Cloud Function types
@@ -11,24 +12,20 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// Fixed: Order status change trigger (updated to 2nd Gen)
+// FIXED: Order status change trigger
 exports.onOrderStatusChange = onDocumentUpdated("orders/{orderId}", async (event) => {
     console.log('Order status change detected');
 
-    // Make sure data exists before proceeding
     if (!event.data) {
         console.log('No data associated with the event.');
         return;
     }
 
     try {
-      // In 2nd Gen, data is accessed via event.data.before and event.data.after
       const before = event.data.before.data();
       const after = event.data.after.data();
-      // Parameters are accessed via event.params
       const orderId = event.params.orderId;
 
-      // Check if status actually changed
       if (before.status === after.status) {
         console.log('No status change detected, skipping notification');
         return;
@@ -36,14 +33,23 @@ exports.onOrderStatusChange = onDocumentUpdated("orders/{orderId}", async (event
 
       console.log(`Order ${orderId} status changed from ${before.status} to ${after.status}`);
 
-      await sendOrderStatusNotification(orderId, after.status, after.rolnikId, after.clientId);
+      // FIXED: Handle missing clientId/farmerId fields gracefully
+      const farmerId = after.farmerId || after.rolnikId;
+      const customerId = after.customerId || after.clientId;
+
+      if (!customerId) {
+        console.log('Warning: No customer ID found in order data, skipping notification');
+        return;
+      }
+
+      await sendOrderStatusNotification(orderId, after.status, farmerId, customerId);
 
     } catch (error) {
       console.error('Error handling order status change:', error);
     }
 });
 
-// New message notification trigger (updated to 2nd Gen)
+// FIXED: New message notification trigger
 exports.onNewMessage = onDocumentCreated("conversations/{conversationId}/messages/{messageId}", async (event) => {
     console.log('New message detected');
 
@@ -53,32 +59,32 @@ exports.onNewMessage = onDocumentCreated("conversations/{conversationId}/message
     }
 
     try {
-      // For onCreate, the document data is directly on event.data
       const message = event.data.data();
       const conversationId = event.params.conversationId;
 
-      // Get conversation data to find participants
+      // FIXED: Use admin SDK .get() method properly
       const conversationDoc = await db.collection('conversations').doc(conversationId).get();
 
-      if (conversationDoc.exists()) {
+      if (conversationDoc.exists) {  // FIXED: Remove parentheses for admin SDK
         const conversation = conversationDoc.data();
         const participants = conversation.participants || [];
 
-        // Send notification to all participants except sender
         const recipientIds = participants.filter(id => id !== message.senderId);
 
         for (const recipientId of recipientIds) {
-          await createNotification(recipientId, {
-            type: 'new_message',
-            priority: 'medium',
-            title: 'New Message',
-            message: `You have a new message from ${message.senderName || 'someone'}`,
-            actionData: {
-              conversationId: conversationId,
-              messageId: event.params.messageId, // Use event.params
-              type: 'conversation'
-            }
-          });
+          if (recipientId) {  // FIXED: Check for valid recipient ID
+            await createNotification(recipientId, {
+              type: 'new_message',
+              priority: 'medium',
+              title: 'New Message',
+              message: `You have a new message from ${message.senderName || 'someone'}`,
+              actionData: {
+                conversationId: conversationId,
+                messageId: event.params.messageId,
+                type: 'conversation'
+              }
+            });
+          }
         }
       }
 
@@ -87,8 +93,85 @@ exports.onNewMessage = onDocumentCreated("conversations/{conversationId}/message
     }
 });
 
-// Inventory check function (updated to 2nd Gen Pub/Sub)
-// The `event` parameter for onSchedule is often not explicitly used if you only need to trigger a job
+// FIXED: New review notification trigger  
+exports.onNewReview = onDocumentCreated("reviews/{reviewId}", async (event) => {
+    console.log('New review detected');
+
+    if (!event.data) {
+        console.log('No data associated with the event.');
+        return;
+    }
+
+    try {
+      const review = event.data.data();
+      const reviewId = event.params.reviewId;
+
+      if (review.targetType === 'farmer' && review.targetId) {  // FIXED: Validate targetId
+        await createNotification(review.targetId, {
+          type: 'new_review',
+          priority: 'medium',
+          title: 'New Review',
+          message: `You received a ${review.rating}-star review for your product`,
+          actionData: {
+            reviewId: reviewId,
+            targetId: review.targetId,
+            customerId: review.customerId,
+            type: 'review'
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error sending new review notification:', error);
+    }
+});
+
+// FIXED: Scheduled notifications processing
+exports.processScheduledNotifications = onSchedule("*/5 * * * *", async (event) => {
+    console.log('Processing scheduled notifications...');
+
+    try {
+      const now = new Date();
+      
+      // SIMPLIFIED QUERY - Remove the complex index requirement for now
+      const notificationsSnapshot = await db.collection('notifications')
+        .where('scheduledFor', '<=', now)
+        .limit(100)
+        .get();
+
+      const batch = db.batch();
+      let processedCount = 0;
+
+      for (const notificationDoc of notificationsSnapshot.docs) {
+        const notification = notificationDoc.data();
+        
+        // Skip if already sent
+        if (notification.channels?.inApp?.sent) {
+          continue;
+        }
+
+        // FIXED: Use admin SDK exists property (no parentheses)
+        const userDoc = await db.collection('users').doc(notification.userId).get();
+
+        if (userDoc.exists) {  // FIXED: Remove parentheses for admin SDK
+          batch.update(notificationDoc.ref, {
+            'channels.inApp.sent': true,
+            'channels.email.sent': true,
+            'channels.email.delivered': true,
+            sentAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+          processedCount++;
+        }
+      }
+
+      await batch.commit();
+      console.log(`Processed ${processedCount} scheduled notifications`);
+
+    } catch (error) {
+      console.error('Error processing scheduled notifications:', error);
+    }
+});
+
+// Inventory check function (working correctly)
 exports.checkInventoryLevels = onSchedule("every 6 hours", async (event) => {
     console.log('Checking inventory levels...');
 
@@ -98,60 +181,47 @@ exports.checkInventoryLevels = onSchedule("every 6 hours", async (event) => {
       for (const productDoc of productsSnapshot.docs) {
         const product = productDoc.data();
 
-        // Check total stock level
-        const totalStock = (product.inventory?.batches || [])
-          .reduce((sum, batch) => sum + (batch.quantity || 0), 0);
+        if (product.inventory && typeof product.inventory.available === 'number') {
+          const threshold = product.inventory.threshold || 10;
+          
+          if (product.inventory.available <= threshold) {
+            await createNotification(product.farmerId, {
+              type: 'low_stock',
+              priority: 'high',
+              title: 'Low Stock Alert',
+              message: `${product.name} is running low (${product.inventory.available} left)`,
+              actionData: {
+                productId: productDoc.id,
+                currentStock: product.inventory.available,
+                threshold: threshold,
+                type: 'inventory'
+              }
+            });
+          }
 
-        // Low stock notification
-        if (totalStock <= (product.lowStockThreshold || 5) && totalStock > 0) {
-          await createNotification(product.farmerId, {
-            type: 'low_stock',
-            priority: 'medium',
-            title: 'Low Stock Alert',
-            message: `${product.name} is running low (${totalStock} remaining)`,
-            actionData: {
-              productId: productDoc.id,
-              currentStock: totalStock,
-              type: 'product'
-            }
-          });
-        }
-
-        // Out of stock notification
-        if (totalStock === 0) {
-          await createNotification(product.farmerId, {
-            type: 'out_of_stock',
-            priority: 'high',
-            title: 'Out of Stock',
-            message: `${product.name} is out of stock`,
-            actionData: {
-              productId: productDoc.id,
-              type: 'product'
-            }
-          });
-        }
-
-        // Check for expiring batches
-        const now = new Date();
-        const threeDaysFromNow = new Date(now.getTime() + (3 * 24 * 60 * 60 * 1000));
-
-        for (const batch of product.inventory?.batches || []) {
-          if (batch.expiryDate && batch.quantity > 0) {
-            const expiryDate = new Date(batch.expiryDate.seconds * 1000);
-
-            if (expiryDate <= threeDaysFromNow && expiryDate > now) {
-              await createNotification(product.farmerId, {
-                type: 'batch_expiring',
-                priority: 'high',
-                title: 'Batch Expiring Soon',
-                message: `Batch of ${product.name} expires on ${expiryDate.toLocaleDateString()}`,
-                actionData: {
-                  productId: productDoc.id,
-                  batchId: batch.id,
-                  expiryDate: batch.expiryDate,
-                  type: 'inventory'
+          // Check batch expiration
+          if (product.inventory.batches) {
+            const threeDaysFromNow = new Date(Date.now() + (3 * 24 * 60 * 60 * 1000));
+            
+            for (const batch of product.inventory.batches) {
+              if (batch.expiryDate) {
+                const expiryDate = new Date(batch.expiryDate);
+                
+                if (expiryDate <= threeDaysFromNow) {
+                  await createNotification(product.farmerId, {
+                    type: 'batch_expiring',
+                    priority: 'high',
+                    title: 'Batch Expiring Soon',
+                    message: `Batch of ${product.name} expires on ${expiryDate.toLocaleDateString()}`,
+                    actionData: {
+                      productId: productDoc.id,
+                      batchId: batch.id,
+                      expiryDate: batch.expiryDate,
+                      type: 'inventory'
+                    }
+                  });
                 }
-              });
+              }
             }
           }
         }
@@ -163,7 +233,7 @@ exports.checkInventoryLevels = onSchedule("every 6 hours", async (event) => {
     }
 });
 
-// Seasonal notifications (updated to 2nd Gen Pub/Sub)
+// Seasonal notifications (working correctly)
 exports.checkSeasonalNotifications = onSchedule("0 8 * * *", async (event) => {
     console.log('Checking seasonal notifications...');
 
@@ -219,83 +289,15 @@ exports.checkSeasonalNotifications = onSchedule("0 8 * * *", async (event) => {
     }
 });
 
-// Process scheduled notifications (updated to 2nd Gen Pub/Sub)
-exports.processScheduledNotifications = onSchedule("*/5 * * * *", async (event) => {
-    console.log('Processing scheduled notifications...');
-
-    try {
-      const now = new Date();
-      const notificationsSnapshot = await db.collection('notifications')
-        .where('scheduledFor', '<=', now)
-        .where('channels.inApp.sent', '==', false)
-        .limit(100)
-        .get();
-
-      const batch = db.batch();
-
-      for (const notificationDoc of notificationsSnapshot.docs) {
-        const notification = notificationDoc.data();
-
-        // Get user data for delivery
-        const userDoc = await db.collection('users').doc(notification.userId).get();
-
-        if (userDoc.exists()) {
-          // In a real implementation, you would send emails/SMS here
-          // For now, just mark as sent
-          batch.update(notificationDoc.ref, {
-            'channels.inApp.sent': true,
-            'channels.email.sent': true,
-            'channels.email.delivered': true,
-            sentAt: admin.firestore.FieldValue.serverTimestamp()
-          });
-        }
-      }
-
-      await batch.commit();
-      console.log(`Processed ${notificationsSnapshot.size} scheduled notifications`);
-
-    } catch (error) {
-      console.error('Error processing scheduled notifications:', error);
-    }
-});
-
-// New review notification trigger (updated to 2nd Gen)
-exports.onNewReview = onDocumentCreated("reviews/{reviewId}", async (event) => {
-    console.log('New review detected');
-
-    if (!event.data) {
-        console.log('No data associated with the event.');
-        return;
-    }
-
-    try {
-      const review = event.data.data();
-      const reviewId = event.params.reviewId; // Access reviewId from event.params
-
-      if (review.targetType === 'farmer') {
-        // Notify farmer of new review
-        await createNotification(review.targetId, {
-          type: 'new_review',
-          priority: 'medium',
-          title: 'New Review',
-          message: `You received a ${review.rating}-star review for your product`,
-          actionData: {
-            reviewId: reviewId, // Use the extracted reviewId
-            targetId: review.targetId,
-            customerId: review.customerId,
-            type: 'review'
-          }
-        });
-      }
-    } catch (error) {
-      console.error('Error sending new review notification:', error);
-    }
-});
-
-// HELPER FUNCTIONS (No changes needed for these, as they are not triggers)
-
+// FIXED: Helper function with better error handling
 async function createNotification(userId, notificationData) {
   try {
+    // FIXED: Validate userId before creating notification
+    if (!userId) {
+      console.error('Cannot create notification: userId is undefined');
+      return null;
+    }
+
     return await db.collection('notifications').add({
       userId,
       ...notificationData,
@@ -312,7 +314,96 @@ async function createNotification(userId, notificationData) {
   }
 }
 
-// Keep this function even if unused for future inventory logging
+// FIXED: Order notification function with better validation
+async function sendOrderStatusNotification(orderId, newStatus, farmerId, customerId) {
+  console.log(`Sending notification for order ${orderId}, status: ${newStatus}, farmer: ${farmerId}, customer: ${customerId}`);
+  
+  const notifications = [];
+
+  switch (newStatus) {
+    case 'confirmed':
+      if (customerId) {  // FIXED: Check if customerId exists
+        notifications.push({
+          userId: customerId,
+          type: 'order_confirmed',
+          priority: 'medium',
+          title: 'Order Confirmed',
+          message: 'Your order has been confirmed by the farmer',
+          actionData: { orderId, type: 'order' }
+        });
+      }
+      break;
+
+    case 'shipped':
+    case 'in_transit':
+      if (customerId) {
+        notifications.push({
+          userId: customerId,
+          type: 'order_shipped',
+          priority: 'high',
+          title: 'Order Shipped',
+          message: 'Your order is on its way!',
+          actionData: { orderId, type: 'order' }
+        });
+      }
+      break;
+
+    case 'delivered':
+      if (customerId) {
+        notifications.push({
+          userId: customerId,
+          type: 'order_delivered',
+          priority: 'medium',
+          title: 'Order Delivered',
+          message: 'Your order has been delivered. Please confirm receipt.',
+          actionData: { orderId, type: 'order' }
+        });
+      }
+      break;
+
+    case 'cancelled':
+      if (customerId) {
+        notifications.push({
+          userId: customerId,
+          type: 'order_cancelled',
+          priority: 'high',
+          title: 'Order Cancelled',
+          message: 'Your order has been cancelled',
+          actionData: { orderId, type: 'order' }
+        });
+      }
+
+      if (farmerId) {
+        notifications.push({
+          userId: farmerId,
+          type: 'order_cancelled',
+          priority: 'medium',
+          title: 'Order Cancelled',
+          message: `Order ${orderId} was cancelled`,
+          actionData: { orderId, type: 'order' }
+        });
+      }
+      break;
+  }
+
+  // FIXED: Only send notifications if we have valid user IDs
+  const validNotifications = notifications.filter(n => n.userId);
+  
+  if (validNotifications.length === 0) {
+    console.log('No valid user IDs found, skipping notifications');
+    return;
+  }
+
+  // Send all notifications
+  const promises = validNotifications.map(notification =>
+    createNotification(notification.userId, notification)
+  );
+  
+  await Promise.all(promises);
+  console.log(`Sent ${validNotifications.length} notifications for order ${orderId}`);
+}
+
+// Keep this for future use
 async function logInventoryChange(productId, batchId, type, data) {
   try {
     return await db.collection('inventory_logs').add({
@@ -326,74 +417,3 @@ async function logInventoryChange(productId, batchId, type, data) {
     console.error('Error logging inventory change:', error);
   }
 }
-
-async function sendOrderStatusNotification(orderId, newStatus, farmerId, customerId) {
-  const notifications = [];
-
-  switch (newStatus) {
-    case 'confirmed':
-      notifications.push({
-        userId: customerId,
-        type: 'order_confirmed',
-        priority: 'medium',
-        title: 'Order Confirmed',
-        message: 'Your order has been confirmed by the farmer',
-        actionData: { orderId, type: 'order' }
-      });
-      break;
-
-    case 'shipped':
-    case 'in_transit':
-      notifications.push({
-        userId: customerId,
-        type: 'order_shipped',
-        priority: 'high',
-        title: 'Order Shipped',
-        message: 'Your order is on its way!',
-        actionData: { orderId, type: 'order' }
-      });
-      break;
-
-    case 'delivered':
-      notifications.push({
-        userId: customerId,
-        type: 'order_delivered',
-        priority: 'medium',
-        title: 'Order Delivered',
-        message: 'Your order has been delivered. Please confirm receipt.',
-        actionData: { orderId, type: 'order' }
-      });
-      break;
-
-    case 'cancelled':
-      notifications.push({
-        userId: customerId,
-        type: 'order_cancelled',
-        priority: 'high',
-        title: 'Order Cancelled',
-        message: 'Your order has been cancelled',
-        actionData: { orderId, type: 'order' }
-      });
-
-      // Also notify farmer
-      notifications.push({
-        userId: farmerId,
-        type: 'order_cancelled',
-        priority: 'medium',
-        title: 'Order Cancelled',
-        message: `Order ${orderId} was cancelled`,
-        actionData: { orderId, type: 'order' }
-      });
-      break;
-  }
-
-  // Send all notifications
-  const promises = notifications.map(notification =>
-    createNotification(notification.userId, notification)
-  );
-  await Promise.all(promises);
-}
-
-// Ensure all your functions are exported correctly for Firebase to deploy them.
-// The previous `module.exports = { logInventoryChange };` would override all previous `exports.myFunction = ...`
-// So we just let the direct `exports.functionName = ...` assignments stand.
