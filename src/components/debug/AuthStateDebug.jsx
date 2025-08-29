@@ -36,27 +36,6 @@ const AuthStateDebug = () => {
     }
   });
 
-  // Simple redirect fix - use this temporarily
-  useEffect(() => {
-    let redirectTimeout;
-    
-    if (civicAuth.user && !civicAuth.isLoading) {
-      console.log('🚀 Attempting redirect for:', civicAuth.user.email);
-      
-      // Add a small delay and only redirect once
-      redirectTimeout = setTimeout(() => {
-        if (window.location.pathname !== '/dashboard') {
-          console.log('✅ Redirecting to dashboard...');
-          window.location.replace('/dashboard');
-        }
-      }, 1000);
-    }
-    
-    return () => {
-      if (redirectTimeout) clearTimeout(redirectTimeout);
-    };
-  }, [civicAuth.user?.email]); // Only depend on email
-
   return (
     <Card className="fixed top-4 right-4 w-80 z-50 bg-yellow-50 border-yellow-200">
       <CardHeader className="pb-2">

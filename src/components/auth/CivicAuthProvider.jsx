@@ -1,11 +1,8 @@
 // src/components/auth/CivicAuthProvider.jsx
-// src/components/auth/CivicAuthProvider.jsx
-// Fixed Civic Auth Provider with proper exports
+// Simplified Civic Auth Provider - no Firestore operations (handled by AuthContext)
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { CivicAuthProvider as RealCivicAuthProvider, useUser } from '@civic/auth/react';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../../firebase/config';
 
 // Context for bridging Civic Auth with your existing auth system
 const BridgeAuthContext = createContext(null);
@@ -16,7 +13,7 @@ function CivicAuthBridge({ children }) {
   const [bridgedUser, setBridgedUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Convert Civic user to Firebase-compatible format
+  // Convert Civic user to Firebase-compatible format (no Firestore operations)
   const createFirebaseCompatibleUser = (civicUser) => {
     if (!civicUser) return null;
     
@@ -47,101 +44,7 @@ function CivicAuthBridge({ children }) {
     };
   };
 
-  // Save/update user in Firestore
-  const saveUserToFirestore = async (civicUser) => {
-    if (!civicUser) return;
-
-    try {
-      console.log('💾 Saving REAL Civic user to Firestore:', civicUser);
-      
-      const userDocRef = doc(db, 'users', civicUser.id);
-      const existingDoc = await getDoc(userDocRef);
-
-      const baseUserData = {
-        id: civicUser.id,
-        email: civicUser.email || '',
-        displayName: civicUser.name || `${civicUser.given_name || ''} ${civicUser.family_name || ''}`.trim(),
-        authProvider: 'civic_real_react',
-        isVerified: true,
-        updatedAt: serverTimestamp(),
-        lastLogin: serverTimestamp()
-      };
-
-if (existingDoc.exists()) {
-  // Only update auth-related fields, preserve all profile data
-  await setDoc(userDocRef, {
-    lastLogin: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    authProvider: 'civic_real_react',
-    isVerified: true
-  }, { merge: true });
-  console.log('✅ REAL Civic user updated in Firestore (profile preserved)');
-} else {
-        const newUserData = {
-          ...baseUserData,
-          firstName: civicUser.given_name || '',
-          lastName: civicUser.family_name || '',
-          role: 'klient',
-          profileImage: civicUser.picture || '',
-          createdAt: serverTimestamp(),
-
-          location: {
-            address: '',
-            coordinates: { lat: 0, lng: 0 },
-            geoHash: '',
-            city: '',
-            region: '',
-            country: '',
-            deliveryAddresses: []
-          },
-
-          verification: {
-            provider: 'civic_real_react',
-            civicId: civicUser.id,
-            verifiedAt: new Date().toISOString(),
-            authStatus: authStatus
-          },
-
-          notificationPreferences: {
-            email: {
-              orderUpdates: true,
-              newMessages: true,
-              lowStock: false,
-              reviews: true,
-              marketing: false
-            },
-            sms: {
-              orderUpdates: false,
-              newMessages: false,
-              lowStock: false,
-              reviews: false
-            },
-            inApp: {
-              orderUpdates: true,
-              newMessages: true,
-              lowStock: true,
-              reviews: true,
-              marketing: true
-            }
-          },
-
-          customerInfo: {
-            preferredCategories: [],
-            dietaryRestrictions: [],
-            averageOrderValue: 0,
-            totalOrders: 0
-          }
-        };
-
-        await setDoc(userDocRef, newUserData);
-        console.log('✅ REAL Civic user created in Firestore');
-      }
-    } catch (error) {
-      console.error('❌ Error saving REAL Civic user to Firestore:', error);
-    }
-  };
-
-  // Handle Civic auth state changes
+  // Handle Civic auth state changes (no Firestore operations - AuthContext handles that)
   useEffect(() => {
     console.log('🔄 Civic auth state changed:', { 
       user: civicUser?.email || 'none', 
@@ -150,12 +53,12 @@ if (existingDoc.exists()) {
     });
 
     if (civicUser) {
-      // User logged in with Civic
+      // User logged in with Civic - just create compatible user object
       const firebaseUser = createFirebaseCompatibleUser(civicUser);
       setBridgedUser(firebaseUser);
+      console.log('✅ Civic sign in successful');
       
-      // Save to Firestore
-      saveUserToFirestore(civicUser);
+      // Note: Firestore operations are handled by AuthContext to prevent duplicates
       
     } else if (!isLoading) {
       // User logged out or not authenticated
@@ -163,7 +66,7 @@ if (existingDoc.exists()) {
     }
 
     setLoading(isLoading);
-  }, [civicUser, authStatus, isLoading]);
+  }, [civicUser?.email, authStatus, isLoading]); // Depend on email to reduce triggers
 
   const value = {
     // Firebase-compatible auth state
@@ -228,5 +131,4 @@ const CivicAuthProvider = ({ children }) => {
   );
 };
 
-// IMPORTANT: Default export to fix the import issue
 export default CivicAuthProvider;

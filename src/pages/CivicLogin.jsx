@@ -1,19 +1,14 @@
-// src/pages/auth/CivicLogin.jsx
-import React, { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+// src/pages/CivicLogin.jsx
+import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import CivicLoginForm from '../components/auth/CivicLoginForm';
 import { Loader2 } from 'lucide-react';
 
 const CivicLogin = () => {
-  const { currentUser, loading } = useAuth();
-  const navigate = useNavigate();
+  const { loading } = useAuth();
 
-  useEffect(() => {
-    if (currentUser && !loading) {
-      navigate('/dashboard');
-    }
-  }, [currentUser, loading, navigate]);
+  // Don't handle redirect here - let CivicLoginForm handle it
+  // This prevents duplicate redirect logic
 
   if (loading) {
     return (
