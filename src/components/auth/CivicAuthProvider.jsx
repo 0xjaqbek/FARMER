@@ -67,10 +67,16 @@ function CivicAuthBridge({ children }) {
         lastLogin: serverTimestamp()
       };
 
-      if (existingDoc.exists()) {
-        await setDoc(userDocRef, baseUserData, { merge: true });
-        console.log('✅ REAL Civic user updated in Firestore');
-      } else {
+if (existingDoc.exists()) {
+  // Only update auth-related fields, preserve all profile data
+  await setDoc(userDocRef, {
+    lastLogin: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    authProvider: 'civic_real_react',
+    isVerified: true
+  }, { merge: true });
+  console.log('✅ REAL Civic user updated in Firestore (profile preserved)');
+} else {
         const newUserData = {
           ...baseUserData,
           firstName: civicUser.given_name || '',

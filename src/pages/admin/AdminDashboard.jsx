@@ -240,6 +240,18 @@ const ResponsiveAdminTabs = ({ activeTab, setActiveTab, systemStats = {}, campai
 };
 
 const AdminDashboard = () => {
+  
+  // COMPREHENSIVE DEBUG
+  useEffect(() => {
+    console.log('=== ADMIN DEBUG ===');
+    console.log('Raw userProfile:', userProfile);
+    console.log('Role value:', userProfile?.role);
+    console.log('Role type:', typeof userProfile?.role);
+    console.log('Admin check result:', userProfile?.role === 'admin');
+    console.log('==================');
+  }, [userProfile]);
+
+  const isAdmin = userProfile?.role === 'admin';
   const { isConnected, connect, disconnect, account, network } = useWeb3();
 
   const { userProfile } = useAuth();
@@ -267,8 +279,9 @@ const AdminDashboard = () => {
   const [campaignStats, setCampaignStats] = useState({});
   const [deploying, setDeploying] = useState(false);
 
-  // Check if user is admin
-  const isAdmin = userProfile?.role === 'admin';
+
+
+  
 
   useEffect(() => {
     if (!isAdmin) return;

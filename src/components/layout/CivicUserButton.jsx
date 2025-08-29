@@ -16,7 +16,7 @@ import {
   User, 
   Settings, 
   LogOut, 
-  Home, // FIXED: Use Home instead of Dashboard
+  Home,
   ShoppingCart,
   Sprout,
   Shield
@@ -62,7 +62,8 @@ const CivicUserButton = () => {
   };
 
   const getRoleBadge = () => {
-    if (userProfile?.isAdmin) {
+    // UPDATED: Use role-based check instead of isAdmin boolean
+    if (userProfile?.role === 'admin') {
       return <Badge variant="destructive" className="text-xs">Admin</Badge>;
     }
     if (userProfile?.role === 'rolnik') {
@@ -137,7 +138,8 @@ const CivicUserButton = () => {
           </DropdownMenuItem>
         )}
 
-        {userProfile?.isAdmin && (
+        {/* UPDATED: Use role-based check instead of isAdmin boolean */}
+        {userProfile?.role === 'admin' && (
           <DropdownMenuItem onClick={() => navigate('/admin')}>
             <Shield className="mr-2 h-4 w-4" />
             <span>Admin Panel</span>
