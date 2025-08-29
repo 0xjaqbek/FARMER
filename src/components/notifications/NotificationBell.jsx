@@ -1,5 +1,5 @@
 // src/components/notifications/NotificationBell.jsx
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { Bell, BellRing } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -11,50 +11,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import { useAuth } from '../../context/AuthContext';
-import { NotificationService } from '../../services/notificationService';
+// Import the new hook
+import { useNotifications } from '../../hooks/useNotifications';
 
 const NotificationBell = () => {
-  const { currentUser } = useAuth();
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [recentNotifications, setRecentNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (currentUser) {
-      loadNotificationData();
-      
-      // Set up real-time listener for unread count
-      const unsubscribe = NotificationService.subscribeToUnreadCount(
-        currentUser.uid, 
-        setUnreadCount
-      );
-      
-      return () => unsubscribe && unsubscribe();
-    }
-  }, [currentUser]);
-
-  const loadNotificationData = async () => {
-    try {
-      setLoading(true);
-      
-      // Get unread count
-      const count = await NotificationService.getUnreadCount(currentUser.uid);
-      setUnreadCount(count);
-      
-      // Get recent notifications for preview
-      const recent = await NotificationService.getUserNotifications(currentUser.uid, {
-        limitCount: 5,
-        unreadOnly: false
-      });
-      setRecentNotifications(recent);
-      
-    } catch (error) {
-      console.error('Error loading notification data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Replace all the manual state management with the new hook
+  const { 
+    notifications, 
+    unreadCount, 
+    loading, 
+    markAsRead 
+  } = useNotifications();
 
   const formatTimeAgo = (date) => {
     const now = new Date();
@@ -68,20 +35,43 @@ const NotificationBell = () => {
   };
 
   const getNotificationIcon = (type) => {
-    // You can customize icons based on notification type
     switch (type) {
       case 'new_order':
         return '🛒';
       case 'order_confirmed':
         return '✅';
+      case 'order_shipped':
+        return '🚚';
+      case 'order_delivered':
+        return '📦';
       case 'new_message':
         return '💬';
       case 'low_stock':
         return '⚠️';
+      case 'out_of_stock':
+        return '❌';
+      case 'batch_expiring':
+        return '⏰';
+      case 'new_review':
+        return '⭐';
+      case 'season_starting':
+        return '🌱';
+      case 'season_ending':
+        return '🍂';
       default:
         return '🔔';
     }
   };
+
+  const handleNotificationClick = async (notification) => {
+    // Mark as read when clicked
+    if (!notification.readAt) {
+      await markAsRead(notification.id);
+    }
+  };
+
+  // Get recent notifications for dropdown preview (limit to 5)
+  const recentNotifications = notifications.slice(0, 5);
 
   return (
     <DropdownMenu>
@@ -92,54 +82,47 @@ const NotificationBell = () => {
           ) : (
             <Bell className="h-5 w-5" />
           )}
-          
           {unreadCount > 0 && (
             <Badge 
               variant="destructive" 
-              className="absolute -top-2 -right-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs"
+              className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center text-xs"
             >
-              {unreadCount > 99 ? '99+' : unreadCount}
+              {unreadCount > 9 ? '9+' : unreadCount}
             </Badge>
           )}
         </Button>
       </DropdownMenuTrigger>
       
       <DropdownMenuContent align="end" className="w-80">
-        <div className="p-3 font-medium border-b">
-          <div className="flex items-center justify-between">
-            <span>Notifications</span>
-            {unreadCount > 0 && (
-              <Badge variant="secondary" className="text-xs">
-                {unreadCount} new
-              </Badge>
-            )}
-          </div>
-        </div>
-
         {loading ? (
-          <div className="p-4 text-center text-sm text-gray-500">
+          <div className="p-4 text-center text-gray-500">
+            <Bell className="h-6 w-6 mx-auto mb-2 animate-pulse" />
             Loading notifications...
           </div>
         ) : recentNotifications.length === 0 ? (
-          <div className="p-4 text-center text-sm text-gray-500">
-            No notifications yet
+          <div className="p-4 text-center text-gray-500">
+            <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">No notifications yet</p>
+            <p className="text-xs text-gray-400 mt-1">
+              You'll receive notifications for orders, messages, and inventory alerts
+            </p>
           </div>
         ) : (
           <>
-            <div className="max-h-80 overflow-y-auto">
+            <div className="p-2">
+              <h3 className="font-semibold text-sm mb-2 px-2">Recent Notifications</h3>
               {recentNotifications.map((notification) => (
-                <DropdownMenuItem 
-                  key={notification.id}
-                  className="p-3 cursor-pointer"
-                  asChild
-                >
-                  <Link to="/notifications" className="block">
+                <DropdownMenuItem key={notification.id} className="p-0">
+                  <div 
+                    className="w-full p-3 hover:bg-gray-50 cursor-pointer"
+                    onClick={() => handleNotificationClick(notification)}
+                  >
                     <div className="flex items-start space-x-3">
-                      <span className="text-lg flex-shrink-0">
+                      <span className="text-lg flex-shrink-0 mt-0.5">
                         {getNotificationIcon(notification.type)}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium ${
+                        <p className={`text-sm font-medium truncate ${
                           !notification.readAt ? 'text-gray-900' : 'text-gray-600'
                         }`}>
                           {notification.title}
@@ -155,7 +138,7 @@ const NotificationBell = () => {
                         <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-1"></div>
                       )}
                     </div>
-                  </Link>
+                  </div>
                 </DropdownMenuItem>
               ))}
             </div>
@@ -164,9 +147,9 @@ const NotificationBell = () => {
             <DropdownMenuItem asChild>
               <Link 
                 to="/notifications" 
-                className="p-3 text-center text-sm font-medium text-blue-600 hover:text-blue-700"
+                className="p-3 text-center text-sm font-medium text-blue-600 hover:text-blue-700 w-full block"
               >
-                View all notifications
+                View all notifications ({notifications.length})
               </Link>
             </DropdownMenuItem>
           </>
