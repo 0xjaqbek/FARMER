@@ -156,7 +156,7 @@ body {
 }
 
 /* Small mobile phones (480px and below) */
-@media (max-width: 480px) {
+@media (max-width: 640px) {
   /* Even smaller root font size */
   html {
     font-size: calc(var(--base-font-size) * var(--small-mobile-scale-factor));
@@ -300,7 +300,7 @@ body {
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 640px) {
   .mobile-menu-item {
     padding: 0.375rem 0.625rem !important;
     font-size: 0.8125rem !important;

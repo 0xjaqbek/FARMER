@@ -212,7 +212,7 @@ const handleLogout = async () => {
       {/* Navigation */}
       <nav className="bg-white shadow-sm border-b sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
+          <div className="flex justify-between h-16 ">
             {/* Logo and main navigation */}
             <div className="flex items-center">
               <Link to="/dashboard" className="flex items-center space-x-2">
@@ -220,7 +220,7 @@ const handleLogout = async () => {
               </Link>
               
               {/* Desktop navigation - Shows on 1024px+ */}
-              <div className="hidden lg:ml-8 lg:flex lg:space-x-1">
+              <div className="hidden xl:ml-8 xl:flex xl:space-x-1">
                 {visibleNavItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = location.pathname === item.href || 
@@ -230,7 +230,7 @@ const handleLogout = async () => {
                   <Link
                     key={item.name}
                     to={item.href}
-                    className={`flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium transition-colors min-w-[140px] ${
+                    className={`flex items-center justify-center px-1 py-2 rounded-md text-sm font-medium transition-colors min-w-[100px] ${
                       isActive
                         ? 'bg-green-50 text-green-700 border border-green-200'
                         : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
@@ -245,7 +245,7 @@ const handleLogout = async () => {
             </div>
 
             {/* Right side navigation - Shows on 1024px+ */}
-            <div className="hidden lg:ml-6 lg:flex lg:items-center space-x-3">
+            <div className="hidden xl:ml-6 xl:flex xl:items-center space-x-3">
                            
               {/* Notification Bell */}
               <NotificationBell />
@@ -398,7 +398,7 @@ const handleLogout = async () => {
             </div>
 
             {/* Mobile menu button */}
-            <div className="lg:hidden flex items-center space-x-2">
+            <div className="xl:hidden flex items-center space-x-2">
               
               {/* Mobile Quick Actions */}
               {(isKlient ) && (
@@ -447,7 +447,7 @@ const handleLogout = async () => {
 
         {/* Mobile navigation menu */}
         {mobileMenuOpen && (
-          <div className="lg:hidden bg-white border-t">
+          <div className="xl:hidden bg-white border-t">
             <div className="pt-2 pb-3 space-y-1">
               {visibleNavItems.map((item) => {
                 const Icon = item.icon;
@@ -590,9 +590,6 @@ const handleLogout = async () => {
               </div>
               
               <div className="space-y-1 mt-3">
-                
-
-                
                 <button
                   onClick={() => {
                     handleLogout();
