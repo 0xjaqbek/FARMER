@@ -287,7 +287,7 @@ body {
 }
 
 /* Mobile navigation improvements (from your MainLayout.jsx) */
-@media (max-width: 768px) {
+@media (max-width: 640px) {
   .mobile-menu-item {
     padding: 0.5rem 0.75rem !important;
     font-size: 0.875rem !important;
@@ -497,3 +497,29 @@ body {
   scrollbar-width: none;  /* Firefox */
 }
 
+/* PWA Safe Area Support */
+.pwa-installed {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.pt-safe-area-inset-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.min-h-screen-safe {
+  min-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+}
+
+
+.ios-splash {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f7fa 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
