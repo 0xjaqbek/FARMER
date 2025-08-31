@@ -2,6 +2,8 @@
 import web3Service from './web3Service';
 import zetaChainService from './zetaChainService';
 import { updateCampaign } from '../firebase/crowdfunding';
+import { CONTRACT_CONFIG } from './web3Service';
+
 
 /**
  * Integrated Payment Service
@@ -12,6 +14,46 @@ class IntegratedPaymentService {
   constructor() {
     this.activePayments = new Map(); // Track ongoing payments
   }
+/**
+ * Process ZetaChain cross-chain payment
+ */
+async processZetaChainPayment({ campaignId, amount, sourceChain, rewardIndex, campaignData }) {
+  // Note: Added campaignData parameter to the destructuring
+  try {
+    await zetaChainService.initialize();
+
+    // Use CONTRACT_CONFIG.address instead of web3Service.getContractAddress()
+    const targetContractAddress = CONTRACT_CONFIG.address;
+
+    // CRITICAL FIX: Use the blockchain campaign ID (web3CampaignId) instead of Firebase document ID
+    const blockchainCampaignId = campaignData.web3CampaignId || campaignData.blockchainDeployment?.web3CampaignId;
+    
+    if (!blockchainCampaignId) {
+      throw new Error(`Campaign ${campaignId} is not deployed to blockchain. Missing web3CampaignId.`);
+    }
+
+    console.log('🔗 Using blockchain campaign ID:', blockchainCampaignId, 'for Firebase campaign:', campaignId);
+
+    const result = await zetaChainService.executeCrossChainContribution({
+      campaignId: blockchainCampaignId, // Use the numeric blockchain ID here!
+      amount,
+      sourceChain,
+      targetContractAddress,
+      rewardIndex
+    });
+
+    return {
+      ...result,
+      paymentMethod: 'zetachain',
+      firebaseCampaignId: campaignId, // Keep track of the original Firebase ID
+      blockchainCampaignId: blockchainCampaignId
+    };
+
+  } catch (error) {
+    console.error('ZetaChain payment failed:', error);
+    throw error;
+  }
+}
 
   /**
    * Process contribution with support for both traditional and cross-chain payments
@@ -120,34 +162,6 @@ class IntegratedPaymentService {
 
     } catch (error) {
       console.error('Traditional payment failed:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Process ZetaChain cross-chain payment
-   */
-  async processZetaChainPayment({ campaignId, amount, sourceChain, rewardIndex }) {
-    try {
-      await zetaChainService.initialize();
-
-      const targetContractAddress = web3Service.getContractAddress();
-
-      const result = await zetaChainService.executeCrossChainContribution({
-        campaignId,
-        amount,
-        sourceChain,
-        targetContractAddress,
-        rewardIndex
-      });
-
-      return {
-        ...result,
-        paymentMethod: 'zetachain'
-      };
-
-    } catch (error) {
-      console.error('ZetaChain payment failed:', error);
       throw error;
     }
   }

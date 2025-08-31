@@ -843,6 +843,8 @@ async verifyFarmer(farmerAddress, verified) {
 // Create singleton instance
 const web3Service = new Web3Service();
 
+export { CONTRACT_CONFIG };
+
 export default web3Service;
 
 // Export utility functions

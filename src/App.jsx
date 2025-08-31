@@ -5,6 +5,7 @@ import { Toaster } from '@/components/ui/toaster';
 
 // PWA Components
 import { PWAProvider, usePWA } from './components/PWAProvider';
+import PWAErrorBoundary from './components/PWAErrorBoundary';
 import { useOffline } from './hooks/useOffline';
 
 // Auth Components
@@ -652,11 +653,11 @@ const App = () => {
     const handleAppInstalled = () => {
       console.log('Farm Direct PWA installed successfully');
       // Track installation in analytics if available
-    if (window.gtag) { // Check if gtag is defined on the window object
-      window.gtag('event', 'pwa_install', {
-        event_category: 'engagement',
-        event_label: 'Farm Direct PWA Installation'
-      });
+      if (window.gtag) { // Check if gtag is defined on the window object
+        window.gtag('event', 'pwa_install', {
+          event_category: 'engagement',
+          event_label: 'Farm Direct PWA Installation'
+        });
       }
     };
     
@@ -672,9 +673,11 @@ const App = () => {
   }, []);
 
   return (
-    <PWAProvider>
-      <AppContent />
-    </PWAProvider>
+    <PWAErrorBoundary>
+      <PWAProvider>
+        <AppContent />
+      </PWAProvider>
+    </PWAErrorBoundary>
   );
 };
 

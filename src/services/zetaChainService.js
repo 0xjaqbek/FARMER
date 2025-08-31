@@ -558,16 +558,26 @@ class ZetaChainService {
     };
   }
 
-  // Encode contribution data for your smart contract
+    // Encode contribution data for your smart contract
   encodeContributionData(campaignId, rewardIndex = null) {
     try {
+      // Ensure campaignId is numeric (convert string to number if needed)
+      const numericCampaignId = typeof campaignId === 'string' ? 
+        parseInt(campaignId, 10) : campaignId;
+      
+      if (isNaN(numericCampaignId) || numericCampaignId < 0) {
+        throw new Error(`Invalid campaign ID: ${campaignId}. Expected a positive number.`);
+      }
+
+      console.log('🔢 Encoding contribution data for blockchain campaign ID:', numericCampaignId);
+
       // ABI encode the function call to contribute()
       const iface = new ethers.Interface([
         "function contribute(uint256 campaignId, uint256 rewardIndex)"
       ]);
 
       const encodedData = iface.encodeFunctionData("contribute", [
-        campaignId,
+        numericCampaignId, // Now guaranteed to be numeric
         rewardIndex !== null ? rewardIndex : ethers.MaxUint256
       ]);
 
