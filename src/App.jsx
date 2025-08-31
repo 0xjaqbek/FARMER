@@ -8,7 +8,6 @@ import { PWAProvider, usePWA } from './components/PWAProvider';
 import { useOffline } from './hooks/useOffline';
 
 // Auth Components
-import CivicAuthWrapper from './components/auth/CivicAuthProvider';
 import CivicAuthProvider from './components/auth/CivicAuthProvider';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';

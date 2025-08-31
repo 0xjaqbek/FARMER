@@ -116,6 +116,9 @@ export default defineConfig({
     port: 3000,
     strictPort: true,
     host: true, // Allow external connections
+    hmr: {
+    port: 3001, // Use different port for HMR
+    },
     headers: {
       'Service-Worker-Allowed': '/'
     }

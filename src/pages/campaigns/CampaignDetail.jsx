@@ -10,6 +10,8 @@ import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Separator } from '@/components/ui/separator';
 import { 
   ArrowLeft,
   Wallet,
@@ -20,11 +22,18 @@ import {
   Users,
   MapPin,
   ExternalLink,
-  Bug
+  Bug,
+  Zap,
+  Globe,
+  Loader2
 } from 'lucide-react';
 
 // Import services
 import { getCampaignById } from '../../firebase/crowdfunding';
+
+// Import NEW ZetaChain components and services
+import ZetaChainPaymentButton from '../../components/payment/ZetaChainPaymentButton';
+import integratedPaymentService from '../../services/integratedPaymentService';
 
 const CampaignDetail = () => {
   const { id } = useParams();
@@ -39,6 +48,9 @@ const CampaignDetail = () => {
   const [showBackingForm, setShowBackingForm] = useState(false);
   const [web3Account, setWeb3Account] = useState(null);
   const [web3Connected, setWeb3Connected] = useState(false);
+  
+  // NEW: Payment method tracking
+  const [activePaymentMethod, setActivePaymentMethod] = useState('traditional');
 
   useEffect(() => {
     loadCampaign();
@@ -146,6 +158,82 @@ const CampaignDetail = () => {
     }
   };
 
+  // NEW: Unified payment success handler (works for both traditional and ZetaChain)
+  const handlePaymentSuccess = async (paymentResult) => {
+    try {
+      console.log('Payment successful:', paymentResult);
+
+      toast({
+        title: "Contribution Successful!",
+        description: `Thank you for contributing ${backingAmount} ETH to this campaign.`,
+        variant: "default"
+      });
+
+      // Process through integrated service (maintains all your existing database logic)
+      await integratedPaymentService.processContribution({
+        campaignId: campaign.id,
+        amount: parseFloat(backingAmount),
+        paymentMethod: paymentResult.paymentMethod || 'traditional',
+        sourceChain: paymentResult.sourceChain || null,
+        user: userProfile,
+        campaignData: campaign
+      });
+
+      // Update local campaign state if we have blockchain data
+      if (paymentResult.transactionHash) {
+        setCampaign(prev => ({
+          ...prev,
+          backerCount: (prev.backerCount || 0) + 1,
+          lastContributionAt: new Date(),
+          lastTransactionHash: paymentResult.transactionHash,
+          blockchainSynced: true
+        }));
+      }
+
+      // Reset form and reload campaign
+      setBackingAmount('');
+      setShowBackingForm(false);
+      
+      // Refresh the page to show updated data
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+
+    } catch (error) {
+      console.error('Payment processing error:', error);
+      toast({
+        title: "Payment Processing Error", 
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
+  // NEW: Unified payment error handler
+  const handlePaymentError = (error) => {
+    console.error('Payment error:', error);
+    
+    let errorMessage = 'Payment failed. Please try again.';
+    
+    if (error.message?.includes('user rejected')) {
+      errorMessage = 'Transaction was cancelled.';
+    } else if (error.message?.includes('insufficient funds')) {
+      errorMessage = 'Insufficient balance to complete this transaction.';
+    } else if (error.message?.includes('Campaign not active')) {
+      errorMessage = 'Campaign is not currently accepting contributions.';
+    } else if (error.message?.includes('Campaign deadline passed')) {
+      errorMessage = 'Campaign has expired.';
+    } else if (error.message?.includes('Farmers cannot back their own campaigns')) {
+      errorMessage = 'You cannot back your own campaign.';
+    }
+
+    toast({
+      title: "Payment Failed",
+      description: errorMessage,
+      variant: "destructive"
+    });
+  };
+
   const debugCampaignBlockchain = async () => {
     try {
       const { ethers } = await import('ethers');
@@ -190,178 +278,85 @@ const CampaignDetail = () => {
     }
   };
 
-const handleCryptoBacking = async () => {
-  if (!web3Connected) {
-    await connectWallet();
-    return;
-  }
-
-  if (!backingAmount || parseFloat(backingAmount) <= 0) {
-    toast({
-      title: "Invalid Amount",
-      description: "Please enter a valid ETH amount",
-      variant: "destructive"
-    });
-    return;
-  }
-
-  if (!campaign.web3CampaignId && !campaign.blockchainDeployment?.web3CampaignId) {
-    toast({
-      title: "Campaign Not Available",
-      description: "This campaign is not available for crypto backing yet",
-      variant: "destructive"
-    });
-    return;
-  }
-
-  try {
-    setBacking(true);
-
-    const { ethers } = await import('ethers');
-    
-    // Get contract configuration
-    const contractAddress = import.meta.env.VITE_APP_CONTRACT_ADDRESS;
-    if (!contractAddress) {
-      throw new Error('Contract address not configured');
+  // UPDATED: Enhanced crypto backing function using integrated service
+  const handleCryptoBacking = async () => {
+    if (!web3Connected) {
+      await connectWallet();
+      return;
     }
 
-    // Contract ABI for contribution
-    const contractABI = [
-      "function contribute(uint256 campaignId, uint256 rewardTierIndex) external payable",
-      "function getCampaignBasic(uint256 campaignId) external view returns (uint256, string, address, uint256, uint256, uint256)",
-      "event ContributionMade(uint256 indexed campaignId, address indexed backer, uint256 amount, uint256 totalRaised)"
-    ];
-
-    // Connect to contract
-    const provider = new ethers.BrowserProvider(window.ethereum);
-    const signer = await provider.getSigner();
-    const contract = new ethers.Contract(contractAddress, contractABI, signer);
-
-    // Convert ETH to Wei
-    const amountWei = ethers.parseEther(backingAmount);
-    
-    // Get the campaign ID (check both locations)
-    const web3CampaignId = campaign.web3CampaignId || campaign.blockchainDeployment?.web3CampaignId;
-    
-    // Make contribution (using MaxUint256 for no reward tier)
-    const tx = await contract.contribute(
-      web3CampaignId,
-      ethers.MaxUint256, // No specific reward tier
-      { value: amountWei }
-    );
-
-    toast({
-      title: "Transaction Sent",
-      description: `Transaction hash: ${tx.hash.slice(0, 10)}...`,
-    });
-
-    // Wait for transaction confirmation
-    const receipt = await tx.wait();
-    
-    console.log('Transaction confirmed:', receipt);
-
-    // STEP 1: Save backing info to Firebase
-    const backingData = {
-      campaignId: campaign.id,
-      userId: userProfile?.uid || 'anonymous',
-      userEmail: userProfile?.email || 'anonymous',
-      userName: userProfile ? `${userProfile.firstName} ${userProfile.lastName}`.trim() : 'Anonymous',
-      walletAddress: web3Account,
-      amount: parseFloat(backingAmount), // ETH amount
-      currency: 'ETH',
-      transactionHash: receipt.hash,
-      blockNumber: receipt.blockNumber,
-      timestamp: new Date(),
-      paymentMethod: 'crypto',
-      status: 'confirmed'
-    };
-
-    // Save to Firebase backings collection
-    const { addDoc, collection } = await import('firebase/firestore');
-    const { db } = await import('../../firebase/config');
-    
-    await addDoc(collection(db, 'backings'), backingData);
-
-    // STEP 2: Get updated blockchain data
-    const [_id, _firebaseId, _farmer, goalAmount, raisedAmount, _deadline] = await contract.getCampaignBasic(web3CampaignId);
-    
-    const raisedAmountETH = parseFloat(ethers.formatEther(raisedAmount));
-    const goalAmountETH = parseFloat(ethers.formatEther(goalAmount));
-    
-    console.log('Updated blockchain data:', {
-      raisedAmountETH,
-      goalAmountETH,
-      raisedAmountWei: raisedAmount.toString()
-    });
-
-    // STEP 3: Update Firebase campaign with blockchain data
-    const { updateCampaign } = await import('../../firebase/crowdfunding');
-    const { increment } = await import('firebase/firestore');
-    
-    // Convert ETH to PLN for Firebase (assuming 1 ETH = 4000 PLN)
-    const ethToPln = 4000;
-    const raisedAmountPLN = raisedAmountETH * ethToPln;
-    
-    await updateCampaign(campaign.id, {
-      currentAmount: raisedAmountPLN, // Update with actual blockchain amount
-      backerCount: increment(1), // Increment backer count
-      lastContributionAt: new Date(),
-      lastTransactionHash: receipt.hash,
-      blockchainSynced: true,
-      updatedAt: new Date()
-    });
-
-    // STEP 4: Update local campaign state with real blockchain data
-    setCampaign(prev => ({
-      ...prev,
-      currentAmount: raisedAmountPLN,
-      backerCount: (prev.backerCount || 0) + 1,
-      lastContributionAt: new Date(),
-      lastTransactionHash: receipt.hash,
-      blockchainSynced: true
-    }));
-
-    toast({
-      title: "Contribution Successful!",
-      description: `You backed ${backingAmount} ETH to this campaign`,
-    });
-
-    setShowBackingForm(false);
-    setBackingAmount('');
-    
-    // Refresh the page to show updated data
-    setTimeout(() => {
-      window.location.reload();
-    }, 2000);
-    
-  } catch (error) {
-    console.error('Error making crypto contribution:', error);
-    
-    let errorMessage = 'Failed to process contribution';
-    
-    if (error.message.includes('user rejected')) {
-      errorMessage = 'Transaction cancelled by user';
-    } else if (error.message.includes('insufficient funds')) {
-      errorMessage = 'Insufficient funds for this transaction';
-    } else if (error.message.includes('Campaign not active')) {
-      errorMessage = 'Campaign is not currently accepting contributions';
-    } else if (error.message.includes('Campaign deadline passed')) {
-      errorMessage = 'Campaign has expired';
-    } else if (error.message.includes('Farmers cannot back their own campaigns')) {
-      errorMessage = 'You cannot back your own campaign.';
-    } else if (error.message.includes('missing revert data')) {
-      errorMessage = 'Transaction failed. Check if campaign is active and you are not the farmer.';
+    if (!backingAmount || parseFloat(backingAmount) <= 0) {
+      toast({
+        title: "Invalid Amount",
+        description: "Please enter a valid ETH amount",
+        variant: "destructive"
+      });
+      return;
     }
-    
-    toast({
-      title: "Contribution Failed",
-      description: errorMessage,
-      variant: "destructive"
-    });
-  } finally {
-    setBacking(false);
-  }
-};
+
+    if (!campaign.web3CampaignId && !campaign.blockchainDeployment?.web3CampaignId) {
+      toast({
+        title: "Campaign Not Available",
+        description: "This campaign is not available for crypto backing yet",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      setBacking(true);
+
+      // Your existing Web3 logic (unchanged)
+      const { ethers } = await import('ethers');
+      
+      const contractAddress = import.meta.env.VITE_APP_CONTRACT_ADDRESS;
+      if (!contractAddress) {
+        throw new Error('Contract address not configured');
+      }
+
+      const contractABI = [
+        "function contribute(uint256 campaignId, uint256 rewardTierIndex) external payable",
+        "function getCampaignBasic(uint256 campaignId) external view returns (uint256, string, address, uint256, uint256, uint256)",
+        "event ContributionMade(uint256 indexed campaignId, address indexed backer, uint256 amount, uint256 totalRaised)"
+      ];
+
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(contractAddress, contractABI, signer);
+
+      const amountWei = ethers.parseEther(backingAmount);
+      const web3CampaignId = campaign.web3CampaignId || campaign.blockchainDeployment?.web3CampaignId;
+      
+      const tx = await contract.contribute(
+        web3CampaignId,
+        ethers.MaxUint256,
+        { value: amountWei }
+      );
+
+      toast({
+        title: "Transaction Sent",
+        description: `Transaction hash: ${tx.hash.slice(0, 10)}...`,
+      });
+
+      const receipt = await tx.wait();
+      
+      // Use new unified payment success handler
+      await handlePaymentSuccess({
+        success: true,
+        transactionHash: receipt.hash,
+        amount: parseFloat(backingAmount),
+        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: receipt.blockNumber,
+        paymentMethod: 'traditional'
+      });
+
+    } catch (error) {
+      // Use new unified error handler
+      handlePaymentError(error);
+    } finally {
+      setBacking(false);
+    }
+  };
 
   const calculateProgress = () => {
     if (!campaign?.goalAmount) return 0;
@@ -394,6 +389,132 @@ const handleCryptoBacking = async () => {
       });
     }
   };
+
+  // NEW: Enhanced backing form with payment method tabs
+  const renderBackingForm = () => (
+    <div className="pt-4 border-t space-y-4">
+      <div>
+        <Label htmlFor="amount">Contribution Amount (ETH)</Label>
+        <Input
+          id="amount"
+          type="number"
+          step="0.001"
+          min="0.001"
+          placeholder="0.01"
+          value={backingAmount}
+          onChange={(e) => setBackingAmount(e.target.value)}
+          className="text-lg"
+        />
+        {backingAmount && (
+          <p className="text-xs text-gray-500 mt-1">
+            ≈ ${(parseFloat(backingAmount) * 3000).toFixed(2)} USD (estimated)
+          </p>
+        )}
+      </div>
+
+      <Separator />
+      
+      {/* Payment Method Tabs */}
+      <Tabs value={activePaymentMethod} onValueChange={setActivePaymentMethod}>
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="traditional" className="flex items-center space-x-2">
+            <Wallet className="h-4 w-4" />
+            <span>Direct</span>
+          </TabsTrigger>
+          <TabsTrigger value="zetachain" className="flex items-center space-x-2">
+            <Zap className="h-4 w-4" />
+            <span>Cross-Chain</span>
+            <Badge variant="secondary" className="ml-1 text-xs">New</Badge>
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Traditional Payment Tab */}
+        <TabsContent value="traditional" className="space-y-3">
+          <div className="p-3 border rounded-lg bg-gray-50">
+            <div className="flex items-center space-x-2">
+              <Wallet className="h-4 w-4 text-blue-600" />
+              <div>
+                <p className="font-medium text-sm">Direct Wallet Payment</p>
+                <p className="text-xs text-gray-600">Pay from your connected wallet</p>
+                {web3Connected && (
+                  <p className="text-xs text-green-600 mt-1">
+                    ✓ Connected: {web3Account?.slice(0, 6)}...{web3Account?.slice(-4)}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <Button
+            onClick={handleCryptoBacking}
+            disabled={backing || !backingAmount}
+            className="w-full"
+          >
+            {backing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <Wallet className="mr-2 h-4 w-4" />
+                Send {backingAmount} ETH
+              </>
+            )}
+          </Button>
+        </TabsContent>
+
+        {/* ZetaChain Cross-Chain Tab */}
+        <TabsContent value="zetachain" className="space-y-3">
+          <div className="p-3 border rounded-lg bg-gradient-to-r from-blue-50 to-purple-50">
+            <div className="flex items-start space-x-3">
+              <Globe className="h-5 w-5 text-purple-600 mt-0.5" />
+              <div>
+                <p className="font-medium text-sm">Cross-Chain Payment</p>
+                <p className="text-xs text-gray-600 mt-1">
+                  Pay from Bitcoin, Solana, TON, or any EVM chain
+                </p>
+                <div className="flex flex-wrap gap-1 mt-2">
+                  <Badge variant="outline" className="text-xs">₿ Bitcoin</Badge>
+                  <Badge variant="outline" className="text-xs">◎ Solana</Badge>
+                  <Badge variant="outline" className="text-xs">💎 TON</Badge>
+                  <Badge variant="outline" className="text-xs">+ EVM</Badge>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <ZetaChainPaymentButton
+            campaignId={campaign?.web3CampaignId || campaign?.blockchainDeployment?.web3CampaignId}
+            amount={parseFloat(backingAmount) || 0}
+            targetContractAddress={import.meta.env.VITE_APP_CONTRACT_ADDRESS}
+            onPaymentSuccess={handlePaymentSuccess}
+            onPaymentError={handlePaymentError}
+            disabled={!backingAmount || backing}
+            className="w-full"
+          />
+
+          <Alert>
+            <Zap className="h-4 w-4" />
+            <AlertDescription className="text-xs">
+              <strong>How it works:</strong> Choose your preferred blockchain, and your payment will be automatically converted and sent to this campaign. 
+              Cross-chain payments may take 2-10 minutes to complete.
+            </AlertDescription>
+          </Alert>
+        </TabsContent>
+      </Tabs>
+
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          onClick={() => setShowBackingForm(false)}
+          className="flex-1"
+        >
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
 
   if (loading) {
     return (
@@ -621,20 +742,37 @@ const handleCryptoBacking = async () => {
                   </Alert>
                 )}
 
-                {/* Crypto Backing Section */}
+                {/* ENHANCED: Crypto Backing Section with ZetaChain support */}
                 {campaign.status === 'active' && 
                  campaign.web3Enabled && 
                  (campaign.web3CampaignId || campaign.blockchainDeployment?.web3CampaignId) && 
                  campaign.blockchainDeployment?.status === 'deployed' && (
                   <div className="pt-4 border-t space-y-3">
                     {!web3Connected ? (
-                      <Button 
-                        className="w-full"
-                        onClick={connectWallet}
-                      >
-                        <Wallet className="w-4 h-4 mr-2" />
-                        Connect Wallet to Back
-                      </Button>
+                      <div className="space-y-2">
+                        <Button 
+                          className="w-full"
+                          onClick={connectWallet}
+                        >
+                          <Wallet className="w-4 h-4 mr-2" />
+                          Connect Wallet to Back with Ethereum
+                        </Button>
+                        
+                        {/* NEW: ZetaChain Payment Button for non-connected users */}
+                        <ZetaChainPaymentButton
+                          campaignId={campaign?.web3CampaignId || campaign?.blockchainDeployment?.web3CampaignId}
+                          amount={0.01} // Default amount for demo
+                          targetContractAddress={import.meta.env.VITE_APP_CONTRACT_ADDRESS}
+                          onPaymentSuccess={handlePaymentSuccess}
+                          onPaymentError={handlePaymentError}
+                          disabled={false}
+                          className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                        />
+                        
+                        <div className="text-xs text-gray-500 text-center">
+                          Pay from Bitcoin, Solana, TON, or other blockchains
+                        </div>
+                      </div>
                     ) : !showBackingForm ? (
                       <div className="space-y-2">
                         <div className="text-xs text-gray-500">
@@ -645,38 +783,12 @@ const handleCryptoBacking = async () => {
                           onClick={() => setShowBackingForm(true)}
                         >
                           <Wallet className="w-4 h-4 mr-2" />
-                          Pay with Crypto
+                          Choose Payment Method
                         </Button>
                       </div>
                     ) : (
-                      <div className="space-y-3">
-                        <div>
-                          <Label htmlFor="amount">Amount (ETH)</Label>
-                          <Input
-                            id="amount"
-                            type="number"
-                            step="0.001"
-                            placeholder="0.1"
-                            value={backingAmount}
-                            onChange={(e) => setBackingAmount(e.target.value)}
-                          />
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            onClick={handleCryptoBacking}
-                            disabled={backing}
-                            className="flex-1"
-                          >
-                            {backing ? 'Processing...' : 'Send ETH'}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => setShowBackingForm(false)}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
+                      /* NEW: Enhanced backing form with payment method tabs */
+                      renderBackingForm()
                     )}
                   </div>
                 )}
