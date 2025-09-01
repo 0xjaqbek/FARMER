@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+// src/components/PWAProvider.jsx - Development-safe version
+import React, { createContext, useContext, useEffect, useState, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
@@ -19,7 +20,8 @@ import {
   setupNetworkMonitoring,
   setupPushNotifications,
   getPWACapabilities,
-  getServiceWorkerRegistration
+  getServiceWorkerRegistration,
+  clearServiceWorkerCache
 } from '../utils/pwa';
 
 const PWAContext = createContext();
@@ -33,12 +35,21 @@ export const usePWA = () => {
 };
 
 export const PWAProvider = ({ children }) => {
-  // Add ref to track if component is mounted
   const mountedRef = useRef(true);
+  const initializingRef = useRef(false);
   
-  // Wrap useState calls in try-catch and check if mounted
+  // Development mode detection
+  const isDev = import.meta.env.DEV;
+  
+  // Initial states with development considerations
   const [isInstallable, setIsInstallable] = useState(false);
-  const [isInstalled, setIsInstalled] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(() => {
+    try {
+      return !isDev && isPWA();
+    } catch {
+      return false;
+    }
+  });
   const [isOnline, setIsOnline] = useState(() => {
     try {
       return navigator?.onLine ?? true;
@@ -50,6 +61,7 @@ export const PWAProvider = ({ children }) => {
   const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
   const [showOfflineAlert, setShowOfflineAlert] = useState(false);
   const [capabilities, setCapabilities] = useState({});
+  const [isDevMode, setIsDevMode] = useState(isDev);
 
   // Safe state setter that checks if component is still mounted
   const safeSetState = (setter, value) => {
@@ -58,17 +70,52 @@ export const PWAProvider = ({ children }) => {
         setter(value);
       }
     } catch (error) {
-      console.warn('PWAProvider: State update failed:', error);
+      if (isDev) console.warn('PWAProvider: State update failed:', error);
     }
   };
+
+  // Development helpers
+  const devHelpers = useMemo(() => {
+    if (!isDev) return {};
+    
+    return {
+      clearCache: async () => {
+        console.log('🧹 Clearing service worker cache...');
+        await clearServiceWorkerCache();
+        window.location.reload();
+      },
+      forceReload: () => {
+        console.log('🔄 Force reloading app...');
+        window.location.reload();
+      },
+      togglePWA: () => {
+        console.log('🔧 Toggling PWA features...');
+        // This could restart with PWA enabled
+        window.location.search = '?pwa=dev';
+      }
+    };
+  }, [isDev]);
   
   useEffect(() => {
     mountedRef.current = true;
 
-    // Initialize PWA features with error handling
+    // Skip initialization if already in progress
+    if (initializingRef.current) return;
+    initializingRef.current = true;
+
     const initializePWA = async () => {
       try {
         if (!mountedRef.current) return;
+
+        // Get initial capabilities
+        safeSetState(setCapabilities, getPWACapabilities());
+        
+        // Skip service worker registration in development unless explicitly enabled
+        if (isDev && import.meta.env.VITE_ENABLE_SW_DEV !== 'true') {
+          console.log('🔧 PWA features disabled in development mode');
+          safeSetState(setIsDevMode, true);
+          return;
+        }
 
         // Register service worker
         await registerServiceWorker();
@@ -83,12 +130,11 @@ export const PWAProvider = ({ children }) => {
         // Check initial states with safety checks
         safeSetState(setIsInstalled, isPWA());
         safeSetState(setIsInstallable, isPWAInstallable());
-        safeSetState(setCapabilities, getPWACapabilities());
         
         if (!mountedRef.current) return;
 
         // Setup network monitoring
-        setupNetworkMonitoring(
+        const cleanupNetworkMonitoring = setupNetworkMonitoring(
           () => {
             safeSetState(setIsOnline, true);
             safeSetState(setShowOfflineAlert, false);
@@ -103,26 +149,40 @@ export const PWAProvider = ({ children }) => {
           }
         );
         
-        // Setup push notifications if user is already logged in
-        if (localStorage.getItem('authToken') && mountedRef.current) {
+        // Setup push notifications if user is already logged in (production only)
+        if (!isDev && localStorage.getItem('authToken') && mountedRef.current) {
           setupPushNotifications();
         }
+
+        // Store cleanup function
+        return cleanupNetworkMonitoring;
+        
       } catch (error) {
         console.error('PWA initialization failed:', error);
+        if (isDev) {
+          console.log('💡 This is normal in development mode');
+        }
       }
     };
     
-    // Delay initialization slightly to ensure component is fully mounted
+    // Initialize with delay to ensure component is fully mounted
     const initTimer = setTimeout(() => {
       if (mountedRef.current) {
-        initializePWA();
+        initializePWA().then((cleanup) => {
+          // Store cleanup for later use
+          if (cleanup && typeof cleanup === 'function') {
+            mountedRef.current.cleanup = cleanup;
+          }
+        });
       }
-    }, 100);
+    }, isDev ? 200 : 50);
     
-    // Listen for PWA events with safety checks
+    // PWA event handlers with safety checks
     const handleInstallAvailable = () => {
-      safeSetState(setIsInstallable, true);
-      safeSetState(setShowInstallPrompt, true);
+      if (!isDev) {
+        safeSetState(setIsInstallable, true);
+        safeSetState(setShowInstallPrompt, true);
+      }
     };
     
     const handleInstalled = () => {
@@ -132,7 +192,9 @@ export const PWAProvider = ({ children }) => {
     };
     
     const handleUpdateAvailable = () => {
-      safeSetState(setShowUpdatePrompt, true);
+      if (!isDev) {
+        safeSetState(setShowUpdatePrompt, true);
+      }
     };
 
     // Add event listeners
@@ -143,182 +205,150 @@ export const PWAProvider = ({ children }) => {
     // Cleanup function
     return () => {
       mountedRef.current = false;
+      initializingRef.current = false;
       clearTimeout(initTimer);
+      
+      // Call stored cleanup function
+      if (mountedRef.current?.cleanup) {
+        mountedRef.current.cleanup();
+      }
+      
       window.removeEventListener('pwa-install-available', handleInstallAvailable);
       window.removeEventListener('pwa-installed', handleInstalled);
       window.removeEventListener('pwa-update-available', handleUpdateAvailable);
     };
-  }, []);
+  }, [isDev]);
 
   // Handle install PWA
   const handleInstallPWA = async () => {
     try {
       const installed = await installPWA();
-      if (installed && mountedRef.current) {
+      if (installed) {
         safeSetState(setShowInstallPrompt, false);
+        safeSetState(setIsInstalled, true);
       }
     } catch (error) {
       console.error('PWA installation failed:', error);
     }
   };
 
-  // Handle update PWA
-  const handleUpdatePWA = async () => {
-    try {
-      const registration = await getServiceWorkerRegistration();
-      if (registration?.waiting) {
+  // Handle update app
+  const handleUpdateApp = () => {
+    if (isDev) {
+      window.location.reload();
+    } else {
+      const registration = getServiceWorkerRegistration();
+      if (registration && registration.waiting) {
         registration.waiting.postMessage({ type: 'SKIP_WAITING' });
         window.location.reload();
       }
-      safeSetState(setShowUpdatePrompt, false);
-    } catch (error) {
-      console.error('PWA update failed:', error);
-      safeSetState(setShowUpdatePrompt, false);
     }
   };
 
+  // Context value
   const contextValue = {
     isInstallable,
     isInstalled,
     isOnline,
-    showInstallPrompt,
-    showUpdatePrompt,
     capabilities,
-    handleInstallPWA,
-    handleUpdatePWA,
-    setShowInstallPrompt: (value) => safeSetState(setShowInstallPrompt, value),
-    setShowUpdatePrompt: (value) => safeSetState(setShowUpdatePrompt, value)
+    isDevMode,
+    installPWA: handleInstallPWA,
+    updateApp: handleUpdateApp,
+    ...(isDev ? { devHelpers } : {})
   };
 
-  // Don't render anything if component is unmounted
-  if (!mountedRef.current) {
-    return null;
-  }
-
-  try {
-    return (
-      <PWAContext.Provider value={contextValue}>
-        {children}
-
-        {/* Install Prompt */}
-        {showInstallPrompt && (
-          <div className="fixed bottom-4 right-4 z-50 max-w-sm">
-            <Alert className="border-blue-200 bg-blue-50">
-              <Smartphone className="h-4 w-4 text-blue-600" />
-              <div className="flex flex-col gap-2">
-                <AlertDescription className="text-blue-800">
-                  Install Farm Direct as an app for a better experience!
-                </AlertDescription>
-                <div className="flex gap-2">
-                  <Button 
-                    size="sm" 
-                    onClick={handleInstallPWA}
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
-                    <Download className="h-4 w-4 mr-1" />
-                    Install
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => safeSetState(setShowInstallPrompt, false)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
+  return (
+    <PWAContext.Provider value={contextValue}>
+      {children}
+      
+      {/* Development Debug Panel */}
+      {isDev && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <details className="bg-gray-900 text-white p-2 rounded text-xs">
+            <summary className="cursor-pointer">🔧 Dev PWA</summary>
+            <div className="mt-2 space-y-2">
+              <button 
+                onClick={devHelpers.clearCache}
+                className="block w-full text-left hover:bg-gray-800 p-1 rounded"
+              >
+                Clear SW Cache
+              </button>
+              <button 
+                onClick={devHelpers.forceReload}
+                className="block w-full text-left hover:bg-gray-800 p-1 rounded"
+              >
+                Force Reload
+              </button>
+              <div className="text-xs opacity-70 pt-1 border-t border-gray-700">
+                SW: {capabilities.serviceWorker ? '✅' : '❌'}<br/>
+                Online: {isOnline ? '✅' : '❌'}
               </div>
-            </Alert>
-          </div>
-        )}
-
-        {/* Update Prompt */}
-        {showUpdatePrompt && (
-          <div className="fixed top-4 right-4 z-50 max-w-sm">
-            <Alert className="border-green-200 bg-green-50">
-              <RefreshCw className="h-4 w-4 text-green-600" />
-              <div className="flex flex-col gap-2">
-                <AlertDescription className="text-green-800">
-                  A new version is available! Update now for the latest features.
-                </AlertDescription>
-                <div className="flex gap-2">
-                  <Button 
-                    size="sm"
-                    onClick={handleUpdatePWA}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    Update
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => safeSetState(setShowUpdatePrompt, false)}
-                  >
-                    Later
-                  </Button>
-                </div>
-              </div>
-            </Alert>
-          </div>
-        )}
-
-        {/* Offline Alert */}
-        {showOfflineAlert && (
-          <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 max-w-md">
-            <Alert className="border-yellow-200 bg-yellow-50">
-              <WifiOff className="h-4 w-4 text-yellow-600" />
-              <AlertDescription className="text-yellow-800">
-                <p className="font-semibold">You're offline</p>
-                <p className="text-sm mt-1">
-                  We'll sync your changes when you're back online.
-                </p>
-              </AlertDescription>
-            </Alert>
-          </div>
-        )}
-
-        {/* Network Status Indicator */}
-        <div className="fixed top-4 left-4 z-30">
-          <div className={`
-            flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium
-            transition-all duration-300
-            ${isOnline 
-              ? 'bg-green-100 text-green-800 border border-green-200' 
-              : 'bg-red-100 text-red-800 border border-red-200'
-            }
-          `}>
-            {isOnline ? (
-              <Wifi className="h-3 w-3" />
-            ) : (
-              <WifiOff className="h-3 w-3" />
-            )}
-            <span className="hidden sm:inline">
-              {isOnline ? 'Online' : 'Offline'}
-            </span>
-          </div>
-        </div>
-
-        {/* PWA Status Indicator (Development) */}
-        {import.meta.env.NODE_ENV === 'development' && (
-          <div className="fixed bottom-4 left-4 z-30">
-            <div className={`
-              flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium
-              ${isInstalled 
-                ? 'bg-blue-100 text-blue-800 border border-blue-200' 
-                : 'bg-gray-100 text-gray-800 border border-gray-200'
-              }
-            `}>
-              <CheckCircle className="h-3 w-3" />
-              <span>
-                {isInstalled ? 'PWA Mode' : 'Browser Mode'}
-              </span>
             </div>
-          </div>
-        )}
-      </PWAContext.Provider>
-    );
-  } catch (error) {
-    console.error('PWAProvider render error:', error);
-    // Return children without PWA features if there's an error
-    return <div>{children}</div>;
-  }
+          </details>
+        </div>
+      )}
+      
+      {/* Install Prompt */}
+      {showInstallPrompt && !isDev && (
+        <div className="fixed bottom-4 left-4 right-4 z-50 mx-auto max-w-sm">
+          <Alert className="bg-blue-50 border-blue-200">
+            <Smartphone className="h-4 w-4 text-blue-600" />
+            <AlertDescription className="flex items-center justify-between">
+              <span>Install Farm Direct as an app?</span>
+              <div className="flex gap-2 ml-2">
+                <Button size="sm" onClick={handleInstallPWA} className="bg-blue-600 hover:bg-blue-700">
+                  <Download className="h-3 w-3 mr-1" />
+                  Install
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={() => setShowInstallPrompt(false)}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+      
+      {/* Update Prompt */}
+      {showUpdatePrompt && (
+        <div className="fixed bottom-4 left-4 right-4 z-50 mx-auto max-w-sm">
+          <Alert className="bg-green-50 border-green-200">
+            <CheckCircle className="h-4 w-4 text-green-600" />
+            <AlertDescription className="flex items-center justify-between">
+              <span>App update available!</span>
+              <div className="flex gap-2 ml-2">
+                <Button size="sm" onClick={handleUpdateApp} className="bg-green-600 hover:bg-green-700">
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                  Update
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={() => setShowUpdatePrompt(false)}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+      
+      {/* Offline Alert */}
+      {showOfflineAlert && (
+        <div className="fixed top-4 left-4 right-4 z-50 mx-auto max-w-sm">
+          <Alert className="bg-orange-50 border-orange-200">
+            <WifiOff className="h-4 w-4 text-orange-600" />
+            <AlertDescription>
+              You're offline. Some features may be limited.
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+    </PWAContext.Provider>
+  );
 };

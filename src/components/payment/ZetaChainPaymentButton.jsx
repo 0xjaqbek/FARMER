@@ -1,4 +1,4 @@
-// src/components/payment/ZetaChainPaymentButton.jsx
+// src/components/payment/ZetaChainPaymentButton.jsx - Fixed version
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -55,12 +55,68 @@ const ZetaChainPaymentButton = ({
   const [transactionResult, setTransactionResult] = useState(null);
   const [error, setError] = useState(null);
 
+  // Validate props on component mount
+  useEffect(() => {
+    console.log('🔍 ZetaChainPaymentButton props validation:', {
+      campaignId,
+      amount,
+      rewardIndex,
+      targetContractAddress,
+      hasOnPaymentSuccess: !!onPaymentSuccess,
+      hasOnPaymentError: !!onPaymentError,
+      disabled,
+      className
+    });
+
+    // Validate required props
+    const validationErrors = [];
+    
+    if (campaignId === null || campaignId === undefined) {
+      validationErrors.push('campaignId is required');
+    }
+    
+    if (!amount || parseFloat(amount) <= 0) {
+      validationErrors.push('amount must be a positive number');
+    }
+    
+    if (!targetContractAddress) {
+      validationErrors.push('targetContractAddress is required');
+    }
+
+    if (validationErrors.length > 0) {
+      console.error('❌ ZetaChainPaymentButton validation errors:', validationErrors);
+      setError(`Component validation failed: ${validationErrors.join(', ')}`);
+    }
+  }, [campaignId, amount, rewardIndex, targetContractAddress]);
+
+  // Helper function to safely get chain display name
+  const getChainDisplayName = (chainName) => {
+    return chainName || 'Unknown Chain';
+  };
+
+  // Helper function to safely get chain type display
+  const getChainTypeDisplay = (chainType) => {
+    if (!chainType) return null;
+    return chainType.toUpperCase();
+  };
+
+  // Helper function to get currency symbol
+  const getCurrencySymbol = (chain) => {
+    if (!chain || !chain.nativeCurrency) return 'ETH';
+    return chain.nativeCurrency.symbol || 'ETH';
+  };
+
+  // Helper function to get amount display
+  const getAmountDisplay = (chain, amount) => {
+    const symbol = getCurrencySymbol(chain);
+    return `${amount} ${symbol}`;
+  };
+
   // Simple toast replacement function
   const showToast = (title, description, variant = 'default') => {
     console.log(`Toast: ${title} - ${description}`);
-    // You can replace this with a simple alert or custom notification
     if (variant === 'destructive') {
-      alert(`Error: ${description}`);
+      console.error(`Error: ${description}`);
     } else {
       console.log(`Success: ${description}`);
     }
@@ -68,8 +124,13 @@ const ZetaChainPaymentButton = ({
 
   // Initialize supported chains
   useEffect(() => {
-    const chains = zetaChainService.getSupportedChains();
-    setSupportedChains(chains);
+    try {
+      const chains = zetaChainService.getSupportedChains();
+      setSupportedChains(chains || []);
+    } catch (error) {
+      console.error('Error loading supported chains:', error);
+      setSupportedChains([]);
+    }
   }, []);
 
   // Update user balance and fees when chain is selected
@@ -77,29 +138,39 @@ const ZetaChainPaymentButton = ({
     if (selectedChain && isDialogOpen) {
       updateBalanceAndFees();
     }
-  }, [selectedChain, isDialogOpen]);
+  }, [selectedChain, isDialogOpen, amount]);
 
   const updateBalanceAndFees = async () => {
     try {
       setIsLoading(true);
+      setError(null);
       
+      const chainConfig = supportedChains.find(c => c.id === selectedChain);
+      if (!chainConfig) {
+        throw new Error('Selected chain configuration not found');
+      }
+
       // Get user balance
-      const balance = await zetaChainService.getUserBalance();
-      setUserBalance(balance);
+      const balance = await zetaChainService.getUserBalance(chainConfig.chainId);
+      setUserBalance({
+        balance: balance || '0.0',
+        currency: getCurrencySymbol(chainConfig)
+      });
 
       // Estimate cross-chain fees
-      const chainConfig = supportedChains.find(c => c.id === selectedChain);
-      if (chainConfig) {
+      if (amount && parseFloat(amount) > 0) {
         const fees = await zetaChainService.estimateCrossChainFees(
           chainConfig.chainId,
-          1 // Assuming destination is Ethereum mainnet
+          parseFloat(amount)
         );
         setEstimatedFees(fees);
       }
 
     } catch (error) {
       console.error('Error updating balance and fees:', error);
-      setError(error.message);
+      setError(error.message || 'Failed to load balance and fees');
+      setUserBalance({ balance: '0.0', currency: 'ETH' });
+      setEstimatedFees(null);
     } finally {
       setIsLoading(false);
     }
@@ -111,7 +182,7 @@ const ZetaChainPaymentButton = ({
       await zetaChainService.initialize();
       setIsDialogOpen(true);
     } catch (error) {
-      showToast("Wallet Connection Error", error.message, "destructive");
+      showToast("Wallet Connection Error", error.message || 'Failed to initialize ZetaChain service', "destructive");
     }
   };
 
@@ -131,40 +202,73 @@ const ZetaChainPaymentButton = ({
         throw new Error('Selected chain configuration not found');
       }
 
-      // Execute cross-chain payment
-      const result = await zetaChainService.executeCrossChainContribution({
+      // Validate amount
+      if (!amount || parseFloat(amount) <= 0) {
+        throw new Error('Invalid payment amount');
+      }
+
+      // Validate campaignId - ensure it's not null/undefined
+      if (!campaignId && campaignId !== 0) {
+        throw new Error('Campaign ID is required');
+      }
+
+      // Validate targetContractAddress
+      if (!targetContractAddress) {
+        throw new Error('Target contract address is required');
+      }
+
+      // Log all parameters for debugging
+      console.log('🚀 Initiating cross-chain payment with parameters:', {
         campaignId,
-        amount,
+        amount: parseFloat(amount),
         sourceChain: chainConfig.chainId,
         targetContractAddress,
-        rewardIndex,
+        rewardIndex: rewardIndex || 0,
+        chainConfig
+      });
+
+      // Execute cross-chain payment with validated parameters
+      const result = await zetaChainService.executeCrossChainContribution({
+        campaignId: campaignId, // Ensure it's passed explicitly
+        amount: parseFloat(amount),
+        sourceChain: chainConfig.chainId,
+        targetContractAddress: targetContractAddress,
+        rewardIndex: rewardIndex || 0, // Provide default if null
         onProgress: (message) => {
+          console.log('🔄 Progress:', message);
           showToast("Transaction Progress", message);
         }
       });
+
+      console.log('✅ Cross-chain payment successful:', result);
 
       setTransactionResult(result);
       setCurrentStep('success');
 
       // Call success callback to update database and trigger existing flow
-      onPaymentSuccess?.({
-        ...result,
-        paymentMethod: 'zetachain',
-        sourceChain: chainConfig.name,
-        campaignId,
-        amount
-      });
+      if (onPaymentSuccess) {
+        onPaymentSuccess({
+          ...result,
+          paymentMethod: 'zetachain',
+          sourceChain: getChainDisplayName(chainConfig.name),
+          campaignId: campaignId,
+          amount: parseFloat(amount)
+        });
+      }
 
-      showToast("Cross-Chain Payment Successful!", `Payment of ${amount} ETH sent from ${chainConfig.name}`);
+      showToast("Cross-Chain Payment Successful!", `Payment of ${getAmountDisplay(chainConfig, amount)} sent from ${getChainDisplayName(chainConfig.name)}`);
 
     } catch (error) {
-      console.error('Cross-chain payment error:', error);
-      setError(error.message);
+      console.error('❌ Cross-chain payment error:', error);
+      const errorMessage = error.message || 'Payment failed. Please try again.';
+      setError(errorMessage);
       setCurrentStep('confirm');
       
-      onPaymentError?.(error);
+      if (onPaymentError) {
+        onPaymentError(error);
+      }
       
-      showToast("Payment Failed", error.message, "destructive");
+      showToast("Payment Failed", errorMessage, "destructive");
     } finally {
       setIsLoading(false);
     }
@@ -181,18 +285,18 @@ const ZetaChainPaymentButton = ({
   };
 
   const getTotalCost = () => {
-    if (!estimatedFees) return null;
+    if (!estimatedFees || !amount) return null;
     
     const paymentAmount = parseFloat(amount);
-    const totalFees = parseFloat(estimatedFees.totalFee);
+    const totalFees = parseFloat(estimatedFees.totalFee || '0');
     return (paymentAmount + totalFees).toFixed(6);
   };
 
   const hasEnoughBalance = () => {
-    if (!userBalance || !estimatedFees) return false;
+    if (!userBalance || !estimatedFees || !amount) return false;
     
     const totalCost = getTotalCost();
-    return parseFloat(userBalance.balance) >= parseFloat(totalCost);
+    return parseFloat(userBalance.balance || '0') >= parseFloat(totalCost || '0');
   };
 
   const renderChainSelect = () => {
@@ -228,13 +332,13 @@ const ZetaChainPaymentButton = ({
                   <div className="flex items-center space-x-3">
                     <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
                       <span className="text-white text-xs font-bold">
-                        {chain.name.slice(0, 2).toUpperCase()}
+                        {(chain.name || 'ETH').slice(0, 2).toUpperCase()}
                       </span>
                     </div>
                     <div className="text-left">
-                      <div className="font-medium">{chain.name}</div>
+                      <div className="font-medium">{getChainDisplayName(chain.name)}</div>
                       <div className="text-xs text-gray-500">
-                        Chain ID: {chain.chainId}
+                        Chain ID: {chain.chainId || 'Unknown'}
                       </div>
                     </div>
                   </div>
@@ -251,81 +355,67 @@ const ZetaChainPaymentButton = ({
             <h4 className="text-sm font-medium text-gray-700 flex items-center space-x-2">
               <Zap className="h-4 w-4" />
               <span>Native Blockchain Support</span>
-              <Badge variant="secondary" className="text-xs">New!</Badge>
             </h4>
             <div className="grid gap-2">
-              {nonEvmChains.map((chain) => {
-                // Custom icons and colors for each chain type
-                let chainIcon = '🔗';
-                let bgColor = 'from-gray-500 to-gray-600';
-                
-                if (chain.name.toLowerCase().includes('bitcoin')) {
-                  chainIcon = '₿';
-                  bgColor = 'from-orange-500 to-yellow-500';
-                } else if (chain.name.toLowerCase().includes('solana')) {
-                  chainIcon = 'S';
-                  bgColor = 'from-purple-500 to-indigo-500';
-                } else if (chain.name.toLowerCase().includes('ton')) {
-                  chainIcon = '💎';
-                  bgColor = 'from-cyan-500 to-blue-500';
-                }
-
-                return (
-                  <Button
-                    key={chain.id}
-                    variant="outline"
-                    className="p-4 h-auto justify-start border-dashed border-2 hover:border-solid"
-                    onClick={() => handleChainSelect(chain.id)}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-8 h-8 bg-gradient-to-r ${bgColor} rounded-full flex items-center justify-center`}>
-                        <span className="text-white text-sm font-bold">
-                          {chainIcon}
-                        </span>
-                      </div>
-                      <div className="text-left">
-                        <div className="font-medium flex items-center space-x-2">
-                          <span>{chain.name}</span>
-                          {chain.name.toLowerCase().includes('bitcoin') && (
-                            <Badge variant="outline" className="text-xs">UTXO</Badge>
-                          )}
-                          {chain.name.toLowerCase().includes('solana') && (
-                            <Badge variant="outline" className="text-xs">SVM</Badge>
-                          )}
-                          {chain.name.toLowerCase().includes('ton') && (
-                            <Badge variant="outline" className="text-xs">TON VM</Badge>
-                          )}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {chain.symbol && `Native ${chain.symbol}`}
-                          {chain.name.toLowerCase().includes('bitcoin') && ' • Secure & Decentralized'}
-                          {chain.name.toLowerCase().includes('solana') && ' • Fast & Low Cost'}
-                          {chain.name.toLowerCase().includes('ton') && ' • Telegram Ecosystem'}
-                        </div>
+              {nonEvmChains.map((chain) => (
+                <Button
+                  key={chain.id}
+                  variant="outline"
+                  className="p-4 h-auto justify-start"
+                  onClick={() => handleChainSelect(chain.id)}
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-blue-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs font-bold">
+                        {(chain.name || 'COIN').slice(0, 2).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="text-left">
+                      <div className="font-medium">{getChainDisplayName(chain.name)}</div>
+                      <div className="text-xs text-gray-500">
+                        {getChainTypeDisplay(chain.type) && (
+                          <Badge variant="outline" className="text-xs">
+                            {getChainTypeDisplay(chain.type)}
+                          </Badge>
+                        )}
                       </div>
                     </div>
-                    <ArrowRightLeft className="h-4 w-4 ml-auto" />
-                  </Button>
-                );
-              })}
+                  </div>
+                  <ArrowRightLeft className="h-4 w-4 ml-auto" />
+                </Button>
+              ))}
             </div>
           </div>
         )}
 
-        <Alert>
-          <Globe className="h-4 w-4" />
-          <AlertDescription className="text-xs">
-            <strong>Bitcoin, Solana & TON:</strong> First time using? You'll need the appropriate wallet installed (Unisat/Xverse for Bitcoin, Phantom for Solana, TON Wallet for TON).
-          </AlertDescription>
-        </Alert>
+        {supportedChains.length === 0 && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              No supported chains available. Please try again later.
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
     );
   };
 
   const renderPaymentConfirmation = () => {
     const selectedChainConfig = supportedChains.find(c => c.id === selectedChain);
-    const currency = estimatedFees?.currency || 'ETH';
+    const currency = estimatedFees?.currency || getCurrencySymbol(selectedChainConfig);
     
+    // Safety check for selectedChainConfig
+    if (!selectedChainConfig) {
+      return (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Selected chain configuration not found. Please try selecting a chain again.
+          </AlertDescription>
+        </Alert>
+      );
+    }
+
     return (
       <div className="space-y-4">
         <div className="text-center">
@@ -333,103 +423,106 @@ const ZetaChainPaymentButton = ({
           <h3 className="text-lg font-semibold">Confirm Cross-Chain Payment</h3>
         </div>
 
-        {selectedChainConfig && (
-          <Card>
-            <CardContent className="p-4">
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">From:</span>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-4 h-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full" />
-                    <span className="font-medium">{selectedChainConfig.name}</span>
-                    {selectedChainConfig.type !== 'evm' && (
-                      <Badge variant="outline" className="text-xs">
-                        {selectedChainConfig.type.toUpperCase()}
-                      </Badge>
-                    )}
+        <Card>
+          <CardContent className="p-4">
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">From:</span>
+                <div className="flex items-center space-x-2">
+                  <div className="w-4 h-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full" />
+                  <span className="font-medium">{getChainDisplayName(selectedChainConfig.name)}</span>
+                  {getChainTypeDisplay(selectedChainConfig.type) && (
+                    <Badge variant="outline" className="text-xs">
+                      {getChainTypeDisplay(selectedChainConfig.type)}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">To:</span>
+                <span className="font-medium">Your Campaign Contract</span>
+              </div>
+
+              <Separator />
+
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Payment Amount:</span>
+                <span className="font-medium">
+                  {getAmountDisplay(selectedChainConfig, amount)}
+                </span>
+              </div>
+
+              {estimatedFees && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">Network Fee:</span>
+                    <span className="text-sm">{estimatedFees.networkFee} {currency}</span>
                   </div>
-                </div>
-                
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">To:</span>
-                  <span className="font-medium">Your Campaign Contract</span>
-                </div>
+                  
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">Cross-Chain Fee:</span>
+                    <span className="text-sm">{estimatedFees.zetaFee || '0'} {currency}</span>
+                  </div>
 
-                <Separator />
+                  <Separator />
 
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Payment Amount:</span>
-                  <span className="font-medium">
-                    {selectedChainConfig.type === 'evm' ? `${amount} ETH` : 
-                     selectedChainConfig.type === 'utxo' ? `${amount} BTC` :
-                     selectedChainConfig.type === 'svm' ? `${amount} SOL` :
-                     selectedChainConfig.type === 'ton' ? `${amount} TON` :
-                     `${amount} ${currency}`}
+                  <div className="flex justify-between font-medium">
+                    <span>Total Cost:</span>
+                    <span>{getTotalCost()} {currency}</span>
+                  </div>
+                </>
+              )}
+
+              {userBalance && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Your Balance:</span>
+                  <span className={parseFloat(userBalance.balance) >= parseFloat(getTotalCost() || '0') ? 'text-green-600' : 'text-red-600'}>
+                    {userBalance.balance} {userBalance.currency}
                   </span>
                 </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
-                {estimatedFees && (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Cross-Chain Fee:</span>
-                      <span className="font-medium">{estimatedFees.totalFee} {currency}</span>
-                    </div>
+        {/* Chain-specific warnings */}
+        <div className="space-y-2">
+          {selectedChainConfig.type === 'bitcoin' && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                <strong>Bitcoin Notice:</strong> Transaction may take 10-30 minutes for confirmation. 
+                You'll need Unisat or Xverse wallet installed.
+              </AlertDescription>
+            </Alert>
+          )}
 
-                    <Separator />
+          {selectedChainConfig.type === 'solana' && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                <strong>Solana Notice:</strong> Make sure you have Phantom wallet installed. 
+                Transaction fees are typically low (≈0.00025 SOL).
+              </AlertDescription>
+            </Alert>
+          )}
 
-                    <div className="flex justify-between font-bold">
-                      <span>Total Cost:</span>
-                      <span>{getTotalCost()} {currency}</span>
-                    </div>
-                  </>
-                )}
-
-                {userBalance && (
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Your Balance:</span>
-                    <span className={`font-medium ${hasEnoughBalance() ? 'text-green-600' : 'text-red-600'}`}>
-                      {userBalance.balance} {userBalance.currency || currency}
-                    </span>
-                  </div>
-                )}
-
-                {/* Special notices for different chain types */}
-                {selectedChainConfig.type === 'utxo' && (
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription className="text-xs">
-                      <strong>Bitcoin Notice:</strong> Transaction will be processed through ZetaChain's Bitcoin gateway. Confirmation may take 10-30 minutes.
-                    </AlertDescription>
-                  </Alert>
-                )}
-
-                {selectedChainConfig.type === 'svm' && (
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription className="text-xs">
-                      <strong>Solana Notice:</strong> Make sure you have Phantom wallet connected and enough SOL for transaction fees.
-                    </AlertDescription>
-                  </Alert>
-                )}
-
-                {selectedChainConfig.type === 'ton' && (
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription className="text-xs">
-                      <strong>TON Notice:</strong> This feature is in beta. Make sure you have TON Wallet or Tonkeeper installed.
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+          {selectedChainConfig.type === 'ton' && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                <strong>TON Notice:</strong> This feature is in beta. Make sure you have TON Wallet or Tonkeeper installed.
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
 
         {!hasEnoughBalance() && userBalance && estimatedFees && (
-          <Alert>
+          <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              Insufficient balance. You need {getTotalCost()} {currency} but only have {userBalance.balance} {userBalance.currency || currency}.
+              Insufficient balance. You need {getTotalCost()} {currency} but only have {userBalance.balance} {userBalance.currency}.
             </AlertDescription>
           </Alert>
         )}
@@ -438,6 +531,13 @@ const ZetaChainPaymentButton = ({
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {isLoading && (
+          <Alert>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <AlertDescription>Loading balance and fee information...</AlertDescription>
           </Alert>
         )}
       </div>
@@ -465,23 +565,25 @@ const ZetaChainPaymentButton = ({
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">Transaction Hash:</span>
-                <a 
-                  href="#" 
-                  className="text-blue-600 hover:underline flex items-center space-x-1"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <span>{transactionResult.transactionHash.slice(0, 10)}...</span>
-                  <ExternalLink className="h-3 w-3" />
-                </a>
+                <div className="flex items-center space-x-1">
+                  <span className="font-mono text-xs">
+                    {transactionResult.transactionHash ? 
+                      `${transactionResult.transactionHash.slice(0, 10)}...${transactionResult.transactionHash.slice(-6)}` :
+                      'Processing...'
+                    }
+                  </span>
+                  {transactionResult.transactionHash && (
+                    <ExternalLink className="h-3 w-3 cursor-pointer" />
+                  )}
+                </div>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Amount:</span>
-                <span>{transactionResult.amount} ETH</span>
+                <span>{transactionResult.amount} {getCurrencySymbol()}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Source:</span>
-                <span>{zetaChainService.getChainDisplayName(transactionResult.sourceChain)}</span>
+                <span>{getChainDisplayName(transactionResult.sourceChain)}</span>
               </div>
             </div>
           </CardContent>

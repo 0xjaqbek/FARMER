@@ -1,40 +1,62 @@
-// PWA Installation and Management Utilities
+// src/utils/pwa.js - Development-safe version
 
 let deferredPrompt = null;
 let serviceWorkerRegistration = null;
 
-// Register service worker
+// Check if we should register service worker (skip in development)
+const shouldRegisterSW = () => {
+  return (
+    'serviceWorker' in navigator &&
+    (import.meta.env.PROD || import.meta.env.VITE_ENABLE_SW_DEV === 'true')
+  );
+};
+
+// Register service worker (conditional)
 export const registerServiceWorker = async () => {
-  if ('serviceWorker' in navigator) {
-    try {
-      const registration = await navigator.serviceWorker.register('/sw.js', {
-        scope: '/'
-      });
-      
-      serviceWorkerRegistration = registration;
-      console.log('Service Worker registered successfully:', registration.scope);
-      
-      // Listen for updates
-      registration.addEventListener('updatefound', () => {
-        const newWorker = registration.installing;
-        console.log('New Service Worker found, installing...');
-        
-        newWorker.addEventListener('statechange', () => {
-          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            console.log('New Service Worker installed, update available');
-            // Notify user about update
-            notifyUserOfUpdate();
-          }
-        });
-      });
-      
-      return registration;
-    } catch (error) {
-      console.error('Service Worker registration failed:', error);
-      return null;
+  if (!shouldRegisterSW()) {
+    console.log('Service Worker registration skipped in development');
+    return null;
+  }
+
+  try {
+    // Clear any existing service workers in development
+    if (import.meta.env.DEV) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (let registration of registrations) {
+        await registration.unregister();
+        console.log('Unregistered existing service worker');
+      }
     }
-  } else {
-    console.log('Service Workers not supported');
+
+    const registration = await navigator.serviceWorker.register('/sw.js', {
+      scope: '/',
+      updateViaCache: import.meta.env.DEV ? 'none' : 'imports' // No cache in dev
+    });
+    
+    serviceWorkerRegistration = registration;
+    console.log('Service Worker registered successfully:', registration.scope);
+    
+    // Listen for updates
+    registration.addEventListener('updatefound', () => {
+      const newWorker = registration.installing;
+      console.log('New Service Worker found, installing...');
+      
+      newWorker.addEventListener('statechange', () => {
+        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          console.log('New Service Worker installed, update available');
+          notifyUserOfUpdate();
+        }
+      });
+    });
+    
+    // Force update in development
+    if (import.meta.env.DEV) {
+      registration.update();
+    }
+    
+    return registration;
+  } catch (error) {
+    console.error('Service Worker registration failed:', error);
     return null;
   }
 };
@@ -46,12 +68,16 @@ export const getServiceWorkerRegistration = () => {
 
 // Handle PWA install prompt
 export const setupPWAInstall = () => {
+  // Skip PWA features in development
+  if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_PWA_DEV !== 'true') {
+    console.log('PWA install features disabled in development');
+    return;
+  }
+
   window.addEventListener('beforeinstallprompt', (e) => {
     console.log('PWA install prompt available');
     e.preventDefault();
     deferredPrompt = e;
-    
-    // Show custom install button
     showInstallButton();
   });
 
@@ -59,10 +85,39 @@ export const setupPWAInstall = () => {
     console.log('PWA installed successfully');
     deferredPrompt = null;
     hideInstallButton();
-    
-    // Track installation
     trackPWAInstallation();
   });
+};
+
+// Clear service worker cache (development helper)
+export const clearServiceWorkerCache = async () => {
+  if ('serviceWorker' in navigator) {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    for (let registration of registrations) {
+      await registration.unregister();
+    }
+    
+    // Clear all caches
+    if ('caches' in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(
+        cacheNames.map(cacheName => caches.delete(cacheName))
+      );
+    }
+    
+    console.log('Service Worker cache cleared');
+    return true;
+  }
+  return false;
+};
+
+// Development helper to force refresh
+export const forceRefresh = () => {
+  if (import.meta.env.DEV) {
+    clearServiceWorkerCache().then(() => {
+      window.location.reload();
+    });
+  }
 };
 
 // Trigger PWA installation
@@ -88,56 +143,63 @@ export const installPWA = async () => {
 
 // Check if app is running as PWA
 export const isPWA = () => {
-  return window.matchMedia('(display-mode: standalone)').matches ||
-         window.navigator.standalone ||
-         document.referrer.includes('android-app://');
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone ||
+    document.referrer.includes('android-app://')
+  );
 };
 
 // Check if PWA is installable
 export const isPWAInstallable = () => {
-  return deferredPrompt !== null;
-};
-
-// Network status detection
-export const getNetworkStatus = () => {
-  return {
-    online: navigator.onLine,
-    connection: navigator.connection || navigator.mozConnection || navigator.webkitConnection,
-    effectiveType: (navigator.connection && navigator.connection.effectiveType) || 'unknown'
-  };
+  return !!deferredPrompt;
 };
 
 // Setup network monitoring
 export const setupNetworkMonitoring = (onOnline, onOffline) => {
-  window.addEventListener('online', () => {
-    console.log('Network: Back online');
-    onOnline && onOnline();
-  });
-
-  window.addEventListener('offline', () => {
-    console.log('Network: Gone offline');
-    onOffline && onOffline();
-  });
-};
-
-// Background sync registration
-export const registerBackgroundSync = async (tag) => {
-  const registration = getServiceWorkerRegistration();
-  if ('serviceWorker' in navigator && 'sync' in window.ServiceWorkerRegistration.prototype && registration) {
-    try {
-      await registration.sync.register(tag);
-      console.log('Background sync registered:', tag);
-      return true;
-    } catch (error) {
-      console.error('Background sync registration failed:', error);
-      return false;
-    }
+  if (import.meta.env.DEV) {
+    console.log('Network monitoring simplified for development');
   }
-  return false;
+
+  const handleOnline = () => {
+    console.log('Network: Online');
+    onOnline?.();
+  };
+
+  const handleOffline = () => {
+    console.log('Network: Offline');
+    onOffline?.();
+  };
+
+  window.addEventListener('online', handleOnline);
+  window.addEventListener('offline', handleOffline);
+
+  return () => {
+    window.removeEventListener('online', handleOnline);
+    window.removeEventListener('offline', handleOffline);
+  };
 };
 
-// Push notifications setup
+// Simplified capabilities for development
+export const getPWACapabilities = () => {
+  return {
+    serviceWorker: shouldRegisterSW(),
+    notifications: 'Notification' in window,
+    pushManager: 'PushManager' in window,
+    installPrompt: import.meta.env.PROD ? ('beforeinstallprompt' in window || isPWA()) : false,
+    webShare: 'share' in navigator,
+    geolocation: 'geolocation' in navigator,
+    devMode: import.meta.env.DEV
+  };
+};
+
+// Setup push notifications (production only)
 export const setupPushNotifications = async () => {
+  if (import.meta.env.DEV) {
+    console.log('Push notifications disabled in development');
+    return null;
+  }
+
   if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
     console.log('Push notifications not supported');
     return null;
@@ -159,10 +221,6 @@ export const setupPushNotifications = async () => {
       });
       
       console.log('Push subscription created:', subscription);
-      
-      // Send subscription to your backend
-      await sendSubscriptionToBackend(subscription);
-      
       return subscription;
     } else {
       console.log('Push notification permission denied');
@@ -203,7 +261,6 @@ export const saveOfflineData = async (storeName, data) => {
   });
 };
 
-// Get offline data
 export const getOfflineData = async (storeName) => {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open('FarmDirectOffline', 1);
@@ -212,112 +269,65 @@ export const getOfflineData = async (storeName) => {
     
     request.onsuccess = () => {
       const db = request.result;
+      
+      if (!db.objectStoreNames.contains(storeName)) {
+        resolve([]);
+        return;
+      }
+      
       const transaction = db.transaction([storeName], 'readonly');
       const store = transaction.objectStore(storeName);
       const getAllRequest = store.getAll();
       
-      getAllRequest.onsuccess = () => resolve(getAllRequest.result);
+      getAllRequest.onsuccess = () => {
+        resolve(getAllRequest.result || []);
+      };
       getAllRequest.onerror = () => reject(getAllRequest.error);
+    };
+    
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(storeName)) {
+        db.createObjectStore(storeName, { keyPath: 'id' });
+      }
     };
   });
 };
 
-// PWA update management
-export const checkForAppUpdate = async () => {
-  const registration = getServiceWorkerRegistration();
-  if (registration) {
-    await registration.update();
+// Background sync registration
+export const registerBackgroundSync = async (tag) => {
+  if (import.meta.env.DEV) {
+    console.log('Background sync disabled in development:', tag);
+    return false;
   }
+
+  const registration = getServiceWorkerRegistration();
+  if ('serviceWorker' in navigator && 'sync' in window.ServiceWorkerRegistration.prototype && registration) {
+    try {
+      await registration.sync.register(tag);
+      console.log('Background sync registered:', tag);
+      return true;
+    } catch (error) {
+      console.error('Background sync registration failed:', error);
+      return false;
+    }
+  }
+  return false;
 };
 
-// Helper functions for UI components
+// Helper functions for UI feedback
 const showInstallButton = () => {
-  const event = new CustomEvent('pwa-install-available');
-  window.dispatchEvent(event);
+  window.dispatchEvent(new CustomEvent('pwa-install-available'));
 };
 
 const hideInstallButton = () => {
-  const event = new CustomEvent('pwa-installed');
-  window.dispatchEvent(event);
+  window.dispatchEvent(new CustomEvent('pwa-install-hidden'));
 };
 
 const notifyUserOfUpdate = () => {
-  const event = new CustomEvent('pwa-update-available');
-  window.dispatchEvent(event);
+  window.dispatchEvent(new CustomEvent('pwa-update-available'));
 };
 
 const trackPWAInstallation = () => {
-  // Track PWA installation in your analytics
-  console.log('PWA installation tracked');
-  
-  // You could send this to Firebase Analytics or your preferred analytics service
-  if (typeof window.gtag !== 'undefined') {
-    window.gtag('event', 'pwa_install', {
-      event_category: 'engagement',
-      event_label: 'PWA Installation'
-    });
-  }
-};
-
-const sendSubscriptionToBackend = async (subscription) => {
-  try {
-    // Send push subscription to your Firebase Function or API
-    const response = await fetch('/api/push-subscription', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(subscription)
-    });
-    
-    if (!response.ok) {
-      throw new Error('Failed to send subscription to backend');
-    }
-    
-    console.log('Push subscription sent to backend');
-  } catch (error) {
-    console.error('Failed to send push subscription:', error);
-  }
-};
-
-// PWA capabilities detection
-export const getPWACapabilities = () => {
-  return {
-    serviceWorker: 'serviceWorker' in navigator,
-    notifications: 'Notification' in window,
-    pushManager: 'PushManager' in window,
-    backgroundSync: 'sync' in window.ServiceWorkerRegistration.prototype,
-    installPrompt: 'beforeinstallprompt' in window || isPWA(),
-    fileSystemAccess: 'showOpenFilePicker' in window,
-    webShare: 'share' in navigator,
-    geolocation: 'geolocation' in navigator,
-    camera: 'mediaDevices' in navigator && 'getUserMedia' in navigator.mediaDevices
-  };
-};
-
-// Web Share API integration
-export const shareContent = async (shareData) => {
-  if (navigator.share) {
-    try {
-      await navigator.share(shareData);
-      return true;
-    } catch (error) {
-      console.error('Web Share failed:', error);
-      return false;
-    }
-  }
-  
-  // Fallback to clipboard
-  if (navigator.clipboard && shareData.url) {
-    try {
-      await navigator.clipboard.writeText(shareData.url);
-      console.log('URL copied to clipboard');
-      return true;
-    } catch (error) {
-      console.error('Clipboard write failed:', error);
-      return false;
-    }
-  }
-  
-  return false;
+  window.dispatchEvent(new CustomEvent('pwa-installed'));
 };
