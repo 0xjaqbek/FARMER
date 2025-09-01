@@ -128,86 +128,196 @@ const CampaignDetail = () => {
     }
   };
 
-  const connectWallet = async () => {
-    if (!window.ethereum) {
-      toast({
-        title: "MetaMask Required",
-        description: "Please install MetaMask to back this campaign",
-        variant: "destructive"
-      });
-      return;
-    }
+const connectWallet = async (e) => {
+  // Prevent any form submission or page reload
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
 
-    try {
-      const accounts = await window.ethereum.request({ 
-        method: 'eth_requestAccounts' 
-      });
-      setWeb3Account(accounts[0]);
-      setWeb3Connected(true);
-      toast({
-        title: "Wallet Connected",
-        description: `Connected: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`
-      });
-    } catch (error) {
-      console.error('Error connecting wallet:', error);
-      toast({
-        title: "Connection Failed",
-        description: "Failed to connect wallet",
-        variant: "destructive"
-      });
-    }
-  };
+  if (!window.ethereum) {
+    toast({
+      title: "MetaMask Required",
+      description: "Please install MetaMask to back this campaign",
+      variant: "destructive"
+    });
+    return;
+  }
+
+  try {
+    const accounts = await window.ethereum.request({ 
+      method: 'eth_requestAccounts' 
+    });
+    setWeb3Account(accounts[0]);
+    setWeb3Connected(true);
+    toast({
+      title: "Wallet Connected",
+      description: `Connected: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`
+    });
+  } catch (error) {
+    console.error('Error connecting wallet:', error);
+    toast({
+      title: "Connection Failed",
+      description: "Failed to connect wallet",
+      variant: "destructive"
+    });
+  }
+};
 
   // NEW: Unified payment success handler (works for both traditional and ZetaChain)
-  const handlePaymentSuccess = async (paymentResult) => {
-    try {
-      console.log('Payment successful:', paymentResult);
 
+// Helper function to get block explorer URL
+const getBlockExplorerUrl = (txHash, sourceChain, sourceChainId) => {
+  // Map of chain IDs to block explorers
+  const blockExplorers = {
+    // Ethereum mainnet
+    1: 'https://etherscan.io',
+    // Sepolia testnet  
+    11155111: 'https://sepolia.etherscan.io',
+    // Bitcoin mainnet
+    'btc-mainnet': 'https://blockstream.info',
+    'bitcoin': 'https://blockstream.info',
+    // Bitcoin testnet
+    'btc-testnet': 'https://blockstream.info/testnet',
+    // Solana mainnet
+    'solana-mainnet': 'https://explorer.solana.com',
+    // Solana devnet
+    'solana-devnet': 'https://explorer.solana.com/?cluster=devnet',
+    // TON
+    'ton-mainnet': 'https://tonviewer.com',
+    'ton': 'https://tonviewer.com',
+    // Polygon
+    137: 'https://polygonscan.com',
+    // BSC
+    56: 'https://bscscan.com',
+    // Arbitrum
+    42161: 'https://arbiscan.io',
+    // Optimism
+    10: 'https://optimistic.etherscan.io',
+    // Avalanche
+    43114: 'https://snowtrace.io'
+  };
+
+  const explorer = blockExplorers[sourceChainId] || blockExplorers[sourceChain];
+  
+  if (!explorer || !txHash) return null;
+
+  // Different URL formats for different chains
+  if (sourceChain?.includes('solana')) {
+    const clusterParam = sourceChain.includes('devnet') ? '?cluster=devnet' : '';
+    return `${explorer}/tx/${txHash}${clusterParam}`;
+  } else if (sourceChain?.includes('ton') || sourceChainId?.toString().includes('ton')) {
+    return `${explorer}/transaction/${txHash}`;
+  } else if (sourceChain?.includes('bitcoin') || sourceChain?.includes('btc')) {
+    return `${explorer}/tx/${txHash}`;
+  } else {
+    // Default EVM format
+    return `${explorer}/tx/${txHash}`;
+  }
+};
+
+const handlePaymentSuccess = async (paymentResult) => {
+  // Prevent any page reload or navigation
+  try {
+    console.log('Payment successful:', paymentResult);
+    setBacking(true);
+
+    // For ZetaChain payments, the transaction is already completed
+    // We only need to handle the post-payment logic (database updates, notifications)
+    if (paymentResult.paymentMethod === 'zetachain') {
+      console.log('Processing ZetaChain payment completion...');
+      
+      // Show processing toast that stays until user closes it
       toast({
-        title: "Contribution Successful!",
-        description: `Thank you for contributing ${backingAmount} ETH to this campaign.`,
-        variant: "default"
+        title: "🔄 Processing Cross-Chain Payment...",
+        description: `Your payment of ${paymentResult.amount} ETH from ${paymentResult.sourceChain} is being processed...`,
+        duration: Infinity // Toast stays until manually dismissed
+      });
+      
+      // Handle only the database updates and post-payment logic
+      await integratedPaymentService.executePostPaymentLogic({
+        paymentResult,
+        campaignId: id,
+        amount: parseFloat(backingAmount),
+        user: userProfile,
+        campaignData: campaign,
+        paymentMethod: 'zetachain',
+        sourceChain: paymentResult.sourceChain
       });
 
-      // Process through integrated service (maintains all your existing database logic)
+    } else {
+      // For traditional payments, process normally
+      toast({
+        title: "🔄 Processing Payment...",
+        description: `Your payment of ${backingAmount} ETH is being processed...`,
+        duration: Infinity // Toast stays until manually dismissed
+      });
+
       await integratedPaymentService.processContribution({
-        campaignId: campaign.id,
+        campaignId: id,
         amount: parseFloat(backingAmount),
-        paymentMethod: paymentResult.paymentMethod || 'traditional',
-        sourceChain: paymentResult.sourceChain || null,
+        rewardIndex: null,
+        paymentMethod: 'traditional',
         user: userProfile,
         campaignData: campaign
       });
-
-      // Update local campaign state if we have blockchain data
-      if (paymentResult.transactionHash) {
-        setCampaign(prev => ({
-          ...prev,
-          backerCount: (prev.backerCount || 0) + 1,
-          lastContributionAt: new Date(),
-          lastTransactionHash: paymentResult.transactionHash,
-          blockchainSynced: true
-        }));
-      }
-
-      // Reset form and reload campaign
-      setBackingAmount('');
-      setShowBackingForm(false);
-      
-      // Refresh the page to show updated data
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
-
-    } catch (error) {
-      console.error('Payment processing error:', error);
-      toast({
-        title: "Payment Processing Error", 
-        description: error.message,
-        variant: "destructive"
-      });
     }
-  };
+
+    console.log('✅ Database updates completed, refreshing campaign data...');
+
+    // Wait a moment for Firebase to propagate the changes
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    // Get block explorer URL for the transaction
+    const explorerUrl = getBlockExplorerUrl(
+      paymentResult.transactionHash, 
+      paymentResult.sourceChain,
+      paymentResult.sourceChainId
+    );
+
+    // Create transaction hash display with link
+    const txHashDisplay = paymentResult.transactionHash 
+      ? `${paymentResult.transactionHash.slice(0, 10)}...${paymentResult.transactionHash.slice(-6)}`
+      : 'Processing...';
+
+    // Show final success message with clickable transaction hash
+  toast({
+    title: "✅ Contribution Complete!",
+    description: `Thank you for backing this campaign! Your ${paymentResult.amount} ${paymentResult.sourceChain || 'ETH'} payment has been recorded. Transaction: ${txHashDisplay}`,
+    duration: Infinity,
+    action: explorerUrl ? {
+      label: "View Transaction",
+      onClick: () => window.open(explorerUrl, '_blank', 'noopener,noreferrer')
+    } : {
+      label: "Close", 
+      onClick: () => {
+        setBackingAmount('');
+        setShowBackingForm(false);
+        setActivePaymentMethod('traditional');
+        loadCampaign();
+      }
+    }
+  });
+    
+  } catch (error) {
+    console.error('Payment processing error:', error);
+    toast({
+      title: "❌ Payment Processing Error",
+      description: error.message || "There was an error processing your payment.",
+      variant: "destructive",
+      duration: Infinity, // Let user read the error
+      action: {
+        label: "Close",
+        onClick: () => {
+          // User can retry after closing error
+        }
+      }
+    });
+  } finally {
+    setBacking(false);
+  }
+};
+
 
   // NEW: Unified payment error handler
   const handlePaymentError = (error) => {
@@ -279,84 +389,89 @@ const CampaignDetail = () => {
   };
 
   // UPDATED: Enhanced crypto backing function using integrated service
-  const handleCryptoBacking = async () => {
-    if (!web3Connected) {
-      await connectWallet();
-      return;
+const handleCryptoBacking = async (e) => {
+  // Prevent any form submission or page reload
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  
+  if (!web3Connected) {
+    await connectWallet();
+    return;
+  }
+
+  if (!backingAmount || parseFloat(backingAmount) <= 0) {
+    toast({
+      title: "Invalid Amount",
+      description: "Please enter a valid ETH amount",
+      variant: "destructive"
+    });
+    return;
+  }
+
+  if (!campaign.web3CampaignId && !campaign.blockchainDeployment?.web3CampaignId) {
+    toast({
+      title: "Campaign Not Available",
+      description: "This campaign is not available for crypto backing yet",
+      variant: "destructive"
+    });
+    return;
+  }
+
+  try {
+    setBacking(true);
+
+    const { ethers } = await import('ethers');
+    
+    const contractAddress = import.meta.env.VITE_APP_CONTRACT_ADDRESS;
+    if (!contractAddress) {
+      throw new Error('Contract address not configured');
     }
 
-    if (!backingAmount || parseFloat(backingAmount) <= 0) {
-      toast({
-        title: "Invalid Amount",
-        description: "Please enter a valid ETH amount",
-        variant: "destructive"
-      });
-      return;
-    }
+    const contractABI = [
+      "function contribute(uint256 campaignId, uint256 rewardTierIndex) external payable",
+      "function getCampaignBasic(uint256 campaignId) external view returns (uint256, string, address, uint256, uint256, uint256)",
+      "event ContributionMade(uint256 indexed campaignId, address indexed backer, uint256 amount, uint256 totalRaised)"
+    ];
 
-    if (!campaign.web3CampaignId && !campaign.blockchainDeployment?.web3CampaignId) {
-      toast({
-        title: "Campaign Not Available",
-        description: "This campaign is not available for crypto backing yet",
-        variant: "destructive"
-      });
-      return;
-    }
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    const contract = new ethers.Contract(contractAddress, contractABI, signer);
 
-    try {
-      setBacking(true);
+    const amountWei = ethers.parseEther(backingAmount);
+    const web3CampaignId = campaign.web3CampaignId || campaign.blockchainDeployment?.web3CampaignId;
+    
+    const tx = await contract.contribute(
+      web3CampaignId,
+      ethers.MaxUint256,
+      { value: amountWei }
+    );
 
-      // Your existing Web3 logic (unchanged)
-      const { ethers } = await import('ethers');
-      
-      const contractAddress = import.meta.env.VITE_APP_CONTRACT_ADDRESS;
-      if (!contractAddress) {
-        throw new Error('Contract address not configured');
-      }
+    toast({
+      title: "Transaction Sent",
+      description: `Transaction hash: ${tx.hash.slice(0, 10)}...`,
+    });
 
-      const contractABI = [
-        "function contribute(uint256 campaignId, uint256 rewardTierIndex) external payable",
-        "function getCampaignBasic(uint256 campaignId) external view returns (uint256, string, address, uint256, uint256, uint256)",
-        "event ContributionMade(uint256 indexed campaignId, address indexed backer, uint256 amount, uint256 totalRaised)"
-      ];
+    const receipt = await tx.wait();
+    
+    // Use new unified payment success handler
+    await handlePaymentSuccess({
+      success: true,
+      transactionHash: receipt.hash,
+      amount: parseFloat(backingAmount),
+      gasUsed: receipt.gasUsed.toString(),
+      blockNumber: receipt.blockNumber,
+      paymentMethod: 'traditional'
+    });
 
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(contractAddress, contractABI, signer);
-
-      const amountWei = ethers.parseEther(backingAmount);
-      const web3CampaignId = campaign.web3CampaignId || campaign.blockchainDeployment?.web3CampaignId;
-      
-      const tx = await contract.contribute(
-        web3CampaignId,
-        ethers.MaxUint256,
-        { value: amountWei }
-      );
-
-      toast({
-        title: "Transaction Sent",
-        description: `Transaction hash: ${tx.hash.slice(0, 10)}...`,
-      });
-
-      const receipt = await tx.wait();
-      
-      // Use new unified payment success handler
-      await handlePaymentSuccess({
-        success: true,
-        transactionHash: receipt.hash,
-        amount: parseFloat(backingAmount),
-        gasUsed: receipt.gasUsed.toString(),
-        blockNumber: receipt.blockNumber,
-        paymentMethod: 'traditional'
-      });
-
-    } catch (error) {
-      // Use new unified error handler
-      handlePaymentError(error);
-    } finally {
-      setBacking(false);
-    }
-  };
+  } catch (error) {
+    // Use new unified error handler
+    handlePaymentError(error);
+  } finally {
+    setBacking(false);
+  }
+};
 
   const calculateProgress = () => {
     if (!campaign?.goalAmount) return 0;
@@ -373,6 +488,16 @@ const CampaignDetail = () => {
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return Math.max(diffDays, 0);
   };
+
+    // Show backing form handler with event prevention
+  const showBackingFormHandler = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setShowBackingForm(true);
+  };
+
 
   const handleShare = () => {
     if (navigator.share) {
@@ -404,6 +529,12 @@ const CampaignDetail = () => {
           value={backingAmount}
           onChange={(e) => setBackingAmount(e.target.value)}
           className="text-lg"
+          // Prevent form submission on Enter
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+            }
+          }}
         />
         {backingAmount && (
           <p className="text-xs text-gray-500 mt-1">
@@ -446,6 +577,7 @@ const CampaignDetail = () => {
           </div>
 
           <Button
+            type="button" // Explicitly set type to prevent form submission
             onClick={handleCryptoBacking}
             disabled={backing || !backingAmount}
             className="w-full"
@@ -504,11 +636,15 @@ const CampaignDetail = () => {
         </TabsContent>
       </Tabs>
 
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          onClick={() => setShowBackingForm(false)}
-          className="flex-1"
+      <div className="flex justify-between pt-2">
+        <Button 
+          type="button" // Explicitly set type to prevent form submission
+          variant="outline" 
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setShowBackingForm(false);
+          }}
         >
           Cancel
         </Button>
@@ -751,8 +887,9 @@ const CampaignDetail = () => {
                     {!web3Connected ? (
                       <div className="space-y-2">
                         <Button 
+                          type="button" // Add explicit type
                           className="w-full"
-                          onClick={connectWallet}
+                          onClick={connectWallet} // Use the updated handler with event prevention
                         >
                           <Wallet className="w-4 h-4 mr-2" />
                           Connect Wallet to Back with Ethereum
@@ -779,8 +916,9 @@ const CampaignDetail = () => {
                           Connected: {web3Account?.slice(0, 6)}...{web3Account?.slice(-4)}
                         </div>
                         <Button 
+                          type="button" // Add explicit type
                           className="w-full"
-                          onClick={() => setShowBackingForm(true)}
+                          onClick={showBackingFormHandler} // Use the updated handler with event prevention
                         >
                           <Wallet className="w-4 h-4 mr-2" />
                           Choose Payment Method

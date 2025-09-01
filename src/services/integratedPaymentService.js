@@ -148,7 +148,7 @@ async processZetaChainPayment({ campaignId, amount, sourceChain, rewardIndex, ca
     try {
       await web3Service.connect();
       
-      const result = await web3Service.contributeTooCampaign(
+      const result = await web3Service.contributeToToCampaign(
         campaignId,
         amount.toString(),
         rewardIndex
@@ -166,81 +166,114 @@ async processZetaChainPayment({ campaignId, amount, sourceChain, rewardIndex, ca
     }
   }
 
-  /**
-   * Execute all post-payment business logic
-   * This maintains ALL your existing database updates and logic
-   */
-  async executePostPaymentLogic({
-    paymentResult,
-    campaignId,
-    amount,
-    user,
-    campaignData,
-    paymentMethod,
-    sourceChain
-  }) {
-    try {
-      // 1. Update campaign in Firebase (your existing logic)
-      await this.updateCampaignDatabase({
-        campaignId,
-        amount,
-        user,
-        paymentResult,
-        paymentMethod,
-        sourceChain
-      });
+/**
+ * Execute all post-payment business logic without repeating the blockchain transaction
+ * Use this for payments that are already completed (like ZetaChain payments)
+ */
+async executePostPaymentLogic({
+  paymentResult,
+  campaignId,
+  amount,
+  user,
+  campaignData,
+  paymentMethod,
+  sourceChain
+}) {
+  try {
+    console.log('🔄 Executing post-payment logic for completed transaction...', {
+      campaignId,
+      amount,
+      paymentMethod,
+      sourceChain,
+      transactionHash: paymentResult.transactionHash
+    });
 
-      // 2. Create notifications (your existing logic)  
-      await this.createPaymentNotifications({
-        campaignId,
-        amount,
-        user,
-        campaignData,
-        paymentMethod,
-        sourceChain
-      });
+    // 1. Update campaign in Firebase with the contribution
+    console.log('📊 Updating campaign database...');
+    
+    // Create backing record in the 'backings' collection
+    const backingData = {
+      campaignId: campaignId,
+      userId: user?.uid || 'anonymous',
+      userEmail: user?.email || 'anonymous',
+      userName: user ? `${user.firstName} ${user.lastName}`.trim() : 'Anonymous',
+      walletAddress: paymentResult.walletAddress || paymentResult.sourceChain || 'cross-chain',
+      amount: parseFloat(amount), // ETH amount
+      currency: 'ETH',
+      transactionHash: paymentResult.transactionHash,
+      blockNumber: paymentResult.blockNumber,
+      timestamp: new Date(),
+      paymentMethod: paymentMethod === 'traditional' ? 'crypto' : 'zetachain',
+      sourceChain: sourceChain || 'ethereum',
+      status: 'confirmed'
+    };
 
-      // 3. Update user's contribution history (your existing logic)
-      await this.updateUserContributionHistory({
-        userId: user.uid,
-        campaignId,
-        amount,
-        paymentResult,
-        paymentMethod
-      });
+    // Save backing to Firebase
+    const { addDoc, collection, increment } = await import('firebase/firestore');
+    const { db } = await import('../firebase/config');
+    
+    const backingRef = await addDoc(collection(db, 'backings'), backingData);
+    console.log('✅ Backing record created:', backingRef.id);
 
-      // 4. Handle reward tier logic (your existing logic)
-      if (paymentResult.rewardIndex !== null) {
-        await this.handleRewardTierLogic({
-          campaignId,
-          rewardIndex: paymentResult.rewardIndex,
-          userId: user.uid,
-          amount
-        });
-      }
+    // Update campaign with incremented data
+    // Convert ETH to PLN for Firebase (using conversion rate)
+    const ethToPln = 4000; // You may want to make this configurable
+    const amountPLN = parseFloat(amount) * ethToPln;
+    
+    await updateCampaign(campaignId, {
+      currentAmount: increment(amountPLN), // Increment current amount in PLN
+      backerCount: increment(1), // Increment backer count
+      lastContributionAt: new Date(),
+      lastTransactionHash: paymentResult.transactionHash,
+      blockchainSynced: true,
+      updatedAt: new Date(),
+      // Add some debug info
+      lastBackingAmount: amountPLN,
+      lastBackingETH: parseFloat(amount),
+      lastBackingMethod: paymentMethod
+    });
+    
+    console.log('✅ Campaign updated - added', amountPLN, 'PLN (', amount, 'ETH) and incremented backer count');
 
-      // 5. Check if campaign goal reached (your existing logic)
-      await this.checkCampaignGoalStatus({
-        campaignId,
-        campaignData,
-        newContributionAmount: amount
-      });
+    // 2. Handle reward tiers (if you have reward logic)
+    await this.handleRewardTierLogic({
+      campaignId,
+      amount,
+      user,
+      campaignData
+    });
 
-      // 6. Send confirmation email/notifications (your existing logic)
-      await this.sendContributionConfirmation({
-        user,
-        campaignId,
-        amount,
-        paymentResult,
-        paymentMethod,
-        sourceChain
-      });
+    // 3. Check campaign goal status
+    await this.checkCampaignGoalStatus({
+      campaignId,
+      campaignData,
+      newContributionAmount: amount
+    });
 
-    } catch (error) {
-      console.error('Post-payment logic error:', error);
-      // Don't throw - payment succeeded, just log the issue
-    }
+    // 4. Send confirmation (placeholder for now)
+    await this.sendContributionConfirmation({
+      user,
+      campaignId,
+      amount,
+      paymentResult,
+      paymentMethod,
+      sourceChain
+    });
+
+    console.log('✅ Post-payment logic completed successfully');
+
+    return {
+      success: true,
+      message: 'Post-payment processing completed',
+      backingId: backingRef.id,
+      contributionData: backingData
+    };
+
+  } catch (error) {
+    console.error('❌ Post-payment logic error:', error);
+    throw error;
   }
+}
 
   /**
    * Update campaign in Firebase database - using your existing pattern

@@ -554,43 +554,125 @@ const ZetaChainPaymentButton = ({
     </div>
   );
 
-  const renderSuccess = () => (
-    <div className="text-center space-y-4">
-      <CheckCircle className="h-12 w-12 mx-auto text-green-500" />
-      <h3 className="text-lg font-semibold text-green-600">Payment Successful!</h3>
+  const getBlockExplorerUrl = (txHash, sourceChain, sourceChainId) => {
+    if (!txHash) return null;
+    
+    const blockExplorers = {
+      // Ethereum mainnet
+      1: 'https://etherscan.io',
+      'ethereum': 'https://etherscan.io',
       
-      {transactionResult && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Transaction Hash:</span>
-                <div className="flex items-center space-x-1">
-                  <span className="font-mono text-xs">
-                    {transactionResult.transactionHash ? 
-                      `${transactionResult.transactionHash.slice(0, 10)}...${transactionResult.transactionHash.slice(-6)}` :
-                      'Processing...'
-                    }
-                  </span>
-                  {transactionResult.transactionHash && (
-                    <ExternalLink className="h-3 w-3 cursor-pointer" />
-                  )}
+      // Sepolia testnet  
+      11155111: 'https://sepolia.etherscan.io',
+      'sepolia': 'https://sepolia.etherscan.io',
+      'Sepolia Testnet': 'https://sepolia.etherscan.io',
+      
+      // Bitcoin
+      'btc-mainnet': 'https://blockstream.info',
+      'bitcoin': 'https://blockstream.info',
+      'btc-testnet': 'https://blockstream.info/testnet',
+      
+      // Solana
+      'solana-mainnet': 'https://explorer.solana.com',
+      'solana': 'https://explorer.solana.com',
+      'solana-devnet': 'https://explorer.solana.com/?cluster=devnet',
+      
+      // TON
+      'ton-mainnet': 'https://tonviewer.com',
+      'ton': 'https://tonviewer.com',
+      
+      // Other chains
+      137: 'https://polygonscan.com',
+      56: 'https://bscscan.com',
+      42161: 'https://arbiscan.io',
+      10: 'https://optimistic.etherscan.io',
+      43114: 'https://snowtrace.io'
+    };
+
+    const explorer = blockExplorers[sourceChainId] || 
+                    blockExplorers[sourceChain] || 
+                    blockExplorers[sourceChain?.toLowerCase()];
+    
+    if (!explorer) return null;
+
+    // Different URL formats for different chain types
+    if (sourceChain?.toLowerCase().includes('solana')) {
+      const clusterParam = sourceChain.toLowerCase().includes('devnet') ? '?cluster=devnet' : '';
+      return `${explorer}/tx/${txHash}${clusterParam}`;
+    } else if (sourceChain?.toLowerCase().includes('ton')) {
+      return `${explorer}/transaction/${txHash}`;
+    } else if (sourceChain?.toLowerCase().includes('bitcoin') || sourceChain?.toLowerCase().includes('btc')) {
+      return `${explorer}/tx/${txHash}`;
+    } else {
+      // Default EVM format
+      return `${explorer}/tx/${txHash}`;
+    }
+  };
+
+  const renderSuccess = () => {
+    // Get the block explorer URL
+    const explorerUrl = transactionResult ? getBlockExplorerUrl(
+      transactionResult.transactionHash,
+      transactionResult.sourceChain,
+      transactionResult.sourceChainId
+    ) : null;
+
+    return (
+      <div className="text-center space-y-4">
+        <CheckCircle className="h-12 w-12 mx-auto text-green-500" />
+        <h3 className="text-lg font-semibold text-green-600">Payment Successful!</h3>
+        
+        {transactionResult && (
+          <Card>
+            <CardContent className="p-4">
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Transaction Hash:</span>
+                  <div className="flex items-center space-x-1">
+                    {transactionResult.transactionHash ? (
+                      explorerUrl ? (
+                        // Clickable transaction hash
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(explorerUrl, '_blank', 'noopener,noreferrer');
+                          }}
+                          className="flex items-center space-x-1 text-blue-500 hover:text-blue-700 transition-colors"
+                        >
+                          <span className="font-mono text-xs underline">
+                            {`${transactionResult.transactionHash.slice(0, 10)}...${transactionResult.transactionHash.slice(-6)}`}
+                          </span>
+                          <ExternalLink className="h-3 w-3" />
+                        </button>
+                      ) : (
+                        // Non-clickable fallback
+                        <div className="flex items-center space-x-1">
+                          <span className="font-mono text-xs text-gray-600">
+                            {`${transactionResult.transactionHash.slice(0, 10)}...${transactionResult.transactionHash.slice(-6)}`}
+                          </span>
+                          <ExternalLink className="h-3 w-3 text-gray-400" />
+                        </div>
+                      )
+                    ) : (
+                      <span className="font-mono text-xs text-gray-500">Processing...</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Amount:</span>
+                  <span>{transactionResult.amount} {getCurrencySymbol()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Source:</span>
+                  <span>{getChainDisplayName(transactionResult.sourceChain)}</span>
                 </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Amount:</span>
-                <span>{transactionResult.amount} {getCurrencySymbol()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Source:</span>
-                <span>{getChainDisplayName(transactionResult.sourceChain)}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  );
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    );
+  };
 
   return (
     <>
