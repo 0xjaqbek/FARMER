@@ -10,9 +10,11 @@ import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { 
   ArrowLeft,
+  Wallet,
   Share,
   Shield,
   AlertCircle,
@@ -20,6 +22,7 @@ import {
   Users,
   MapPin,
   ExternalLink,
+  Bug,
   Zap,
   Globe,
   Loader2
@@ -28,7 +31,7 @@ import {
 // Import services
 import { getCampaignById } from '../../firebase/crowdfunding';
 
-// Import ZetaChain components and services
+// Import NEW ZetaChain components and services
 import ZetaChainPaymentButton from '../../components/payment/ZetaChainPaymentButton';
 import integratedPaymentService from '../../services/integratedPaymentService';
 
@@ -43,9 +46,15 @@ const CampaignDetail = () => {
   const [backing, setBacking] = useState(false);
   const [backingAmount, setBackingAmount] = useState('');
   const [showBackingForm, setShowBackingForm] = useState(false);
+  const [web3Account, setWeb3Account] = useState(null);
+  const [web3Connected, setWeb3Connected] = useState(false);
+  
+  // NEW: Payment method tracking
+  const [activePaymentMethod, setActivePaymentMethod] = useState('traditional');
 
   useEffect(() => {
     loadCampaign();
+    checkWeb3Connection();
   }, [id]);
 
   // Debug campaign data
@@ -105,175 +114,227 @@ const CampaignDetail = () => {
     }
   };
 
-  // Helper function to get block explorer URL
-  const getBlockExplorerUrl = (txHash, sourceChain, sourceChainId) => {
-    if (!txHash) return null;
-    
-    const blockExplorers = {
-      // Ethereum mainnet
-      1: 'https://etherscan.io',
-      'ethereum': 'https://etherscan.io',
-      
-      // Sepolia testnet  
-      11155111: 'https://sepolia.etherscan.io',
-      'sepolia': 'https://sepolia.etherscan.io',
-      'Sepolia Testnet': 'https://sepolia.etherscan.io',
-      
-      // Bitcoin
-      'btc-mainnet': 'https://blockstream.info',
-      'bitcoin': 'https://blockstream.info',
-      'btc-testnet': 'https://blockstream.info/testnet',
-      
-      // Solana
-      'solana-mainnet': 'https://explorer.solana.com',
-      'solana': 'https://explorer.solana.com',
-      'solana-devnet': 'https://explorer.solana.com/?cluster=devnet',
-      
-      // TON
-      'ton-mainnet': 'https://tonviewer.com',
-      'ton': 'https://tonviewer.com',
-      
-      // Other chains
-      137: 'https://polygonscan.com',
-      56: 'https://bscscan.com',
-      42161: 'https://arbiscan.io',
-      10: 'https://optimistic.etherscan.io',
-      43114: 'https://snowtrace.io'
-    };
-
-    const explorer = blockExplorers[sourceChainId] || 
-                     blockExplorers[sourceChain] || 
-                     blockExplorers[sourceChain?.toLowerCase()];
-    
-    if (!explorer) return null;
-
-    // Different URL formats for different chain types
-    if (sourceChain?.toLowerCase().includes('solana')) {
-      const clusterParam = sourceChain.toLowerCase().includes('devnet') ? '?cluster=devnet' : '';
-      return `${explorer}/tx/${txHash}${clusterParam}`;
-    } else if (sourceChain?.toLowerCase().includes('ton')) {
-      return `${explorer}/transaction/${txHash}`;
-    } else if (sourceChain?.toLowerCase().includes('bitcoin') || sourceChain?.toLowerCase().includes('btc')) {
-      return `${explorer}/tx/${txHash}`;
-    } else {
-      // Default EVM format
-      return `${explorer}/tx/${txHash}`;
+  const checkWeb3Connection = async () => {
+    if (window.ethereum) {
+      try {
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+        if (accounts.length > 0) {
+          setWeb3Account(accounts[0]);
+          setWeb3Connected(true);
+        }
+      } catch (error) {
+        console.error('Error checking Web3 connection:', error);
+      }
     }
   };
 
-  // ZetaChain-only payment success handler
-  const handlePaymentSuccess = async (paymentResult) => {
-    try {
-      console.log('ZetaChain payment successful:', paymentResult);
-      setBacking(true);
+const connectWallet = async (e) => {
+  // Prevent any form submission or page reload
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
 
-      // Show processing toast
+  if (!window.ethereum) {
+    toast({
+      title: "MetaMask Required",
+      description: "Please install MetaMask to back this campaign",
+      variant: "destructive"
+    });
+    return;
+  }
+
+  try {
+    const accounts = await window.ethereum.request({ 
+      method: 'eth_requestAccounts' 
+    });
+    setWeb3Account(accounts[0]);
+    setWeb3Connected(true);
+    toast({
+      title: "Wallet Connected",
+      description: `Connected: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`
+    });
+  } catch (error) {
+    console.error('Error connecting wallet:', error);
+    toast({
+      title: "Connection Failed",
+      description: "Failed to connect wallet",
+      variant: "destructive"
+    });
+  }
+};
+
+  // NEW: Unified payment success handler (works for both traditional and ZetaChain)
+
+// Helper function to get block explorer URL
+const getBlockExplorerUrl = (txHash, sourceChain, sourceChainId) => {
+  // Map of chain IDs to block explorers
+  const blockExplorers = {
+    // Ethereum mainnet
+    1: 'https://etherscan.io',
+    // Sepolia testnet  
+    11155111: 'https://sepolia.etherscan.io',
+    // Bitcoin mainnet
+    'btc-mainnet': 'https://blockstream.info',
+    'bitcoin': 'https://blockstream.info',
+    // Bitcoin testnet
+    'btc-testnet': 'https://blockstream.info/testnet',
+    // Solana mainnet
+    'solana-mainnet': 'https://explorer.solana.com',
+    // Solana devnet
+    'solana-devnet': 'https://explorer.solana.com/?cluster=devnet',
+    // TON
+    'ton-mainnet': 'https://tonviewer.com',
+    'ton': 'https://tonviewer.com',
+    // Polygon
+    137: 'https://polygonscan.com',
+    // BSC
+    56: 'https://bscscan.com',
+    // Arbitrum
+    42161: 'https://arbiscan.io',
+    // Optimism
+    10: 'https://optimistic.etherscan.io',
+    // Avalanche
+    43114: 'https://snowtrace.io'
+  };
+
+  const explorer = blockExplorers[sourceChainId] || blockExplorers[sourceChain];
+  
+  if (!explorer || !txHash) return null;
+
+  // Different URL formats for different chains
+  if (sourceChain?.includes('solana')) {
+    const clusterParam = sourceChain.includes('devnet') ? '?cluster=devnet' : '';
+    return `${explorer}/tx/${txHash}${clusterParam}`;
+  } else if (sourceChain?.includes('ton') || sourceChainId?.toString().includes('ton')) {
+    return `${explorer}/transaction/${txHash}`;
+  } else if (sourceChain?.includes('bitcoin') || sourceChain?.includes('btc')) {
+    return `${explorer}/tx/${txHash}`;
+  } else {
+    // Default EVM format
+    return `${explorer}/tx/${txHash}`;
+  }
+};
+
+const handlePaymentSuccess = async (paymentResult) => {
+  // Prevent any page reload or navigation
+  try {
+    console.log('Payment successful:', paymentResult);
+    setBacking(true);
+
+    // For ZetaChain payments, the transaction is already completed
+    // We only need to handle the post-payment logic (database updates, notifications)
+    if (paymentResult.paymentMethod === 'zetachain') {
+      console.log('Processing ZetaChain payment completion...');
+      
+      // Show processing toast that stays until user closes it
       toast({
         title: "🔄 Processing Cross-Chain Payment...",
         description: `Your payment of ${paymentResult.amount} ETH from ${paymentResult.sourceChain} is being processed...`,
-        duration: Infinity
+        duration: Infinity // Toast stays until manually dismissed
       });
       
-      // Handle database updates and post-payment logic
+      // Handle only the database updates and post-payment logic
       await integratedPaymentService.executePostPaymentLogic({
         paymentResult,
         campaignId: id,
-        amount: parseFloat(backingAmount) || paymentResult.amount,
+        amount: parseFloat(backingAmount),
         user: userProfile,
         campaignData: campaign,
         paymentMethod: 'zetachain',
         sourceChain: paymentResult.sourceChain
       });
 
-      console.log('✅ Database updates completed, refreshing campaign data...');
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      await loadCampaign();
-      
-      // Get block explorer URL
-      const explorerUrl = getBlockExplorerUrl(
-        paymentResult.transactionHash, 
-        paymentResult.sourceChain,
-        paymentResult.sourceChainId
-      );
-
-      const txHashDisplay = paymentResult.transactionHash 
-        ? `${paymentResult.transactionHash.slice(0, 10)}...${paymentResult.transactionHash.slice(-6)}`
-        : 'Processing...';
-
-      // Show success toast with clickable transaction hash
+    } else {
+      // For traditional payments, process normally
       toast({
-        title: "✅ Cross-Chain Payment Complete!",
-        description: (
-          <div className="space-y-2">
-            <p>Thank you for backing this campaign! Your cross-chain contribution has been recorded.</p>
-            {paymentResult.transactionHash && (
-              <div className="flex items-center space-x-2 text-xs">
-                <span className="text-gray-600">Transaction:</span>
-                {explorerUrl ? (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      window.open(explorerUrl, '_blank', 'noopener,noreferrer');
-                    }}
-                    className="text-blue-500 hover:text-blue-700 underline font-mono flex items-center space-x-1"
-                  >
-                    <span>{txHashDisplay}</span>
-                    <ExternalLink className="h-3 w-3" />
-                  </button>
-                ) : (
-                  <span className="font-mono text-gray-500">{txHashDisplay}</span>
-                )}
-              </div>
-            )}
-            {paymentResult.sourceChain && (
-              <div className="flex items-center space-x-2 text-xs">
-                <span className="text-gray-600">Chain:</span>
-                <span className="font-medium">{paymentResult.sourceChain}</span>
-              </div>
-            )}
-          </div>
-        ),
-        duration: Infinity,
-        action: {
-          label: "Close",
-          onClick: () => {
-            setBackingAmount('');
-            setShowBackingForm(false);
-          }
-        }
+        title: "🔄 Processing Payment...",
+        description: `Your payment of ${backingAmount} ETH is being processed...`,
+        duration: Infinity // Toast stays until manually dismissed
       });
-      
-    } catch (error) {
-      console.error('Payment processing error:', error);
-      toast({
-        title: "❌ Payment Processing Error",
-        description: error.message || "There was an error processing your payment.",
-        variant: "destructive",
-        duration: Infinity,
-        action: {
-          label: "Close",
-          onClick: () => {
-            // User can retry after closing error
-          }
-        }
+
+      await integratedPaymentService.processContribution({
+        campaignId: id,
+        amount: parseFloat(backingAmount),
+        rewardIndex: null,
+        paymentMethod: 'traditional',
+        user: userProfile,
+        campaignData: campaign
       });
-    } finally {
-      setBacking(false);
     }
-  };
 
-  // Payment error handler
+    console.log('✅ Database updates completed, refreshing campaign data...');
+
+    // Wait a moment for Firebase to propagate the changes
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    // Get block explorer URL for the transaction
+    const explorerUrl = getBlockExplorerUrl(
+      paymentResult.transactionHash, 
+      paymentResult.sourceChain,
+      paymentResult.sourceChainId
+    );
+
+    // Create transaction hash display with link
+    const txHashDisplay = paymentResult.transactionHash 
+      ? `${paymentResult.transactionHash.slice(0, 10)}...${paymentResult.transactionHash.slice(-6)}`
+      : 'Processing...';
+
+    // Show final success message with clickable transaction hash
+  toast({
+    title: "✅ Contribution Complete!",
+    description: `Thank you for backing this campaign! Your ${paymentResult.amount} ${paymentResult.sourceChain || 'ETH'} payment has been recorded. Transaction: ${txHashDisplay}`,
+    duration: Infinity,
+    action: explorerUrl ? {
+      label: "View Transaction",
+      onClick: () => window.open(explorerUrl, '_blank', 'noopener,noreferrer')
+    } : {
+      label: "Close", 
+      onClick: () => {
+        setBackingAmount('');
+        setShowBackingForm(false);
+        setActivePaymentMethod('traditional');
+        loadCampaign();
+      }
+    }
+  });
+    
+  } catch (error) {
+    console.error('Payment processing error:', error);
+    toast({
+      title: "❌ Payment Processing Error",
+      description: error.message || "There was an error processing your payment.",
+      variant: "destructive",
+      duration: Infinity, // Let user read the error
+      action: {
+        label: "Close",
+        onClick: () => {
+          // User can retry after closing error
+        }
+      }
+    });
+  } finally {
+    setBacking(false);
+  }
+};
+
+
+  // NEW: Unified payment error handler
   const handlePaymentError = (error) => {
     console.error('Payment error:', error);
     
-    let errorMessage = 'Cross-chain payment failed. Please try again.';
+    let errorMessage = 'Payment failed. Please try again.';
     
     if (error.message?.includes('user rejected')) {
       errorMessage = 'Transaction was cancelled.';
     } else if (error.message?.includes('insufficient funds')) {
       errorMessage = 'Insufficient balance to complete this transaction.';
-    } else if (error.message?.includes('Chain') && error.message?.includes('not supported')) {
-      errorMessage = 'This blockchain is not supported for cross-chain payments.';
+    } else if (error.message?.includes('Campaign not active')) {
+      errorMessage = 'Campaign is not currently accepting contributions.';
+    } else if (error.message?.includes('Campaign deadline passed')) {
+      errorMessage = 'Campaign has expired.';
+    } else if (error.message?.includes('Farmers cannot back their own campaigns')) {
+      errorMessage = 'You cannot back your own campaign.';
     }
 
     toast({
@@ -282,6 +343,135 @@ const CampaignDetail = () => {
       variant: "destructive"
     });
   };
+
+  const debugCampaignBlockchain = async () => {
+    try {
+      const { ethers } = await import('ethers');
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      
+      const contractABI = [
+        "function getCampaignBasic(uint256 campaignId) external view returns (uint256, string, address, uint256, uint256, uint256)",
+        "function getCampaignStatus(uint256 campaignId) external view returns (uint256, uint8, uint8, bool, bool, uint256)"
+      ];
+      
+      const contract = new ethers.Contract("0x5C92508875629928b643Cac27c931329bA8B74e5", contractABI, provider);
+      const campaignId = campaign.web3CampaignId || campaign.blockchainDeployment?.web3CampaignId;
+      
+      const [_id, _firebaseId, farmer, goalAmount, raisedAmount, deadline] = await contract.getCampaignBasic(campaignId);
+      const [_createdAt, status, _campaignType, _verified, _fundsWithdrawn, _backerCount] = await contract.getCampaignStatus(campaignId);
+      
+      const statusNames = ['Draft', 'Active', 'Funded', 'Expired', 'Cancelled', 'Completed'];
+      const now = Math.floor(Date.now() / 1000);
+      const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+      const userAddress = accounts[0];
+      
+      const debugInfo = {
+        campaignId: campaignId,
+        campaignStatus: statusNames[status] || `Unknown(${status})`,
+        deadlineTimestamp: Number(deadline),
+        currentTimestamp: now,
+        isExpired: now >= Number(deadline),
+        farmerAddress: farmer,
+        userAddress: userAddress,
+        isFarmer: userAddress?.toLowerCase() === farmer?.toLowerCase(),
+        goalAmountETH: ethers.formatEther(goalAmount),
+        raisedAmountETH: ethers.formatEther(raisedAmount),
+        timeRemaining: Math.max(0, Number(deadline) - now)
+      };
+      
+      console.log("CAMPAIGN DEBUG:", debugInfo);
+      console.log(JSON.stringify(debugInfo, null, 2));
+      
+    } catch (error) {
+      console.error("Debug failed:", error);
+      alert("Debug failed: " + error.message);
+    }
+  };
+
+  // UPDATED: Enhanced crypto backing function using integrated service
+const handleCryptoBacking = async (e) => {
+  // Prevent any form submission or page reload
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  
+  if (!web3Connected) {
+    await connectWallet();
+    return;
+  }
+
+  if (!backingAmount || parseFloat(backingAmount) <= 0) {
+    toast({
+      title: "Invalid Amount",
+      description: "Please enter a valid ETH amount",
+      variant: "destructive"
+    });
+    return;
+  }
+
+  if (!campaign.web3CampaignId && !campaign.blockchainDeployment?.web3CampaignId) {
+    toast({
+      title: "Campaign Not Available",
+      description: "This campaign is not available for crypto backing yet",
+      variant: "destructive"
+    });
+    return;
+  }
+
+  try {
+    setBacking(true);
+
+    const { ethers } = await import('ethers');
+    
+    const contractAddress = import.meta.env.VITE_APP_CONTRACT_ADDRESS;
+    if (!contractAddress) {
+      throw new Error('Contract address not configured');
+    }
+
+    const contractABI = [
+      "function contribute(uint256 campaignId, uint256 rewardTierIndex) external payable",
+      "function getCampaignBasic(uint256 campaignId) external view returns (uint256, string, address, uint256, uint256, uint256)",
+      "event ContributionMade(uint256 indexed campaignId, address indexed backer, uint256 amount, uint256 totalRaised)"
+    ];
+
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    const contract = new ethers.Contract(contractAddress, contractABI, signer);
+
+    const amountWei = ethers.parseEther(backingAmount);
+    const web3CampaignId = campaign.web3CampaignId || campaign.blockchainDeployment?.web3CampaignId;
+    
+    const tx = await contract.contribute(
+      web3CampaignId,
+      ethers.MaxUint256,
+      { value: amountWei }
+    );
+
+    toast({
+      title: "Transaction Sent",
+      description: `Transaction hash: ${tx.hash.slice(0, 10)}...`,
+    });
+
+    const receipt = await tx.wait();
+    
+    // Use new unified payment success handler
+    await handlePaymentSuccess({
+      success: true,
+      transactionHash: receipt.hash,
+      amount: parseFloat(backingAmount),
+      gasUsed: receipt.gasUsed.toString(),
+      blockNumber: receipt.blockNumber,
+      paymentMethod: 'traditional'
+    });
+
+  } catch (error) {
+    // Use new unified error handler
+    handlePaymentError(error);
+  } finally {
+    setBacking(false);
+  }
+};
 
   const calculateProgress = () => {
     if (!campaign?.goalAmount) return 0;
@@ -299,7 +489,7 @@ const CampaignDetail = () => {
     return Math.max(diffDays, 0);
   };
 
-  // Show backing form handler
+    // Show backing form handler with event prevention
   const showBackingFormHandler = (e) => {
     if (e) {
       e.preventDefault();
@@ -307,6 +497,7 @@ const CampaignDetail = () => {
     }
     setShowBackingForm(true);
   };
+
 
   const handleShare = () => {
     if (navigator.share) {
@@ -324,7 +515,7 @@ const CampaignDetail = () => {
     }
   };
 
-  // ZetaChain-only backing form (no tabs)
+  // NEW: Enhanced backing form with payment method tabs
   const renderBackingForm = () => (
     <div className="pt-4 border-t space-y-4">
       <div>
@@ -338,6 +529,7 @@ const CampaignDetail = () => {
           value={backingAmount}
           onChange={(e) => setBackingAmount(e.target.value)}
           className="text-lg"
+          // Prevent form submission on Enter
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
@@ -353,48 +545,100 @@ const CampaignDetail = () => {
 
       <Separator />
       
-      {/* ZetaChain Cross-Chain Payment */}
-      <div className="space-y-3">
-        <div className="p-3 border rounded-lg bg-gradient-to-r from-blue-50 to-purple-50">
-          <div className="flex items-start space-x-3">
-            <Globe className="h-5 w-5 text-purple-600 mt-0.5" />
-            <div>
-              <p className="font-medium text-sm">Cross-Chain Payment</p>
-              <p className="text-xs text-gray-600 mt-1">
-                Pay from Bitcoin, Solana, TON, or any EVM chain
-              </p>
-              <div className="flex flex-wrap gap-1 mt-2">
-                <Badge variant="outline" className="text-xs">₿ Bitcoin</Badge>
-                <Badge variant="outline" className="text-xs">◎ Solana</Badge>
-                <Badge variant="outline" className="text-xs">💎 TON</Badge>
-                <Badge variant="outline" className="text-xs">+ EVM</Badge>
+      {/* Payment Method Tabs */}
+      <Tabs value={activePaymentMethod} onValueChange={setActivePaymentMethod}>
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="traditional" className="flex items-center space-x-2">
+            <Wallet className="h-4 w-4" />
+            <span>Direct</span>
+          </TabsTrigger>
+          <TabsTrigger value="zetachain" className="flex items-center space-x-2">
+            <Zap className="h-4 w-4" />
+            <span>Cross-Chain</span>
+            <Badge variant="secondary" className="ml-1 text-xs">New</Badge>
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Traditional Payment Tab */}
+        <TabsContent value="traditional" className="space-y-3">
+          <div className="p-3 border rounded-lg bg-gray-50">
+            <div className="flex items-center space-x-2">
+              <Wallet className="h-4 w-4 text-blue-600" />
+              <div>
+                <p className="font-medium text-sm">Direct Wallet Payment</p>
+                <p className="text-xs text-gray-600">Pay from your connected wallet</p>
+                {web3Connected && (
+                  <p className="text-xs text-green-600 mt-1">
+                    ✓ Connected: {web3Account?.slice(0, 6)}...{web3Account?.slice(-4)}
+                  </p>
+                )}
               </div>
             </div>
           </div>
-        </div>
 
-        <ZetaChainPaymentButton
-          campaignId={campaign?.web3CampaignId || campaign?.blockchainDeployment?.web3CampaignId}
-          amount={parseFloat(backingAmount) || 0}
-          targetContractAddress={import.meta.env.VITE_APP_CONTRACT_ADDRESS}
-          onPaymentSuccess={handlePaymentSuccess}
-          onPaymentError={handlePaymentError}
-          disabled={!backingAmount || backing}
-          className="w-full"
-        />
+          <Button
+            type="button" // Explicitly set type to prevent form submission
+            onClick={handleCryptoBacking}
+            disabled={backing || !backingAmount}
+            className="w-full"
+          >
+            {backing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <Wallet className="mr-2 h-4 w-4" />
+                Send {backingAmount} ETH
+              </>
+            )}
+          </Button>
+        </TabsContent>
 
-        <Alert>
-          <Zap className="h-4 w-4" />
-          <AlertDescription className="text-xs">
-            <strong>How it works:</strong> Choose your preferred blockchain, and your payment will be automatically converted and sent to this campaign. 
-            Cross-chain payments may take 2-10 minutes to complete.
-          </AlertDescription>
-        </Alert>
-      </div>
+        {/* ZetaChain Cross-Chain Tab */}
+        <TabsContent value="zetachain" className="space-y-3">
+          <div className="p-3 border rounded-lg bg-gradient-to-r from-blue-50 to-purple-50">
+            <div className="flex items-start space-x-3">
+              <Globe className="h-5 w-5 text-purple-600 mt-0.5" />
+              <div>
+                <p className="font-medium text-sm">Cross-Chain Payment</p>
+                <p className="text-xs text-gray-600 mt-1">
+                  Pay from Bitcoin, Solana, TON, or any EVM chain
+                </p>
+                <div className="flex flex-wrap gap-1 mt-2">
+                  <Badge variant="outline" className="text-xs">₿ Bitcoin</Badge>
+                  <Badge variant="outline" className="text-xs">◎ Solana</Badge>
+                  <Badge variant="outline" className="text-xs">💎 TON</Badge>
+                  <Badge variant="outline" className="text-xs">+ EVM</Badge>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <ZetaChainPaymentButton
+            campaignId={campaign?.web3CampaignId || campaign?.blockchainDeployment?.web3CampaignId}
+            amount={parseFloat(backingAmount) || 0}
+            targetContractAddress={import.meta.env.VITE_APP_CONTRACT_ADDRESS}
+            onPaymentSuccess={handlePaymentSuccess}
+            onPaymentError={handlePaymentError}
+            disabled={!backingAmount || backing}
+            className="w-full"
+          />
+
+          <Alert>
+            <Zap className="h-4 w-4" />
+            <AlertDescription className="text-xs">
+              <strong>How it works:</strong> Choose your preferred blockchain, and your payment will be automatically converted and sent to this campaign. 
+              Cross-chain payments may take 2-10 minutes to complete.
+            </AlertDescription>
+          </Alert>
+        </TabsContent>
+      </Tabs>
 
       <div className="flex justify-between pt-2">
         <Button 
-          type="button"
+          type="button" // Explicitly set type to prevent form submission
           variant="outline" 
           onClick={(e) => {
             e.preventDefault();
@@ -634,40 +878,52 @@ const CampaignDetail = () => {
                   </Alert>
                 )}
 
-{/* ZetaChain-Only Payment Section */}
-{campaign.status === 'active' && 
- campaign.web3Enabled && 
- (campaign.web3CampaignId || campaign.blockchainDeployment?.web3CampaignId) && 
- campaign.blockchainDeployment?.status === 'deployed' && (
-  <div className="pt-4 border-t space-y-3">
-    {!showBackingForm ? (
-      <div className="space-y-3">
-        {/* Button to show amount form */}
-        <Button 
-          type="button"
-          className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-          onClick={showBackingFormHandler}
-        >
-          <Zap className="w-4 h-4 mr-2" />
-          Back This Campaign with ZetaChain
-        </Button>
-        
-        <div className="text-xs text-gray-500 text-center space-y-1">
-          <p>Pay from Bitcoin, Solana, TON, or any EVM chain</p>
-          <div className="flex justify-center space-x-1">
-            <Badge variant="outline" className="text-xs">₿ Bitcoin</Badge>
-            <Badge variant="outline" className="text-xs">◎ Solana</Badge>
-            <Badge variant="outline" className="text-xs">💎 TON</Badge>
-            <Badge variant="outline" className="text-xs">+ EVM</Badge>
-          </div>
-        </div>
-      </div>
-    ) : (
-      /* Show amount entry form */
-      renderBackingForm()
-    )}
-  </div>
-)}
+                {/* ENHANCED: Crypto Backing Section with ZetaChain support */}
+                {campaign.status === 'active' && 
+                campaign.web3Enabled && 
+                (campaign.web3CampaignId || campaign.blockchainDeployment?.web3CampaignId) && 
+                campaign.blockchainDeployment?.status === 'deployed' && (
+                  <div className="pt-4 border-t space-y-3">
+                    {!showBackingForm ? (
+                      <div className="space-y-3">
+                        {/* Button to show amount form */}
+                        <Button 
+                          type="button"
+                          className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                          onClick={showBackingFormHandler}
+                        >
+                          <Zap className="w-4 h-4 mr-2" />
+                          Back This Campaign
+                        </Button>
+                        
+                        <div className="text-xs text-gray-500 text-center space-y-1">
+                          <p>Pay from Bitcoin, Solana, TON, or any EVM chain</p>
+                          <div className="flex justify-center space-x-1">
+                            <Badge variant="outline" className="text-xs">₿ Bitcoin</Badge>
+                            <Badge variant="outline" className="text-xs">◎ Solana</Badge>
+                            <Badge variant="outline" className="text-xs">💎 TON</Badge>
+                            <Badge variant="outline" className="text-xs">+ EVM</Badge>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Show amount entry form */
+                      renderBackingForm()
+                    )}
+                  </div>
+                )}
+                {/* Debug Button - Always show for now */}
+                <div className="pt-4 border-t">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={debugCampaignBlockchain}
+                    className="w-full"
+                  >
+                    <Bug className="w-4 h-4 mr-2" />
+                    Debug Campaign State
+                  </Button>
+                </div>
 
                 {/* Blockchain Info */}
                 {campaign.web3CampaignId && (
