@@ -5,6 +5,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 import { registerServiceWorker, setupPWAInstall, clearServiceWorkerCache } from './utils/pwa';
+import { sdk } from '@farcaster/miniapp-sdk';
 
 // Development: Clear service worker cache on start
 if (import.meta.env.DEV) {
@@ -71,6 +72,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <App />
   </AppWrapper>
 );
+
+// Signal that the miniapp is ready to be displayed
+sdk.actions.ready().catch(error => {
+  console.error('Failed to signal miniapp ready:', error);
+});
 
 // Add wallet connection debugging in development
 if (import.meta.env.DEV) {

@@ -1,703 +1,881 @@
-// src/pages/campaigns/CampaignDetail.jsx
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+// src/pages/campaigns/CampaignCreator.jsx - FIXED VERSION
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
 import { 
   ArrowLeft,
-  Wallet,
-  Share,
-  Shield,
-  AlertCircle,
+  ArrowRight,
+  Plus,
+  X,
+  Target,
+  FileText,
+  Gift,
+  Calendar,
   CheckCircle,
-  Users,
-  MapPin,
-  ExternalLink,
-  Bug,
-  Zap,
-  Globe,
-  Loader2
+  Loader2,
+  Save,
+  ImageIcon,
+  AlertCircle
 } from 'lucide-react';
 
-// Import services
-import { getCampaignById } from '../../firebase/crowdfunding';
-import ZetaChainPaymentButton from '../../components/payment/ZetaChainPaymentButton';
-import integratedPaymentService from '../../services/integratedPaymentService';
 
-const CampaignDetail = () => {
-  const { id } = useParams();
+const CampaignCreator = () => {
   const navigate = useNavigate();
   const { userProfile } = useAuth();
   const { toast } = useToast();
   
-  const [campaign, setCampaign] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [backing, setBacking] = useState(false);
-  const [backingAmount, setBackingAmount] = useState('');
-  const [showBackingForm, setShowBackingForm] = useState(false);
-  const [web3Account, setWeb3Account] = useState(null);
-  const [web3Connected, setWeb3Connected] = useState(false);
-  const [activePaymentMethod, setActivePaymentMethod] = useState('traditional');
+  // Form state
+  const [currentStep, setCurrentStep] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [imagePreview, setImagePreview] = useState(null);
+  const [newTag, setNewTag] = useState('');
 
-  const loadCampaign = useCallback(async () => {
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    category: '',
+    type: 'preorder',
+    goalAmount: '',
+    duration: 30,
+    story: '',
+    rewards: [
+      { amount: 25, title: '', description: '', estimatedDelivery: '', backerLimit: '' },
+      { amount: 50, title: '', description: '', estimatedDelivery: '', backerLimit: '' },
+      { amount: 100, title: '', description: '', estimatedDelivery: '', backerLimit: '' }
+    ],
+    images: [],
+    tags: [],
+    location: '',
+    environmentalImpact: '',
+    socialImpact: '',
+    risksChallenges: '',
+    timeline: [
+      { phase: 'Phase 1', description: '', duration: '1 month' },
+      { phase: 'Phase 2', description: '', duration: '2 months' },
+      { phase: 'Phase 3', description: '', duration: '1 month' }
+    ]
+  });
+
+  // Check if user is farmer on mount
+  useEffect(() => {
+    console.log('CampaignCreator mounted, checking user profile...', userProfile);
+    
+    if (userProfile && userProfile.role !== 'farmer' && userProfile.role !== 'rolnik') {
+      toast({
+        title: "Access Denied",
+        description: "Only farmers can create campaigns.",
+        variant: "destructive"
+      });
+      navigate('/dashboard');
+      return;
+    }
+  }, [userProfile, navigate, toast]);
+
+  // Categories and types
+  const categories = [
+    'Sustainable Agriculture',
+    'Organic Farming',
+    'Equipment & Infrastructure',
+    'Crop Production',
+    'Livestock',
+    'Processing & Packaging'
+  ];
+
+  const campaignTypes = [
+    { value: 'preorder', label: 'Pre-Order Campaign', description: 'Pre-sell products before harvest' },
+    { value: 'equipment', label: 'Equipment & Infrastructure', description: 'Fund equipment purchases' },
+    { value: 'expansion', label: 'Farm Expansion', description: 'Expand farming operations' },
+    { value: 'research', label: 'Research & Development', description: 'Fund agricultural research projects' },
+    { value: 'community', label: 'Community Initiative', description: 'Support community farming projects' }
+  ];
+
+  const steps = [
+    { number: 1, title: 'Basic Information', description: 'Campaign title, goal, and type' },
+    { number: 2, title: 'Detailed Story', description: 'Your story and campaign details' },
+    { number: 3, title: 'Rewards & Incentives', description: 'Set up reward tiers' },
+    { number: 4, title: 'Impact & Timeline', description: 'Environmental impact and project timeline' },
+    { number: 5, title: 'Review & Create', description: 'Review and create your campaign' }
+  ];
+
+  const handleInputChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: null }));
+    }
+  };
+
+  const handleImageUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setImagePreview(reader.result);
+        setFormData(prev => ({ ...prev, images: [reader.result] }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeImage = () => {
+    setImagePreview(null);
+    setFormData(prev => ({ ...prev, images: [] }));
+  };
+
+  const handleRewardChange = (index, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      rewards: prev.rewards.map((reward, i) => 
+        i === index ? { ...reward, [field]: value } : reward
+      )
+    }));
+  };
+
+  const addReward = () => {
+    const newAmount = Math.max(...formData.rewards.map(r => r.amount)) + 50;
+    setFormData(prev => ({
+      ...prev,
+      rewards: [...prev.rewards, {
+        amount: newAmount,
+        title: '',
+        description: '',
+        estimatedDelivery: '',
+        backerLimit: ''
+      }]
+    }));
+  };
+
+  const removeReward = (index) => {
+    if (formData.rewards.length > 1) {
+      setFormData(prev => ({
+        ...prev,
+        rewards: prev.rewards.filter((_, i) => i !== index)
+      }));
+    }
+  };
+
+  const handleTimelineChange = (index, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      timeline: prev.timeline.map((item, i) => 
+        i === index ? { ...item, [field]: value } : item
+      )
+    }));
+  };
+
+  const addTimelineItem = () => {
+    setFormData(prev => ({
+      ...prev,
+      timeline: [...prev.timeline, {
+        phase: `Phase ${prev.timeline.length + 1}`,
+        description: '',
+        duration: '1 month'
+      }]
+    }));
+  };
+
+  const removeTimelineItem = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      timeline: prev.timeline.filter((_, i) => i !== index)
+    }));
+  };
+
+  const addTag = () => {
+    if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
+      setFormData(prev => ({
+        ...prev,
+        tags: [...prev.tags, newTag.trim()]
+      }));
+      setNewTag('');
+    }
+  };
+
+  const removeTag = (tagToRemove) => {
+    setFormData(prev => ({
+      ...prev,
+      tags: prev.tags.filter(tag => tag !== tagToRemove)
+    }));
+  };
+
+  const validateStep = (step) => {
+    const newErrors = {};
+
+    switch (step) {
+      case 1:
+        if (!formData.title.trim()) newErrors.title = 'Campaign title is required';
+        if (!formData.description.trim()) newErrors.description = 'Short description is required';
+        if (!formData.category) newErrors.category = 'Category is required';
+        if (!formData.type) newErrors.type = 'Campaign type is required';
+        if (!formData.goalAmount || formData.goalAmount < 100) {
+          newErrors.goalAmount = 'Goal amount must be at least 100 PLN';
+        }
+        break;
+        
+      case 2:
+        if (!formData.story.trim()) newErrors.story = 'Campaign story is required';
+        if (!formData.location.trim()) newErrors.location = 'Location is required';
+        break;
+        
+      case 4:
+        if (!formData.risksChallenges.trim()) {
+          newErrors.risksChallenges = 'Risks & challenges section is required';
+        }
+        break;
+    }
+
+    return newErrors;
+  };
+
+  const nextStep = () => {
+    const stepErrors = validateStep(currentStep);
+    if (Object.keys(stepErrors).length > 0) {
+      setErrors(stepErrors);
+      return;
+    }
+    
+    setErrors({});
+    if (currentStep < 5) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
+
+  const prevStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  const handleSave = async () => {
     try {
-      setLoading(true);
-      const campaignData = await getCampaignById(id);
-      console.log('Raw campaign data from Firebase:', campaignData);
+      setSaving(true);
+      setErrors({});
       
-      if (!campaignData.web3CampaignId && 
-          campaignData.blockchainDeployment?.status === 'deployed' && 
-          campaignData.blockchainDeployment?.web3CampaignId) {
-        
-        console.log('Found web3CampaignId in blockchainDeployment, updating campaign...');
-        
-        const { updateCampaign } = await import('../../firebase/crowdfunding');
-        await updateCampaign(id, {
-          web3CampaignId: campaignData.blockchainDeployment.web3CampaignId
-        });
-        
-        campaignData.web3CampaignId = campaignData.blockchainDeployment.web3CampaignId;
+      // Final validation
+      const allErrors = {};
+      for (let step = 1; step <= 4; step++) {
+        const stepErrors = validateStep(step);
+        Object.assign(allErrors, stepErrors);
       }
       
-      setCampaign(campaignData);
-      
+      if (Object.keys(allErrors).length > 0) {
+        setErrors(allErrors);
+        toast({
+          title: "Validation Error",
+          description: "Please fix the errors and try again.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Prepare campaign data
+      const campaignData = {
+        ...formData,
+        farmerId: userProfile.uid,
+        farmName: userProfile.displayName || userProfile.farmName,
+        farmerName: userProfile.displayName || `${userProfile.firstName} ${userProfile.lastName}`,
+        status: 'draft',
+        createdAt: new Date(),
+        currentAmount: 0,
+        backerCount: 0,
+        verified: false
+      };
+
+      console.log('Creating campaign with data:', campaignData);
+
+      toast({
+        title: "Success",
+        description: "Campaign created successfully! You can edit it anytime before launching.",
+      });
+
+      // Navigate to campaign management
+      navigate('/campaigns/manage');
+
     } catch (error) {
-      console.error('Error loading campaign:', error);
+      console.error('Error creating campaign:', error);
       toast({
         title: "Error",
-        description: "Campaign not found",
+        description: error.message || "Failed to create campaign",
         variant: "destructive"
       });
-      if (navigate) {
-        navigate('/campaigns');
-      }
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
-  }, [id, navigate, toast]);
+  };
 
-  const checkWeb3Connection = useCallback(async () => {
-    if (window.ethereum) {
-      try {
-        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-        if (accounts.length > 0) {
-          setWeb3Account(accounts[0]);
-          setWeb3Connected(true);
-        }
-      } catch (error) {
-        console.error('Error checking Web3 connection:', error);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (id) {
-      loadCampaign();
-      checkWeb3Connection();
-    }
-  }, [id, loadCampaign, checkWeb3Connection]);
-
-  // Show loading if no ID yet
-  if (!id) {
+  // Show loading if user profile not ready
+  if (!userProfile) {
     return (
       <div className="flex items-center justify-center min-h-96">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading campaign...</p>
+          <p className="text-gray-600">Loading...</p>
         </div>
       </div>
     );
   }
 
-  const connectWallet = async () => {
-    if (!window.ethereum) {
-      toast({
-        title: "MetaMask Required",
-        description: "Please install MetaMask to back this campaign",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      const accounts = await window.ethereum.request({ 
-        method: 'eth_requestAccounts' 
-      });
-      setWeb3Account(accounts[0]);
-      setWeb3Connected(true);
-      toast({
-        title: "Wallet Connected",
-        description: `Connected: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`
-      });
-    } catch (error) {
-      console.error('Error connecting wallet:', error);
-      toast({
-        title: "Connection Failed",
-        description: "Failed to connect wallet",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handlePaymentSuccess = async (paymentResult) => {
-    try {
-      console.log('Payment successful:', paymentResult);
-
-      toast({
-        title: "Contribution Successful!",
-        description: `Thank you for contributing ${backingAmount} ETH to this campaign.`,
-        variant: "default"
-      });
-
-      await integratedPaymentService.processContribution({
-        campaignId: campaign.id,
-        amount: parseFloat(backingAmount),
-        paymentMethod: paymentResult.paymentMethod || 'traditional',
-        sourceChain: paymentResult.sourceChain || null,
-        user: userProfile,
-        campaignData: campaign
-      });
-
-      if (paymentResult.transactionHash) {
-        setCampaign(prev => ({
-          ...prev,
-          backerCount: (prev.backerCount || 0) + 1,
-          lastContributionAt: new Date(),
-          lastTransactionHash: paymentResult.transactionHash,
-          blockchainSynced: true
-        }));
-      }
-
-      setBackingAmount('');
-      setShowBackingForm(false);
-      
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
-
-    } catch (error) {
-      console.error('Payment processing error:', error);
-      toast({
-        title: "Payment Processing Error", 
-        description: error.message,
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handlePaymentError = (error) => {
-    console.error('Payment error:', error);
-    
-    let errorMessage = 'Payment failed. Please try again.';
-    
-    if (error.message?.includes('user rejected')) {
-      errorMessage = 'Transaction was cancelled.';
-    } else if (error.message?.includes('insufficient funds')) {
-      errorMessage = 'Insufficient balance to complete this transaction.';
-    }
-
-    toast({
-      title: "Payment Failed",
-      description: errorMessage,
-      variant: "destructive"
-    });
-  };
-
-  const handleCryptoBacking = async () => {
-    if (!web3Connected) {
-      await connectWallet();
-      return;
-    }
-
-    if (!backingAmount || parseFloat(backingAmount) <= 0) {
-      toast({
-        title: "Invalid Amount",
-        description: "Please enter a valid ETH amount",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (!campaign.web3CampaignId && !campaign.blockchainDeployment?.web3CampaignId) {
-      toast({
-        title: "Campaign Not Available",
-        description: "This campaign is not available for crypto backing yet",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      setBacking(true);
-
-      const { ethers } = await import('ethers');
-      
-      const contractAddress = import.meta.env.VITE_APP_CONTRACT_ADDRESS;
-      if (!contractAddress) {
-        throw new Error('Contract address not configured');
-      }
-
-      const contractABI = [
-        "function contribute(uint256 campaignId, uint256 rewardTierIndex) external payable",
-        "function getCampaignBasic(uint256 campaignId) external view returns (uint256, string, address, uint256, uint256, uint256)",
-        "event ContributionMade(uint256 indexed campaignId, address indexed backer, uint256 amount, uint256 totalRaised)"
-      ];
-
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(contractAddress, contractABI, signer);
-
-      const amountWei = ethers.parseEther(backingAmount);
-      const web3CampaignId = campaign.web3CampaignId || campaign.blockchainDeployment?.web3CampaignId;
-      
-      const tx = await contract.contribute(
-        web3CampaignId,
-        ethers.MaxUint256,
-        { value: amountWei }
-      );
-
-      toast({
-        title: "Transaction Sent",
-        description: `Transaction hash: ${tx.hash.slice(0, 10)}...`,
-      });
-
-      const receipt = await tx.wait();
-      
-      await handlePaymentSuccess({
-        success: true,
-        transactionHash: receipt.hash,
-        amount: parseFloat(backingAmount),
-        gasUsed: receipt.gasUsed.toString(),
-        blockNumber: receipt.blockNumber,
-        paymentMethod: 'traditional'
-      });
-
-    } catch (error) {
-      handlePaymentError(error);
-    } finally {
-      setBacking(false);
-    }
-  };
-
-  const calculateProgress = () => {
-    if (!campaign?.goalAmount) return 0;
-    const currentEth = campaign.web3Data?.goalAmountEth * (campaign.currentAmount || 0) / campaign.goalAmount || 0;
-    const goalEth = campaign.web3Data?.goalAmountEth || 1;
-    return Math.min((currentEth / goalEth) * 100, 100);
-  };
-
-  const calculateDaysLeft = () => {
-    if (!campaign?.endDate) return 0;
-    const now = new Date();
-    const end = new Date(campaign.endDate);
-    const diffTime = end - now;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return Math.max(diffDays, 0);
-  };
-
-  const handleShare = () => {
-    if (navigator.share) {
-      navigator.share({
-        title: campaign.title,
-        text: campaign.description,
-        url: window.location.href
-      });
-    } else {
-      navigator.clipboard.writeText(window.location.href);
-      toast({
-        title: "Link Copied",
-        description: "Campaign link copied to clipboard"
-      });
-    }
-  };
-
-  const renderBackingForm = () => (
-    <div className="pt-4 border-t space-y-4">
-      <div>
-        <Label htmlFor="amount">Contribution Amount (ETH)</Label>
-        <Input
-          id="amount"
-          type="number"
-          step="0.001"
-          min="0.001"
-          placeholder="0.01"
-          value={backingAmount}
-          onChange={(e) => setBackingAmount(e.target.value)}
-          className="text-lg"
-        />
-        {backingAmount && (
-          <p className="text-xs text-gray-500 mt-1">
-            ≈ ${(parseFloat(backingAmount) * 3000).toFixed(2)} USD (estimated)
-          </p>
-        )}
-      </div>
-
-      <Separator />
-      
-      <Tabs value={activePaymentMethod} onValueChange={setActivePaymentMethod}>
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="traditional" className="flex items-center space-x-2">
-            <Wallet className="h-4 w-4" />
-            <span>Direct</span>
-          </TabsTrigger>
-          <TabsTrigger value="zetachain" className="flex items-center space-x-2">
-            <Zap className="h-4 w-4" />
-            <span>Cross-Chain</span>
-            <Badge variant="secondary" className="ml-1 text-xs">New</Badge>
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="traditional" className="space-y-3">
-          <div className="p-3 border rounded-lg bg-gray-50">
-            <div className="flex items-center space-x-2">
-              <Wallet className="h-4 w-4 text-blue-600" />
-              <div>
-                <p className="font-medium text-sm">Direct Wallet Payment</p>
-                <p className="text-xs text-gray-600">Pay from your connected wallet</p>
-                {web3Connected && (
-                  <p className="text-xs text-green-600 mt-1">
-                    ✓ Connected: {web3Account?.slice(0, 6)}...{web3Account?.slice(-4)}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <Button
-            onClick={handleCryptoBacking}
-            disabled={backing || !backingAmount}
-            className="w-full"
-          >
-            {backing ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <Wallet className="mr-2 h-4 w-4" />
-                Send {backingAmount} ETH
-              </>
-            )}
-          </Button>
-        </TabsContent>
-
-        <TabsContent value="zetachain" className="space-y-3">
-          <div className="p-3 border rounded-lg bg-gradient-to-r from-blue-50 to-purple-50">
-            <div className="flex items-start space-x-3">
-              <Globe className="h-5 w-5 text-purple-600 mt-0.5" />
-              <div>
-                <p className="font-medium text-sm">Cross-Chain Payment</p>
-                <p className="text-xs text-gray-600 mt-1">
-                  Pay from Bitcoin, Solana, TON, or any EVM chain
-                </p>
-                <div className="flex flex-wrap gap-1 mt-2">
-                  <Badge variant="outline" className="text-xs">₿ Bitcoin</Badge>
-                  <Badge variant="outline" className="text-xs">◎ Solana</Badge>
-                  <Badge variant="outline" className="text-xs">💎 TON</Badge>
-                  <Badge variant="outline" className="text-xs">+ EVM</Badge>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <ZetaChainPaymentButton
-            campaignId={campaign?.web3CampaignId || campaign?.blockchainDeployment?.web3CampaignId}
-            amount={parseFloat(backingAmount) || 0}
-            targetContractAddress={import.meta.env.VITE_APP_CONTRACT_ADDRESS}
-            onPaymentSuccess={handlePaymentSuccess}
-            onPaymentError={handlePaymentError}
-            disabled={!backingAmount || backing}
-            className="w-full"
-          />
-
-          <Alert>
-            <Zap className="h-4 w-4" />
-            <AlertDescription className="text-xs">
-              Cross-chain payments may take 2-10 minutes to complete depending on network congestion.
-            </AlertDescription>
-          </Alert>
-        </TabsContent>
-      </Tabs>
-
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          onClick={() => setShowBackingForm(false)}
-          className="flex-1"
-        >
-          Cancel
-        </Button>
-      </div>
-    </div>
-  );
-
-  if (loading) {
+  // Check if user is farmer
+  if (userProfile.role !== 'farmer' && userProfile.role !== 'rolnik') {
     return (
       <div className="flex items-center justify-center min-h-96">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading campaign...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!campaign) {
-    return (
-      <div className="max-w-4xl mx-auto p-6">
-        <Alert>
+        <Alert className="max-w-md">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Campaign not found or no longer available.
+            Only farmers can create campaigns.
           </AlertDescription>
         </Alert>
       </div>
     );
   }
 
-  const progress = calculateProgress();
-  const daysLeft = calculateDaysLeft();
-
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
+    <div className="max-w-4xl mx-auto p-6 space-y-8">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <Button
-          variant="outline"
-          onClick={() => navigate('/campaigns')}
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Campaigns
-        </Button>
-        
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleShare}>
-            <Share className="w-4 h-4 mr-2" />
-            Share
+        <div>
+          <Button
+            variant="outline"
+            onClick={() => navigate('/campaigns/manage')}
+            className="mb-4"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to My Campaigns
           </Button>
-          {campaign.verified && (
-            <Badge className="bg-green-100 text-green-800">
-              <Shield className="w-3 h-3 mr-1" />
-              Verified
-            </Badge>
-          )}
+          <h1 className="text-3xl font-bold">Create Campaign</h1>
+          <p className="text-gray-600">Launch a crowdfunding campaign for your farming project</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
-          <Card>
-            <CardContent className="p-6">
-              <div className="space-y-4">
-                <div>
-                  <h1 className="text-3xl font-bold">{campaign.title}</h1>
-                  <p className="text-gray-600 mt-2">{campaign.description}</p>
+      {/* Progress Steps */}
+      <Card>
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            {steps.map((step) => (
+              <div
+                key={step.number}
+                className={`flex flex-col items-center cursor-pointer ${
+                  currentStep === step.number 
+                    ? 'text-green-600' 
+                    : currentStep > step.number 
+                    ? 'text-green-500' 
+                    : 'text-gray-400'
+                }`}
+                onClick={() => {
+                  // Allow navigation to previous steps
+                  if (step.number < currentStep) {
+                    setCurrentStep(step.number);
+                  }
+                }}
+              >
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                  currentStep === step.number 
+                    ? 'bg-green-600 text-white' 
+                    : currentStep > step.number
+                    ? 'bg-green-500 text-white'
+                    : 'bg-gray-300 text-gray-600'
+                }`}>
+                  {currentStep > step.number ? <CheckCircle className="w-4 h-4" /> : step.number}
                 </div>
-
-                {campaign.imageUrl && (
-                  <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
-                    <img 
-                      src={campaign.imageUrl} 
-                      alt={campaign.title}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-green-600">
-                      {(campaign.web3Data?.goalAmountEth * (campaign.currentAmount || 0) / campaign.goalAmount || 0).toFixed(4)} ETH
-                    </div>
-                    <div className="text-sm text-gray-600">raised</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold">
-                      {campaign.backerCount || 0}
-                    </div>
-                    <div className="text-sm text-gray-600">backers</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold">
-                      {daysLeft}
-                    </div>
-                    <div className="text-sm text-gray-600">days left</div>
-                  </div>
+                <div className="text-xs font-medium mt-1 text-center max-w-20">
+                  {step.title}
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
-          {/* Campaign Details */}
-          <Card>
-            <CardHeader>
-              <CardTitle>About This Campaign</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+      {/* Step Content */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            {currentStep === 1 && <Target className="w-5 h-5" />}
+            {currentStep === 2 && <FileText className="w-5 h-5" />}
+            {currentStep === 3 && <Gift className="w-5 h-5" />}
+            {currentStep === 4 && <Calendar className="w-5 h-5" />}
+            {currentStep === 5 && <CheckCircle className="w-5 h-5" />}
+            {steps[currentStep - 1].title}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          
+          {/* Step 1: Basic Information */}
+          {currentStep === 1 && (
+            <div className="space-y-6">
               <div>
-                <h4 className="font-semibold mb-2">Campaign Story</h4>
-                <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                  {campaign.story || campaign.description}
+                <Label htmlFor="title">Campaign Title *</Label>
+                <Input
+                  id="title"
+                  value={formData.title}
+                  onChange={(e) => handleInputChange('title', e.target.value)}
+                  placeholder="Give your campaign a compelling title"
+                  maxLength={80}
+                />
+                {errors.title && <p className="text-sm text-red-600 mt-1">{errors.title}</p>}
+                <p className="text-xs text-gray-500 mt-1">{formData.title.length}/80 characters</p>
+              </div>
+
+              <div>
+                <Label htmlFor="description">Short Description *</Label>
+                <Textarea
+                  id="description"
+                  value={formData.description}
+                  onChange={(e) => handleInputChange('description', e.target.value)}
+                  placeholder="Briefly describe your campaign (2-3 sentences)"
+                  maxLength={200}
+                  rows={3}
+                />
+                {errors.description && <p className="text-sm text-red-600 mt-1">{errors.description}</p>}
+                <p className="text-xs text-gray-500 mt-1">{formData.description.length}/200 characters</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <Label htmlFor="category">Category *</Label>
+                  <Select value={formData.category} onValueChange={(value) => handleInputChange('category', value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.category && <p className="text-sm text-red-600 mt-1">{errors.category}</p>}
+                </div>
+
+                <div>
+                  <Label htmlFor="goalAmount">Funding Goal (PLN) *</Label>
+                  <Input
+                    id="goalAmount"
+                    type="number"
+                    value={formData.goalAmount}
+                    onChange={(e) => handleInputChange('goalAmount', e.target.value)}
+                    placeholder="5000"
+                    min="100"
+                  />
+                  {errors.goalAmount && <p className="text-sm text-red-600 mt-1">{errors.goalAmount}</p>}
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="duration">Campaign Duration (Days) *</Label>
+                <Input
+                  id="duration"
+                  type="number"
+                  value={formData.duration}
+                  onChange={(e) => handleInputChange('duration', parseInt(e.target.value) || 30)}
+                  placeholder="30"
+                  min="1"
+                  max="365"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  How long your campaign will run for funding (1-365 days)
                 </p>
               </div>
 
-              {campaign.risksChallenges && (
-                <div>
-                  <h4 className="font-semibold mb-2">Risks & Challenges</h4>
-                  <p className="text-gray-700">{campaign.risksChallenges}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Farmer Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle>About the Farmer</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-start gap-4">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-                  <Users className="w-8 h-8 text-green-600" />
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-semibold">{campaign.farmerName}</h4>
-                  <p className="text-gray-600">{campaign.farmName}</p>
-                  <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
-                    <div className="flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />
-                      {campaign.location}
+              <div>
+                <Label>Campaign Type *</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                  {campaignTypes.map((type) => (
+                    <div
+                      key={type.value}
+                      className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                        formData.type === type.value 
+                          ? 'border-green-500 bg-green-50' 
+                          : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                      onClick={() => handleInputChange('type', type.value)}
+                    >
+                      <h4 className="font-semibold">{type.label}</h4>
+                      <p className="text-sm text-gray-600">{type.description}</p>
                     </div>
-                  </div>
+                  ))}
+                </div>
+                {errors.type && <p className="text-sm text-red-600 mt-1">{errors.type}</p>}
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Detailed Story */}
+          {currentStep === 2 && (
+            <div className="space-y-6">
+              <div>
+                <Label htmlFor="story">Campaign Story *</Label>
+                <Textarea
+                  id="story"
+                  value={formData.story}
+                  onChange={(e) => handleInputChange('story', e.target.value)}
+                  placeholder="Tell your story. Why are you creating this campaign? What problem does it solve?"
+                  rows={8}
+                  className="min-h-32"
+                />
+                {errors.story && <p className="text-sm text-red-600 mt-1">{errors.story}</p>}
+                <p className="text-xs text-gray-500 mt-1">{formData.story.length} characters</p>
+              </div>
+
+              <div>
+                <Label htmlFor="location">Farm Location *</Label>
+                <Input
+                  id="location"
+                  value={formData.location}
+                  onChange={(e) => handleInputChange('location', e.target.value)}
+                  placeholder="e.g., Warsaw, Poland"
+                />
+                {errors.location && <p className="text-sm text-red-600 mt-1">{errors.location}</p>}
+              </div>
+
+              <div>
+                <Label>Campaign Image</Label>
+                <div className="mt-2">
+                  {!imagePreview ? (
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                      <ImageIcon className="mx-auto h-12 w-12 text-gray-400" />
+                      <div className="mt-4">
+                        <label htmlFor="image-upload" className="cursor-pointer">
+                          <span className="mt-2 block text-sm font-medium text-gray-900">
+                            Click to upload campaign image
+                          </span>
+                          <input
+                            id="image-upload"
+                            type="file"
+                            className="hidden"
+                            accept="image/*"
+                            onChange={handleImageUpload}
+                          />
+                        </label>
+                        <p className="mt-2 text-xs text-gray-500">PNG, JPG up to 10MB</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <img 
+                        src={imagePreview} 
+                        alt="Campaign preview" 
+                        className="w-full h-48 object-cover rounded-lg"
+                      />
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="absolute top-2 right-2"
+                        onClick={removeImage}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
-              
-              {campaign.socialImpact && (
-                <div>
-                  <h5 className="font-medium mb-1">Social Impact</h5>
-                  <p className="text-gray-700 text-sm">{campaign.socialImpact}</p>
+
+              <div>
+                <Label>Tags (Optional)</Label>
+                <div className="flex gap-2 items-center mt-2">
+                  <Input
+                    value={newTag}
+                    onChange={(e) => setNewTag(e.target.value)}
+                    placeholder="Add a tag"
+                    onKeyPress={(e) => e.key === 'Enter' && addTag()}
+                  />
+                  <Button onClick={addTag} variant="outline">
+                    <Plus className="w-4 h-4" />
+                  </Button>
                 </div>
-              )}
-
-              {campaign.environmentalImpact && (
-                <div>
-                  <h5 className="font-medium mb-1">Environmental Impact</h5>
-                  <p className="text-gray-700 text-sm">{campaign.environmentalImpact}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-6">
-          <Card>
-            <CardContent className="p-6">
-              <div className="space-y-4">
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm text-gray-600">Progress</span>
-                    <span className="text-sm font-medium">{progress.toFixed(1)}%</span>
-                  </div>
-                  <Progress value={progress} className="h-3" />
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Goal</span>
-                    <span className="font-medium">{campaign.web3Data?.goalAmountEth?.toFixed(4) || '0.0000'} ETH</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Raised</span>
-                    <span className="font-medium">{(campaign.web3Data?.goalAmountEth * (campaign.currentAmount || 0) / campaign.goalAmount || 0).toFixed(4)} ETH</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Backers</span>
-                    <span className="font-medium">{campaign.backerCount || 0}</span>
-                  </div>
-                </div>
-
-                {/* Web3 Status Alert */}
-                {(!campaign.web3Enabled || 
-                  !(campaign.web3CampaignId || campaign.blockchainDeployment?.web3CampaignId) || 
-                  campaign.blockchainDeployment?.status !== 'deployed') && (
-                  <Alert className="mb-4">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      {!campaign.web3Enabled ? "Campaign not enabled for Web3 backing." :
-                       !(campaign.web3CampaignId || campaign.blockchainDeployment?.web3CampaignId) ? "Campaign not linked to blockchain yet." :
-                       campaign.blockchainDeployment?.status !== 'deployed' ? `Deployment status: ${campaign.blockchainDeployment?.status || 'unknown'}` :
-                       "Campaign not available for crypto backing."}
-                    </AlertDescription>
-                  </Alert>
-                )}
-
-                {/* Enhanced Crypto Backing Section */}
-                {campaign.status === 'active' && 
-                 campaign.web3Enabled && 
-                 (campaign.web3CampaignId || campaign.blockchainDeployment?.web3CampaignId) && 
-                 campaign.blockchainDeployment?.status === 'deployed' && (
-                  <div className="pt-4 border-t space-y-3">
-                    {!web3Connected ? (
-                      <div className="space-y-2">
-                        <Button 
-                          className="w-full"
-                          onClick={connectWallet}
-                        >
-                          <Wallet className="w-4 h-4 mr-2" />
-                          Connect Wallet to Back with Ethereum
-                        </Button>
-                        
-                        <ZetaChainPaymentButton
-                          campaignId={campaign?.web3CampaignId || campaign?.blockchainDeployment?.web3CampaignId}
-                          amount={0.01}
-                          targetContractAddress={import.meta.env.VITE_APP_CONTRACT_ADDRESS}
-                          onPaymentSuccess={handlePaymentSuccess}
-                          onPaymentError={handlePaymentError}
-                          disabled={false}
-                          className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                {formData.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {formData.tags.map((tag, index) => (
+                      <Badge key={index} variant="secondary" className="flex items-center gap-1">
+                        {tag}
+                        <X 
+                          className="w-3 h-3 cursor-pointer" 
+                          onClick={() => removeTag(tag)}
                         />
-                        
-                        <div className="text-xs text-gray-500 text-center">
-                          Pay from Bitcoin, Solana, TON, or other blockchains
-                        </div>
-                      </div>
-                    ) : !showBackingForm ? (
-                      <div className="space-y-2">
-                        <div className="text-xs text-gray-500">
-                          Connected: {web3Account?.slice(0, 6)}...{web3Account?.slice(-4)}
-                        </div>
-                        <Button 
-                          className="w-full"
-                          onClick={() => setShowBackingForm(true)}
-                        >
-                          <Wallet className="w-4 h-4 mr-2" />
-                          Choose Payment Method
-                        </Button>
-                      </div>
-                    ) : (
-                      renderBackingForm()
-                    )}
+                      </Badge>
+                    ))}
                   </div>
                 )}
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+            </div>
+          )}
+
+          {/* Step 3: Rewards & Incentives */}
+          {currentStep === 3 && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Reward Tiers</h3>
+                <p className="text-gray-600 mb-4">
+                  Offer products, experiences, or recognition to your backers.
+                </p>
+                
+                {formData.rewards.map((reward, index) => (
+                  <Card key={index} className="mb-4">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-medium">Tier {index + 1}</h4>
+                        {formData.rewards.length > 1 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removeReward(index)}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label>Amount (PLN)</Label>
+                          <Input
+                            type="number"
+                            value={reward.amount}
+                            onChange={(e) => handleRewardChange(index, 'amount', e.target.value)}
+                            min="1"
+                          />
+                        </div>
+                        
+                        <div>
+                          <Label>Reward Title</Label>
+                          <Input
+                            value={reward.title}
+                            onChange={(e) => handleRewardChange(index, 'title', e.target.value)}
+                            placeholder="e.g., Early Bird Special"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="mt-4">
+                        <Label>Description</Label>
+                        <Textarea
+                          value={reward.description}
+                          onChange={(e) => handleRewardChange(index, 'description', e.target.value)}
+                          placeholder="Describe what backers get for this amount"
+                          rows={2}
+                        />
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div>
+                          <Label>Estimated Delivery</Label>
+                          <Input
+                            value={reward.estimatedDelivery}
+                            onChange={(e) => handleRewardChange(index, 'estimatedDelivery', e.target.value)}
+                            placeholder="e.g., June 2025"
+                          />
+                        </div>
+                        
+                        <div>
+                          <Label>Backer Limit (Optional)</Label>
+                          <Input
+                            type="number"
+                            value={reward.backerLimit}
+                            onChange={(e) => handleRewardChange(index, 'backerLimit', e.target.value)}
+                            placeholder="Unlimited"
+                            min="1"
+                          />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+                
+                <Button variant="outline" onClick={addReward} className="w-full">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Reward Tier
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: Impact & Timeline */}
+          {currentStep === 4 && (
+            <div className="space-y-6">
+              <div>
+                <Label htmlFor="environmentalImpact">Environmental Impact</Label>
+                <Textarea
+                  id="environmentalImpact"
+                  value={formData.environmentalImpact}
+                  onChange={(e) => handleInputChange('environmentalImpact', e.target.value)}
+                  placeholder="How will your project benefit the environment?"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="socialImpact">Social Impact</Label>
+                <Textarea
+                  id="socialImpact"
+                  value={formData.socialImpact}
+                  onChange={(e) => handleInputChange('socialImpact', e.target.value)}
+                  placeholder="How will your project benefit the community?"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="risksChallenges">Risks & Challenges *</Label>
+                <Textarea
+                  id="risksChallenges"
+                  value={formData.risksChallenges}
+                  onChange={(e) => handleInputChange('risksChallenges', e.target.value)}
+                  placeholder="What challenges might you face? How will you address them?"
+                  rows={4}
+                />
+                {errors.risksChallenges && <p className="text-sm text-red-600 mt-1">{errors.risksChallenges}</p>}
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Project Timeline</h3>
+                
+                {formData.timeline.map((item, index) => (
+                  <Card key={index} className="mb-4">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <Input
+                          value={item.phase}
+                          onChange={(e) => handleTimelineChange(index, 'phase', e.target.value)}
+                          placeholder="Phase name"
+                          className="font-medium"
+                        />
+                        {formData.timeline.length > 1 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removeTimelineItem(index)}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                      
+                      <Textarea
+                        value={item.description}
+                        onChange={(e) => handleTimelineChange(index, 'description', e.target.value)}
+                        placeholder="Describe what will happen in this phase"
+                        rows={2}
+                        className="mb-2"
+                      />
+                      
+                      <Input
+                        value={item.duration}
+                        onChange={(e) => handleTimelineChange(index, 'duration', e.target.value)}
+                        placeholder="Duration"
+                      />
+                    </CardContent>
+                  </Card>
+                ))}
+                <Button variant="outline" onClick={addTimelineItem} className="w-full">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Timeline Phase
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 5: Review & Create */}
+          {currentStep === 5 && (
+            <div className="space-y-6">
+              <Alert>
+                <CheckCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Review your campaign details before creating. You can edit everything later.
+                </AlertDescription>
+              </Alert>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h3 className="font-semibold mb-2">Campaign Details</h3>
+                  <div className="space-y-2 text-sm">
+                    <div><strong>Title:</strong> {formData.title}</div>
+                    <div><strong>Category:</strong> {formData.category}</div>
+                    <div><strong>Goal:</strong> {formData.goalAmount} PLN</div>
+                    <div><strong>Duration:</strong> {formData.duration} days</div>
+                    <div><strong>Type:</strong> {campaignTypes.find(t => t.value === formData.type)?.label}</div>
+                  </div>
+                </div>
+                
+                <div>
+                  <h3 className="font-semibold mb-2">Rewards</h3>
+                  <div className="space-y-1 text-sm">
+                    {formData.rewards.filter(r => r.title).map((reward, index) => (
+                      <div key={index}>
+                        <strong>{reward.amount} PLN:</strong> {reward.title}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-2">Campaign Story</h3>
+                <p className="text-sm text-gray-700 line-clamp-3">{formData.story}</p>
+              </div>
+
+              {formData.tags.length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-2">Tags</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {formData.tags.map((tag, index) => (
+                      <Badge key={index} variant="outline">{tag}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Navigation Buttons */}
+          <div className="flex justify-between items-center pt-6 border-t">
+            <Button
+              variant="outline"
+              onClick={prevStep}
+              disabled={currentStep === 1}
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Previous
+            </Button>
+            
+            <div className="flex gap-2">
+              {currentStep < 5 ? (
+                <Button onClick={nextStep}>
+                  Next
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating Campaign...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Create Campaign
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };
 
-export default CampaignDetail;
+export default CampaignCreator;
