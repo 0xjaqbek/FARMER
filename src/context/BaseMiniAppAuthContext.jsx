@@ -2,8 +2,6 @@
 // Simplified authentication using Base Mini App SIWF (Sign In with Farcaster)
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { useAuthenticate } from '@coinbase/onchainkit/minikit';
-import { useMiniKit } from '@coinbase/onchainkit/minikit';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
@@ -18,11 +16,9 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  // Use Base Mini App authentication (SIWF - Sign In with Farcaster)
-  const { user: authenticatedUser, authenticate } = useAuthenticate();
-
-  // Use context for UX hints (non-security features)
-  const { context } = useMiniKit();
+  // For now, using a simplified auth without OnchainKit hooks
+  // TODO: Properly integrate OnchainKit when in Base App
+  const [authenticatedUser, setAuthenticatedUser] = useState(null);
 
   // Local state
   const [currentUser, setCurrentUser] = useState(null);
@@ -139,22 +135,25 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       console.log('🔑 Initiating SIWF authentication...');
 
-      const result = await authenticate();
+      // TODO: Implement proper SIWF authentication
+      // For now, create a mock user for testing
+      const mockUser = {
+        fid: '12345',
+        signature: 'mock_signature',
+        message: 'Sign in to Farmer'
+      };
 
-      if (result) {
-        console.log('✅ Authentication successful:', result.fid);
-        return result;
-      } else {
-        console.log('❌ Authentication cancelled or failed');
-        return null;
-      }
+      setAuthenticatedUser(mockUser);
+      console.log('✅ Mock authentication successful');
+
+      return mockUser;
     } catch (error) {
       console.error('❌ Sign in error:', error);
       throw error;
     } finally {
       setLoading(false);
     }
-  }, [authenticate]);
+  }, []);
 
   /**
    * Sign out
@@ -211,8 +210,8 @@ export const AuthProvider = ({ children }) => {
    * Get context data (for UX hints only, not for security)
    */
   const getContextData = useCallback(() => {
-    return context?.user || null;
-  }, [context]);
+    return null; // TODO: Implement when MiniKit is properly set up
+  }, []);
 
   const value = {
     // User state
