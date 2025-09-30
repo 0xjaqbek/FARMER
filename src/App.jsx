@@ -1,4 +1,4 @@
-// src/App.jsx - Complete Civic Auth Integration with PWA Support
+// src/App.jsx - Base Mini App with SIWF Authentication
 import React, { useEffect, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from '@/components/ui/toaster';
@@ -8,9 +8,9 @@ import { PWAProvider, usePWA } from './components/PWAProvider';
 import PWAErrorBoundary from './components/PWAErrorBoundary';
 import { useOffline } from './hooks/useOffline';
 
-// Auth Components
-import CivicAuthProvider from './components/auth/CivicAuthProvider';
-import { AuthProvider, useAuth } from './context/AuthContext';
+// Base Mini App Auth Components
+import OnchainProviders from './components/providers/OnchainProviders';
+import { AuthProvider, useAuth } from './context/BaseMiniAppAuthContext';
 import { CartProvider } from './context/CartContext';
 
 // Layout
@@ -19,10 +19,6 @@ import MainLayout from './components/layout/MainLayout';
 // Lazy load pages for better PWA performance
 const Home = React.lazy(() => import('./pages/Home'));
 const About = React.lazy(() => import('./pages/About'));
-
-// Civic Auth Pages
-const CivicLogin = React.lazy(() => import('./pages/CivicLogin'));
-const CivicRegister = React.lazy(() => import('./pages/CivicRegister'));
 
 // Legal Pages
 const TermsOfService = React.lazy(() => import('./pages/legal/TermsOfService'));
@@ -145,32 +141,47 @@ const OfflineStatusBanner = () => {
 };
 
 // UPDATED: Protected Route Component with PWA awareness
-const CivicProtectedRoute = ({ 
-  children, 
+// Base Mini App Protected Route Component
+const BaseMiniAppProtectedRoute = ({
+  children,
   allowedRoles = null,
   requireAdmin = false,
   requireFarmer = false,
-  requireCustomer = false 
+  requireCustomer = false
 }) => {
-  const { currentUser, userProfile, loading } = useAuth();
+  const { currentUser, userProfile, loading, signIn, isAdmin, isFarmer } = useAuth();
 
   if (loading) {
     return <LoadingSpinner />;
   }
 
   if (!currentUser) {
-    return <Navigate to="/login" replace />;
+    // Show sign in prompt instead of redirecting
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="text-center space-y-4">
+          <h1 className="text-2xl font-bold text-gray-900">Authentication Required</h1>
+          <p className="text-gray-600">Sign in with Farcaster to access this page</p>
+          <button
+            onClick={signIn}
+            className="bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 font-medium"
+          >
+            Sign In with Farcaster
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // Admin check
-  if (requireAdmin && !userProfile?.isAdmin) {
+  if (requireAdmin && !isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-4">
           <h1 className="text-2xl font-bold text-red-600">Access Denied</h1>
           <p className="text-gray-600">You need admin privileges to access this page.</p>
-          <button 
-            onClick={() => window.history.back()} 
+          <button
+            onClick={() => window.history.back()}
             className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
           >
             Go Back
@@ -181,14 +192,14 @@ const CivicProtectedRoute = ({
   }
 
   // Farmer check
-  if (requireFarmer && userProfile?.role !== 'rolnik') {
+  if (requireFarmer && !isFarmer && !isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-4">
           <h1 className="text-2xl font-bold text-red-600">Access Denied</h1>
           <p className="text-gray-600">This page is only accessible to farmers.</p>
-          <button 
-            onClick={() => window.history.back()} 
+          <button
+            onClick={() => window.history.back()}
             className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
           >
             Go Back
@@ -198,15 +209,15 @@ const CivicProtectedRoute = ({
     );
   }
 
-  // Customer check
-  if (requireCustomer && userProfile?.role !== 'klient') {
+  // Customer check (for now, any authenticated user is a customer)
+  if (requireCustomer && !currentUser) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-4">
           <h1 className="text-2xl font-bold text-red-600">Access Denied</h1>
           <p className="text-gray-600">This page is only accessible to customers.</p>
-          <button 
-            onClick={() => window.history.back()} 
+          <button
+            onClick={() => window.history.back()}
             className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
           >
             Go Back
@@ -217,7 +228,7 @@ const CivicProtectedRoute = ({
   }
 
   // Legacy allowedRoles check (backward compatibility)
-  if (allowedRoles && userProfile?.role && !allowedRoles.includes(userProfile.role)) {
+  if (allowedRoles && userProfile?.role && !allowedRoles.includes(userProfile.role) && !isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-4">
@@ -274,18 +285,8 @@ const AppRoutes = () => {
           {/* About Page - Public Route */}
           <Route path="/about" element={<About />} />
           
-          {/* UPDATED: Civic Auth Routes */}
-          <Route path="/login" element={
-            <PublicRoute>
-              <CivicLogin />
-            </PublicRoute>
-          } />
-          
-          <Route path="/register" element={
-            <PublicRoute>
-              <CivicRegister />
-            </PublicRoute>
-          } />
+          {/* Base Mini App - No separate login/register pages needed */}
+          {/* Authentication is handled in-app via Sign In with Farcaster */}
 
           {/* Legal Pages - PUBLIC ACCESS (No authentication required) */}
           <Route path="/terms" element={<TermsOfService />} />
@@ -293,213 +294,213 @@ const AppRoutes = () => {
 
           {/* Debug Route (Development Only) */}
           <Route path="/debug" element={
-            <CivicProtectedRoute requireAdmin>
+            <BaseMiniAppProtectedRoute requireAdmin>
               <MainLayout>
                 <FirebaseDebug />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
 
           {/* Dashboard Route */}
           <Route path="/dashboard" element={
-            <CivicProtectedRoute>
+            <BaseMiniAppProtectedRoute>
               <MainLayout>
                 <Dashboard />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
 
           {/* Profile Route */}
           <Route path="/profile" element={
-            <CivicProtectedRoute>
+            <BaseMiniAppProtectedRoute>
               <MainLayout>
                 <Profile />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
 
           {/* Enhanced Search Routes */}
           <Route path="/search" element={
-            <CivicProtectedRoute>
+            <BaseMiniAppProtectedRoute>
               <MainLayout>
                 <SearchWithMap />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
 
           <Route path="/location-picker" element={
-            <CivicProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
+            <BaseMiniAppProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
               <MainLayout>
                 <EnhancedLocationPicker showMap={true} />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
 
           {/* Farmer Directory Routes */}
           <Route path="/farmers" element={
-            <CivicProtectedRoute>
+            <BaseMiniAppProtectedRoute>
               <MainLayout>
                 <FarmersDirectory />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
           
           <Route path="/farmers/:farmerId" element={
-            <CivicProtectedRoute>
+            <BaseMiniAppProtectedRoute>
               <MainLayout>
                 <FarmerProfile />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
 
           {/* Product Routes */}
           <Route path="/browse" element={
-            <CivicProtectedRoute>
+            <BaseMiniAppProtectedRoute>
               <MainLayout>
                 <ProductList />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
           
           <Route path="/products/:id" element={
-            <CivicProtectedRoute>
+            <BaseMiniAppProtectedRoute>
               <MainLayout>
                 <ProductDetail />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
           
           <Route path="/products/add" element={
-            <CivicProtectedRoute requireFarmer>
+            <BaseMiniAppProtectedRoute requireFarmer>
               <MainLayout>
                 <ProductAdd />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
           
           <Route path="/products/manage" element={
-            <CivicProtectedRoute requireFarmer>
+            <BaseMiniAppProtectedRoute requireFarmer>
               <MainLayout>
                 <ProductManage />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
           
           <Route path="/products/:id/edit" element={
-            <CivicProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
+            <BaseMiniAppProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
               <MainLayout>
                 <ProductEdit />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
           
           <Route path="/products/:id/images" element={
-            <CivicProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
+            <BaseMiniAppProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
               <MainLayout>
                 <ProductImages />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
           
           <Route path="/products/:id/qr" element={
-            <CivicProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
+            <BaseMiniAppProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
               <MainLayout>
                 <ProductQR />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
 
           {/* Product Tracker Route */}
           <Route path="/track" element={
-            <CivicProtectedRoute>
+            <BaseMiniAppProtectedRoute>
               <MainLayout>
                 <ProductTracker />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
           
           <Route path="/track/:trackingCode" element={
-            <CivicProtectedRoute>
+            <BaseMiniAppProtectedRoute>
               <MainLayout>
                 <ProductTracker />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
 
           {/* Order Routes */}
           <Route path="/orders" element={
-            <CivicProtectedRoute>
+            <BaseMiniAppProtectedRoute>
               <MainLayout>
                 <OrderList />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
           
           <Route path="/orders/:id" element={
-            <CivicProtectedRoute>
+            <BaseMiniAppProtectedRoute>
               <MainLayout>
                 <OrderDetail />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
           
           <Route path="/orders/create/:productId" element={
-            <CivicProtectedRoute requireCustomer>
+            <BaseMiniAppProtectedRoute requireCustomer>
               <MainLayout>
                 <OrderCreate />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
           
           {/* Cart and Checkout Routes */}
           <Route path="/cart" element={
-            <CivicProtectedRoute requireCustomer>
+            <BaseMiniAppProtectedRoute requireCustomer>
               <MainLayout>
                 <Cart />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
           
           <Route path="/checkout" element={
-            <CivicProtectedRoute requireCustomer>
+            <BaseMiniAppProtectedRoute requireCustomer>
               <MainLayout>
                 <Checkout />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
           
           {/* Chat Routes */}
           <Route path="/chat" element={
-            <CivicProtectedRoute>
+            <BaseMiniAppProtectedRoute>
               <MainLayout>
                 <ChatList />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
           
           <Route path="/chat/:id" element={
-            <CivicProtectedRoute>
+            <BaseMiniAppProtectedRoute>
               <MainLayout>
                 <ChatDetail />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
 
           {/* Notification Routes */}
           <Route path="/notifications" element={
-            <CivicProtectedRoute>
+            <BaseMiniAppProtectedRoute>
               <MainLayout>
                 <NotificationPage />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
 
           <Route path="/notifications/create" element={
-            <CivicProtectedRoute allowedRoles={['farmer', 'admin']}>
+            <BaseMiniAppProtectedRoute allowedRoles={['farmer', 'admin']}>
               <MainLayout>
                 <NotificationCreator />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
 
           {/* About Campaigns - Public Route */}
@@ -507,52 +508,52 @@ const AppRoutes = () => {
 
           {/* Campaign Routes */}
           <Route path="/campaigns" element={
-            <CivicProtectedRoute>
+            <BaseMiniAppProtectedRoute>
               <MainLayout>
                 <CampaignViewer />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
 
           <Route path="/campaigns/create" element={
-            <CivicProtectedRoute requireFarmer>
+            <BaseMiniAppProtectedRoute requireFarmer>
               <MainLayout>
                 <CampaignCreator />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
 
           <Route path="/campaigns/edit/:id" element={
-            <CivicProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
+            <BaseMiniAppProtectedRoute allowedRoles={['rolnik', 'farmer', 'admin']}>
               <MainLayout>
                 <CampaignEdit />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
 
           <Route path="/campaigns/manage" element={
-            <CivicProtectedRoute requireFarmer>
+            <BaseMiniAppProtectedRoute requireFarmer>
               <MainLayout>
                 <CampaignManager />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
 
           <Route path="/campaigns/:id" element={
-            <CivicProtectedRoute>
+            <BaseMiniAppProtectedRoute>
               <MainLayout>
                 <CampaignDetail />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
           
           {/* Admin Routes */}
           <Route path="/admin" element={
-            <CivicProtectedRoute requireAdmin>
+            <BaseMiniAppProtectedRoute requireAdmin>
               <MainLayout>
                 <AdminDashboard />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
 
           {/* PWA-specific routes */}
@@ -560,11 +561,11 @@ const AppRoutes = () => {
 
           {/* Fallback Routes */}
           <Route path="*" element={
-            <CivicProtectedRoute>
+            <BaseMiniAppProtectedRoute>
               <MainLayout>
                 <NotFoundPage />
               </MainLayout>
-            </CivicProtectedRoute>
+            </BaseMiniAppProtectedRoute>
           } />
         </Routes>
         
@@ -586,7 +587,7 @@ const AppContent = () => {
 
   return (
     <div className={appClasses}>
-      <CivicAuthProvider>
+      <OnchainProviders>
         <AuthProvider>
           <CartProvider>
             <Suspense fallback={<LoadingFallback message="Loading Farm Direct..." />}>
@@ -594,7 +595,7 @@ const AppContent = () => {
             </Suspense>
           </CartProvider>
         </AuthProvider>
-      </CivicAuthProvider>
+      </OnchainProviders>
     </div>
   );
 };
