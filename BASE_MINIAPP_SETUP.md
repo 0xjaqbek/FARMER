@@ -90,12 +90,22 @@ Update the fc:miniapp meta tag (line 65-76):
 
 ### 2. Generate Account Association Credentials
 
-1. Deploy your app to make the manifest publicly accessible
+Your app is deployed at **https://farmer4u.web.app**
+
+1. ✅ App is already deployed and manifest will be accessible at:
+   `https://farmer4u.web.app/.well-known/farcaster.json`
+
 2. Go to [Base Build Account Association Tool](https://build.base.org)
-3. Enter your domain (e.g., `your-app.vercel.app`)
-4. Click "Verify" and follow instructions
+
+3. Enter your domain: **farmer4u.web.app** (without https://)
+
+4. Click "Verify" and follow instructions to sign with your Base Account
+
 5. Copy the generated `accountAssociation` fields
-6. Paste into `public/.well-known/farcaster.json`
+
+6. Paste into `public/.well-known/farcaster.json` (lines 2-6)
+
+7. Redeploy to Firebase: `npm run build && firebase deploy`
 
 ### 3. Test Your Mini App
 
