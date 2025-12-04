@@ -1,52 +1,40 @@
-import { useState } from 'react';
+// src/components/auth/LoginForm.jsx
+// Updated LoginForm that uses Civic Auth instead of email/password
+
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { loginUser } from '../../firebase/auth.jsx';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Loader2, Shield, CheckCircle, ArrowRight } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 const LoginForm = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
-  
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!email || !password) {
-      setError('Email and password are required');
-      return;
-    }
-    
+  const { signInWithCivic } = useAuth();
+
+  const handleCivicLogin = async () => {
     try {
       setLoading(true);
       setError('');
-      console.log('Login form submitted with:', { email });
+
+      console.log('Starting Civic Auth login...');
+      const result = await signInWithCivic();
       
-      // Próba logowania
-      const user = await loginUser(email, password);
-      console.log('Login successful, user:', user.uid);
+      console.log('✅ Login successful:', result.user.uid);
       
-      // Przekierowanie do panelu
+      // Redirect to dashboard
       navigate('/dashboard');
-    } catch (error) {
-      console.error('Login error in form:', error);
       
-      // Wyświetl przyjazny komunikat o błędzie
-      if (error.code === 'auth/invalid-credential') {
-        setError('Invalid email or password');
-      } else if (error.code === 'auth/user-not-found') {
-        setError('User not found');
-      } else if (error.code === 'auth/wrong-password') {
-        setError('Incorrect password');
-      } else if (error.code === 'auth/too-many-requests') {
-        setError('Too many failed login attempts. Please try again later.');
-      } else if (error.code === 'auth/network-request-failed') {
-        setError('Network error. Please check your connection.');
+    } catch (error) {
+      console.error('❌ Login failed:', error);
+      
+      if (error.message.includes('cancelled') || error.message.includes('declined')) {
+        setError('Login was cancelled. Please try again when ready.');
+      } else if (error.message.includes('network')) {
+        setError('Network error. Please check your connection and try again.');
       } else {
         setError(`Login failed: ${error.message}`);
       }
@@ -54,55 +42,84 @@ const LoginForm = () => {
       setLoading(false);
     }
   };
-  
+
   return (
     <Card className="w-full max-w-md mx-auto">
-      <CardHeader>
-        <CardTitle className="text-2xl font-bold text-center">Login</CardTitle>
+      <CardHeader className="text-center">
+        <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
+        <p className="text-gray-600">
+          Sign in securely with Civic Auth
+        </p>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
         {error && (
-          <Alert variant="destructive" className="mb-4">
+          <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
         
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input 
-              id="email" 
-              type="email" 
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required 
-            />
+        {/* Civic Auth Benefits */}
+        <div className="bg-blue-50 p-4 rounded-lg space-y-2 text-sm">
+          <div className="flex items-center gap-2 text-blue-800">
+            <Shield className="h-4 w-4" />
+            <span className="font-medium">Secure Identity Verification</span>
           </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input 
-              id="password" 
-              type="password" 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required 
-            />
+          <div className="flex items-center gap-2 text-blue-700">
+            <CheckCircle className="h-4 w-4" />
+            <span>No passwords to remember</span>
           </div>
-          
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Logging in...' : 'Login'}
-          </Button>
-          
-          <div className="text-center mt-4">
-            <p className="text-sm text-gray-600">
-              Don't have an account?{' '}
-              <a href="/register" className="text-blue-600 hover:underline">
-                Register here
-              </a>
-            </p>
+          <div className="flex items-center gap-2 text-blue-700">
+            <CheckCircle className="h-4 w-4" />
+            <span>Protected by blockchain technology</span>
           </div>
-        </form>
+        </div>
+
+        {/* Civic Auth Login Button */}
+        <Button 
+          onClick={handleCivicLogin}
+          disabled={loading}
+          className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+          size="lg"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Connecting to Civic...
+            </>
+          ) : (
+            <>
+              <Shield className="mr-2 h-4 w-4" />
+              Sign in with Civic Auth
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </>
+          )}
+        </Button>
+
+        {/* Information */}
+        <div className="text-center text-sm text-gray-500 space-y-2">
+          <p>
+            New to Farm Direct?{' '}
+            <a href="/register" className="text-blue-600 hover:underline font-medium">
+              Create an account
+            </a>
+          </p>
+          <p>
+            By signing in, you agree to use Civic's secure identity verification.
+          </p>
+        </div>
+
+        {/* How it works */}
+        <details className="text-sm text-gray-600">
+          <summary className="cursor-pointer font-medium text-gray-800 hover:text-gray-900">
+            How does Civic Auth work?
+          </summary>
+          <div className="mt-2 space-y-1 text-xs">
+            <p>• Civic Auth uses blockchain-based identity verification</p>
+            <p>• Your identity is verified once and reused securely</p>
+            <p>• No passwords needed - your identity is your key</p>
+            <p>• All data is encrypted and decentralized</p>
+          </div>
+        </details>
       </CardContent>
     </Card>
   );

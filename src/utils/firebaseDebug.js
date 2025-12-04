@@ -1,5 +1,5 @@
 // src/utils/firebaseDebug.js
-// Debug utilities to check Firebase configuration
+// Fixed Firebase debug utilities that work with Civic Auth
 
 import { auth, db } from '../firebase/config';
 
@@ -9,22 +9,48 @@ export class FirebaseDebug {
   static checkConfiguration() {
     console.group('🔥 Firebase Configuration Check');
     
-    // Check Auth
+    // Check Auth (now Civic Auth)
     if (auth) {
-      console.log('✅ Firebase Auth initialized');
-      console.log('Auth app:', auth.app.name);
-      console.log('Auth config:', {
-        apiKey: auth.config?.apiKey ? '✅ Present' : '❌ Missing',
-        authDomain: auth.config?.authDomain || 'Not found'
-      });
+      console.log('✅ Auth service initialized (Civic Auth)');
+      
+      // Safely check for properties that might not exist with Civic Auth
+      try {
+        console.log('Auth object keys:', Object.keys(auth));
+        
+        // Check if it has the expected methods
+        if (typeof auth.onAuthStateChanged === 'function') {
+          console.log('✅ Auth state listener available');
+        }
+        if (typeof auth.signOut === 'function') {
+          console.log('✅ Sign out method available');
+        }
+        
+        // Don't try to read .app.name as it might not exist with Civic
+        console.log('Auth provider: Civic Auth');
+        
+      } catch (authError) {
+        console.warn('Auth configuration check error:', authError.message);
+      }
+      
     } else {
-      console.error('❌ Firebase Auth not initialized');
+      console.error('❌ Auth service not initialized');
     }
     
     // Check Firestore
     if (db) {
       console.log('✅ Firestore initialized');
-      console.log('Firestore app:', db.app.name);
+      
+      try {
+        // Safely check Firestore properties
+        if (db.app && db.app.name) {
+          console.log('Firestore app:', db.app.name);
+        } else {
+          console.log('Firestore: Connected (app name not available)');
+        }
+      } catch (dbError) {
+        console.warn('Firestore configuration check error:', dbError.message);
+      }
+      
     } else {
       console.error('❌ Firestore not initialized');
     }
@@ -40,84 +66,124 @@ export class FirebaseDebug {
   
   // Test Firebase connection
   static async testConnection() {
-    console.group('🔗 Firebase Connection Test');
+    console.group('🔗 Connection Test');
     
     try {
-      // Test Auth
+      // Test Auth (now Civic)
       const user = auth.currentUser;
-      console.log('Current user:', user ? `✅ ${user.email}` : '👤 Not logged in');
+      console.log('Current user:', user ? `${user.email} (${user.uid})` : 'Not signed in');
       
-      // Test Firestore connection
-      console.log('Testing Firestore connection...');
-      // Simple read test - this will fail gracefully if no permission
+      // Test Firestore (basic check)
+      if (db) {
+        console.log('✅ Firestore connection: Available');
+      } else {
+        console.log('❌ Firestore connection: Not available');
+      }
       
-      console.log('✅ Firebase connection successful');
+      // Test auth state listener
+      if (typeof auth.onAuthStateChanged === 'function') {
+        console.log('✅ Auth state listener: Working');
+      } else {
+        console.log('❌ Auth state listener: Not available');
+      }
+      
     } catch (error) {
-      console.error('❌ Firebase connection failed:', error);
+      console.error('❌ Connection test error:', error);
     }
     
     console.groupEnd();
   }
   
-  // Check auth state
-  static monitorAuthState() {
-    console.log('🔍 Monitoring auth state changes...');
-    
-    return auth.onAuthStateChanged((user) => {
-      if (user) {
-        console.log('👤 User signed in:', {
-          uid: user.uid,
-          email: user.email,
-          emailVerified: user.emailVerified,
-          displayName: user.displayName
-        });
-      } else {
-        console.log('👤 User signed out');
-      }
-    });
-  }
-  
-  // Test registration with dummy data
-  static async testRegistration() {
-    console.log('🧪 Testing registration flow...');
-    
-    const testEmail = `test-${Date.now()}@example.com`;
-    const testPassword = 'test123456';
+  // Check user state
+  static checkUserState() {
+    console.group('👤 User State Check');
     
     try {
-      console.log('Creating test user:', testEmail);
+      const user = auth.currentUser;
       
-      // This will help identify the exact error
-      const result = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${import.meta.env.VITE_FIREBASE_API_KEY}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: testEmail,
-          password: testPassword,
-          returnSecureToken: true
-        })
-      });
-      
-      const data = await result.json();
-      
-      if (result.ok) {
-        console.log('✅ Registration API test successful');
-        console.log('Response:', data);
+      if (user) {
+        console.log('✅ User authenticated');
+        console.log('- UID:', user.uid);
+        console.log('- Email:', user.email);
+        console.log('- Display Name:', user.displayName);
+        console.log('- Provider:', user.providerData?.[0]?.providerId || 'civic');
+        console.log('- Email Verified:', user.emailVerified);
+        
+        if (user.civicData) {
+          console.log('- Civic Data:', user.civicData);
+        }
+        
       } else {
-        console.error('❌ Registration API test failed');
-        console.error('Status:', result.status);
-        console.error('Response:', data);
+        console.log('❌ No user authenticated');
       }
       
     } catch (error) {
-      console.error('❌ Registration test error:', error);
+      console.error('Error checking user state:', error);
     }
+    
+    console.groupEnd();
+  }
+  
+  // Debug auth state changes
+  static startAuthStateDebugging() {
+    console.log('🔍 Starting auth state debugging...');
+    
+    try {
+      const unsubscribe = auth.onAuthStateChanged((user) => {
+        console.group('🔄 Auth State Changed');
+        
+        if (user) {
+          console.log('✅ User signed in');
+          console.log('- UID:', user.uid);
+          console.log('- Email:', user.email);
+          console.log('- Provider:', user.providerData?.[0]?.providerId || 'civic');
+        } else {
+          console.log('❌ User signed out');
+        }
+        
+        console.groupEnd();
+      });
+      
+      // Store unsubscribe function globally for manual cleanup if needed
+      window.debugAuthUnsubscribe = unsubscribe;
+      
+      console.log('✅ Auth state debugging started');
+      
+    } catch (error) {
+      console.error('Error starting auth state debugging:', error);
+    }
+  }
+  
+  // Stop auth state debugging
+  static stopAuthStateDebugging() {
+    if (window.debugAuthUnsubscribe) {
+      window.debugAuthUnsubscribe();
+      delete window.debugAuthUnsubscribe;
+      console.log('✅ Auth state debugging stopped');
+    }
+  }
+  
+  // Complete debug suite
+  static async runFullDebug() {
+    console.group('🔧 Full Debug Suite');
+    
+    this.checkConfiguration();
+    await this.testConnection();
+    this.checkUserState();
+    
+    console.log('🎯 Debug Summary:');
+    console.log('- Auth Provider: Civic Auth');
+    console.log('- Firestore: Available');
+    console.log('- Environment: Development');
+    
+    console.groupEnd();
   }
 }
 
-// Auto-run configuration check in development
+// Auto-run basic checks in development
 if (import.meta.env.DEV) {
-  FirebaseDebug.checkConfiguration();
+  // Add a slight delay to let everything initialize
+  setTimeout(() => {
+    FirebaseDebug.checkConfiguration();
+  }, 1000);
 }

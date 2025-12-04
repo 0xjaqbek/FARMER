@@ -2,18 +2,220 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <!-- PWA Primary Meta Tags -->
     <title>Farmer - farm-to-table marketplace application</title>
+    <meta name="title" content="Farmer - farm-to-table marketplace application">
+    <meta name="description" content="Connect directly with local farmers for fresh, seasonal produce and support farm projects through crowdfunding">
+    <meta name="keywords" content="farm, local produce, organic, farmers market, crowdfunding, fresh vegetables, seasonal food">
+    
+    <!-- Viewport and Mobile Optimization -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Farm Direct">
+    
+    <!-- Theme Colors -->
+    <meta name="theme-color" content="#16a34a">
+    <meta name="msapplication-navbutton-color" content="#16a34a">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json">
+    
+    <!-- Favicon and Icons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/ios/32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/ios/16.png">
+    
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" href="/icons/ios/180.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/ios/152.png">
+    <link rel="apple-touch-icon" sizes="144x144" href="/icons/ios/144.png">
+    <link rel="apple-touch-icon" sizes="120x120" href="/icons/ios/120.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="/icons/ios/114.png">
+    <link rel="apple-touch-icon" sizes="76x76" href="/icons/ios/76.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="/icons/ios/72.png">
+    <link rel="apple-touch-icon" sizes="60x60" href="/icons/ios/60.png">
+    <link rel="apple-touch-icon" sizes="57x57" href="/icons/ios/57.png">
+    
+    <!-- Microsoft Tiles -->
+    <meta name="msapplication-TileImage" content="/icons/android/android-launchericon-144-144.png">
+    <meta name="msapplication-TileColor" content="#16a34a">
+    <meta name="msapplication-config" content="/browserconfig.xml">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://farmdirect.app/">
+    <meta property="og:title" content="Farmer - farm-to-table marketplace application">
+    <meta property="og:description" content="Connect directly with local farmers for fresh, seasonal produce and support farm projects through crowdfunding">
+    <meta property="og:image" content="/icons/android/android-launchericon-512-512.png">
+    <meta property="og:site_name" content="Farm Direct">
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://farmdirect.app/">
+    <meta property="twitter:title" content="Farmer - farm-to-table marketplace application">
+    <meta property="twitter:description" content="Connect directly with local farmers for fresh, seasonal produce and support farm projects through crowdfunding">
+    <meta property="twitter:image" content="/icons/android/android-launchericon-512-512.png">
+
+    <!-- Farcaster Mini App -->
+    <meta name="fc:miniapp" content='{
+  "version":"next",
+  "imageUrl":"https://farmer4u.web.app/icons/android/android-launchericon-512-512.png",
+  "button":{
+      "title":"Open Farmer",
+      "action":{
+      "type":"launch_miniapp",
+      "name":"Farmer",
+      "url":"https://farmer4u.web.app"
+      }
+  }
+  }' />
+    
+    <!-- Security -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-XSS-Protection" content="1; mode=block">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    
+    <!-- Performance Hints -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://firebaseapp.com">
+    <link rel="preconnect" href="https://firebasestorage.googleapis.com">
+    <link rel="dns-prefetch" href="//maps.googleapis.com">
+    
+    <!-- Critical CSS -->
+    <style>
+      /* Critical loading styles */
+      .loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        transition: opacity 0.3s ease-out;
+      }
+      
+      .loading-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid #e5e7eb;
+        border-top: 3px solid #16a34a;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      /* Hide loading screen when app loads */
+      .app-loaded .loading-screen {
+        opacity: 0;
+        pointer-events: none;
+      }
+      
+      /* Prevent flash of unstyled content */
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background-color: #ffffff;
+      }
+      
+      /* iOS Safari specific fixes */
+      body {
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+      }
+    </style>
   </head>
   <body>
+    <!-- Loading Screen -->
+    <div class="loading-screen" id="loading-screen">
+      <div class="loading-spinner"></div>
+    </div>
+    
+    <!-- App Root -->
     <div id="root"></div>
+    
+    <!-- Environment Scripts -->
     <script>
       // Polyfill for global Buffer (required by some Solana libraries)
       if (typeof global === 'undefined') {
         var global = globalThis;
       }
+      
+      // iOS PWA viewport fix
+      if (navigator.standalone) {
+        const viewport = document.querySelector('meta[name=viewport]');
+        viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover');
+      }
+      
+      // Hide loading screen when app loads
+      window.addEventListener('load', () => {
+        setTimeout(() => {
+          document.body.classList.add('app-loaded');
+          setTimeout(() => {
+            const loadingScreen = document.getElementById('loading-screen');
+            if (loadingScreen) {
+              loadingScreen.remove();
+            }
+          }, 300);
+        }, 500);
+      });
+      
+      // Performance monitoring
+      if ('performance' in window && 'mark' in performance) {
+        performance.mark('app-start');
+      }
     </script>
+    
+    <!-- Main App Script -->
     <script type="module" src="/src/main.jsx"></script>
+    
+    <!-- PWA iOS Splash Screens using existing icons -->
+    <!-- iPhone X/XS/11 Pro -->
+    <link rel="apple-touch-startup-image" href="/icons/ios/1024.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
+    
+    <!-- iPhone XR/11 -->
+    <link rel="apple-touch-startup-image" href="/icons/ios/1024.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2)">
+    
+    <!-- iPhone XS Max/11 Pro Max -->
+    <link rel="apple-touch-startup-image" href="/icons/ios/1024.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3)">
+    
+    <!-- iPhone 12/13/14 -->
+    <link rel="apple-touch-startup-image" href="/icons/ios/1024.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
+    
+    <!-- iPhone 12/13/14 Pro Max -->
+    <link rel="apple-touch-startup-image" href="/icons/ios/1024.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)">
+    
+    <!-- iPhone SE, 8, 7, 6s -->
+    <link rel="apple-touch-startup-image" href="/icons/ios/512.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)">
+    
+    <!-- iPhone 8 Plus, 7 Plus, 6s Plus -->
+    <link rel="apple-touch-startup-image" href="/icons/ios/1024.png" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3)">
+    
+    <!-- iPad -->
+    <link rel="apple-touch-startup-image" href="/icons/android/android-launchericon-512-512.png" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2)">
+    
+    <!-- iPad Pro 11" -->
+    <link rel="apple-touch-startup-image" href="/icons/android/android-launchericon-512-512.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2)">
+    
+    <!-- iPad Pro 12.9" -->
+    <link rel="apple-touch-startup-image" href="/icons/android/android-launchericon-512-512.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2)">
+    
+    <!-- Fallback for other devices -->
+    <meta name="apple-mobile-web-app-title" content="Farm Direct">
+    <meta name="apple-touch-fullscreen" content="yes">
   </body>
 </html>

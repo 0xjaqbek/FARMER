@@ -6,10 +6,20 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import OrderStatus from '@/components/orders/OrderStatus';
 import OrderTimeline from '@/components/orders/OrderTimeline';
 import OrderQR from '@/components/orders/OrderQR';
-import { QrCode, ArrowLeft, Truck, Package, CheckCircle, XCircle, MessageSquare } from 'lucide-react';
+import PaymentStatus from '@/components/payment/PaymentStatus';
+import { 
+  QrCode, 
+  ArrowLeft, 
+  Truck, 
+  Package, 
+  CheckCircle, 
+  XCircle, 
+  MessageSquare
+} from 'lucide-react';
 
 const OrderDetail = () => {
   const { id } = useParams();
@@ -46,6 +56,16 @@ const OrderDetail = () => {
     
     fetchOrder();
   }, [id]);
+
+  // Refresh order data
+  const refreshOrder = async () => {
+    try {
+      const orderData = await getOrderById(id);
+      setOrder(orderData);
+    } catch (error) {
+      console.error('Error refreshing order:', error);
+    }
+  };
 
   const handlePrintQR = () => {
     setIsQrModalOpen(true);
@@ -99,10 +119,7 @@ const OrderDetail = () => {
       console.log('Status update successful');
       
       // Refresh order data
-      console.log('Refreshing order data...');
-      const updatedOrder = await getOrderById(id);
-      console.log('Updated order data:', updatedOrder);
-      setOrder(updatedOrder);
+      await refreshOrder();
       
       setSuccess(`Order status updated to ${ORDER_STATUSES[newStatus].label}`);
       setStatusNote('');
@@ -139,6 +156,18 @@ const OrderDetail = () => {
     };
     
     return statusFlow[currentStatus] || [];
+  };
+
+  // Helper function to get payment method display name
+  const getPaymentMethodDisplayName = (method) => {
+    switch (method) {
+      case 'bank_transfer': return 'Bank Transfer';
+      case 'blik': return 'BLIK';
+      case 'crypto': return 'Cryptocurrency';
+      case 'card': return 'Credit Card';
+      case 'cash': return 'Cash on Delivery';
+      default: return method || 'Cash on Delivery';
+    }
   };
   
   if (loading) {
@@ -198,7 +227,8 @@ const OrderDetail = () => {
       )}
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-6">
+          {/* Main Order Card */}
           <Card>
             <CardHeader>
               <div className="flex justify-between items-start">
@@ -246,11 +276,11 @@ const OrderDetail = () => {
                           <div className="flex-1">
                             <h4 className="font-medium">{item.productName}</h4>
                             <p className="text-sm text-gray-500">
-                              {item.quantity} {item.unit} × ${item.price.toFixed(2)}
+                              {item.quantity} {item.unit} × {item.price?.toFixed(2)} PLN
                             </p>
                           </div>
                           <div className="text-right">
-                            <p className="font-medium">${item.totalPrice.toFixed(2)}</p>
+                            <p className="font-medium">{item.totalPrice?.toFixed(2)} PLN</p>
                             {item.productId && (
                               <Button variant="ghost" size="sm" asChild className="text-xs">
                                 <Link to={`/products/${item.productId}`}>
@@ -279,7 +309,7 @@ const OrderDetail = () => {
                             <span className="text-sm text-gray-500">Quantity:</span> {order.quantity} {order.unit}
                           </p>
                           <p>
-                            <span className="text-sm text-gray-500">Price:</span> ${order.price.toFixed(2)} / {order.unit}
+                            <span className="text-sm text-gray-500">Price:</span> {order.price?.toFixed(2)} PLN / {order.unit}
                           </p>
                         </div>
                       </div>
@@ -291,17 +321,17 @@ const OrderDetail = () => {
                 <div className="border-t pt-4">
                   <div className="flex justify-between mb-2">
                     <span className="text-gray-600">Subtotal</span>
-                    <span>${order.subtotal?.toFixed(2) || order.totalPrice?.toFixed(2)}</span>
+                    <span>{(order.subtotal || order.totalPrice)?.toFixed(2)} PLN</span>
                   </div>
                   {order.shippingCost > 0 && (
                     <div className="flex justify-between mb-2">
                       <span className="text-gray-600">Shipping</span>
-                      <span>${order.shippingCost.toFixed(2)}</span>
+                      <span>{order.shippingCost.toFixed(2)} PLN</span>
                     </div>
                   )}
                   <div className="flex justify-between font-medium text-lg">
                     <span>Total</span>
-                    <span>${order.totalPrice.toFixed(2)}</span>
+                    <span>{order.totalPrice?.toFixed(2)} PLN</span>
                   </div>
                 </div>
                 
@@ -362,7 +392,7 @@ const OrderDetail = () => {
                     <h3 className="font-medium mb-2">Payment & Delivery</h3>
                     <p className="mb-1">
                       <span className="text-sm text-gray-600">Payment Method:</span>{' '}
-                      {order.paymentMethod === 'card' ? 'Credit Card' : 'Cash on Delivery'}
+                      {getPaymentMethodDisplayName(order.payment?.method || order.paymentMethod)}
                     </p>
                     <p>
                       <span className="text-sm text-gray-600">Delivery Method:</span>{' '}
@@ -387,6 +417,9 @@ const OrderDetail = () => {
               </div>
             </CardContent>
           </Card>
+
+          {/* Payment Status Card */}
+          <PaymentStatus order={order} onStatusUpdate={refreshOrder} />
         </div>
         
         <div>

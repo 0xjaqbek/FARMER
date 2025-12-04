@@ -33,7 +33,8 @@ import {
   Heart,
   ArrowLeft,
   Copy,
-  ExternalLink
+  ExternalLink,
+  Rocket
 } from 'lucide-react';
 
 // Import Firebase functions
@@ -194,12 +195,30 @@ const CampaignManager = () => {
 
   const CampaignCard = ({ campaign }) => {
     const progressPercentage = getProgressPercentage(campaign.currentAmount || 0, campaign.goalAmount || 1);
-    
+
+    const getVerificationBadge = (campaign) => {
+      if (campaign.status !== 'draft') return null;
+      
+      return campaign.verified ? (
+        <Badge className="bg-green-100 text-green-800 mb-2">
+          <CheckCircle className="w-3 h-3 mr-1" />
+          Verified - Ready to Launch
+        </Badge>
+      ) : (
+        <Badge variant="secondary" className="mb-2">
+          <Clock className="w-3 h-3 mr-1" />
+          Awaiting Admin Verification
+        </Badge>
+      );
+    };
+        
     return (
       <Card className="hover:shadow-md transition-shadow">
         <CardContent className="p-6">
+          {getVerificationBadge(campaign)}
           <div className="space-y-4">
             <div className="flex items-start justify-between">
+              
               <div className="flex-1">
                 <h3 className="text-lg font-semibold line-clamp-2">{campaign.title}</h3>
                 <p className="text-gray-600 text-sm line-clamp-2 mt-1">{campaign.description}</p>
@@ -264,14 +283,32 @@ const CampaignManager = () => {
               </Button>
               
               {campaign.status === 'draft' && (
-                <Button
-                  size="sm"
-                  onClick={() => handleLaunchCampaign(campaign.id)}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  Launch
-                </Button>
+                <>
+                  {campaign.verified ? (
+                    // Launch button - only active when verified by admin
+                    <Button
+                      size="sm"
+                      onClick={() => handleLaunchCampaign(campaign.id)}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <Rocket className="w-4 h-4 mr-2" />
+                      Launch
+                    </Button>
+                  ) : (
+                    // Disabled button with verification status
+                    <Button
+                      size="sm"
+                      disabled
+                      className="bg-gray-400 cursor-not-allowed"
+                      title="Campaign must be verified by admin before launch"
+                    >
+                      <Clock className="w-4 h-4 mr-2" />
+                      Pending Verification
+                    </Button>
+                  )}
+                </>
               )}
+
               
               <Button
                 variant="outline"

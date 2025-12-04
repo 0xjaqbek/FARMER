@@ -85,7 +85,7 @@ body {
    ========================================== */
 
 /* Tablet and small desktop (768px and below) */
-@media (max-width: 768px) {
+@media (max-width: 460px) {
   /* Reduce root font size for proportional scaling */
   html {
     font-size: calc(var(--base-font-size) * var(--mobile-scale-factor));
@@ -93,7 +93,6 @@ body {
 
   /* Global spacing reduction for better mobile layout */
   #root {
-    padding: 1rem !important;
     max-width: 100% !important;
   }
 
@@ -157,15 +156,10 @@ body {
 }
 
 /* Small mobile phones (480px and below) */
-@media (max-width: 480px) {
+@media (max-width: 640px) {
   /* Even smaller root font size */
   html {
     font-size: calc(var(--base-font-size) * var(--small-mobile-scale-factor));
-  }
-
-  /* Minimal padding for maximum content space */
-  #root {
-    padding: 0.5rem !important;
   }
 
   .container, [class*="container"] {
@@ -196,7 +190,7 @@ body {
   }
 
   /* Smaller headings for tiny screens */
-  h1 { font-size: 1.5rem !important; }
+  h1 { font-size: 4rem !important; }
   h2 { font-size: 1.25rem !important; }
   h3 { font-size: 1.125rem !important; }
   h4 { font-size: 1rem !important; }
@@ -220,23 +214,12 @@ body {
     font-size: 13px;
   }
 
-  #root {
-    padding: 0.25rem !important;
-  }
-
   .container, [class*="container"] {
     padding-left: 0.5rem !important;
     padding-right: 0.5rem !important;
   }
 
-  /* Minimal spacing for maximum content */
-  [class*="p-"] {
-    padding: 0.375rem !important;
-  }
 
-  [class*="m-"] {
-    margin: 0.375rem !important;
-  }
 
   /* Very compact buttons */
   button, .btn, [role="button"] {
@@ -251,7 +234,7 @@ body {
   }
 
   /* Tiny headings */
-  h1 { font-size: 1.25rem !important; }
+  h1 { font-size: 3rem !important; }
   h2 { font-size: 1.125rem !important; }
   h3 { font-size: 1rem !important; }
   h4 { font-size: 0.875rem !important; }
@@ -304,7 +287,7 @@ body {
 }
 
 /* Mobile navigation improvements (from your MainLayout.jsx) */
-@media (max-width: 768px) {
+@media (max-width: 640px) {
   .mobile-menu-item {
     padding: 0.5rem 0.75rem !important;
     font-size: 0.875rem !important;
@@ -317,7 +300,7 @@ body {
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 640px) {
   .mobile-menu-item {
     padding: 0.375rem 0.625rem !important;
     font-size: 0.8125rem !important;
@@ -514,3 +497,29 @@ body {
   scrollbar-width: none;  /* Firefox */
 }
 
+/* PWA Safe Area Support */
+.pwa-installed {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.pt-safe-area-inset-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.min-h-screen-safe {
+  min-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+}
+
+
+.ios-splash {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f7fa 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}

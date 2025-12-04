@@ -1,9 +1,9 @@
-// src/components/layout/MainLayout.jsx - Updated with Farmer Navigation
+// src/components/layout/MainLayout.jsx - Updated with Civic Auth
 import { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
-import { logoutUser } from '../../firebase/auth';
+// REMOVED: import { logoutUser } from '../../firebase/auth'; - Now using Civic Auth
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Avatar, AvatarFallback } from '../ui/avatar';
@@ -34,17 +34,17 @@ import {
   Target,
   Heart,
   MapPin,
-  Users // NEW: Added Users icon for farmers
+  Users // Added Users icon for farmers
 } from 'lucide-react';
 
 // Import NotificationBell component
 import NotificationBell from '../notifications/NotificationBell';
 
 const MainLayout = ({ children }) => {
-  const { currentUser, userProfile } = useAuth();
+  // UPDATED: Now using Civic Auth via updated AuthContext
+  const { currentUser, userProfile, signOut } = useAuth();
   const { cartCount } = useCart();
   const location = useLocation();
-  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const isAuthenticated = !!currentUser;
@@ -52,14 +52,15 @@ const MainLayout = ({ children }) => {
   const isKlient = userProfile?.role === 'klient' || userProfile?.role === 'customer';
   const isAdmin = userProfile?.role === 'admin';
 
-  const handleLogout = async () => {
-    try {
-      await logoutUser();
-      navigate('/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
+  // Updated: Now using Civic Auth signOut method and redirects to /home
+const handleLogout = async () => {
+  try {
+    await signOut();
+    window.location.href = '/home'; // Force hard redirect
+  } catch  {
+    window.location.href = '/home';
+  }
+};
 
   const getInitials = () => {
     if (!userProfile) return 'U';
@@ -83,7 +84,7 @@ const MainLayout = ({ children }) => {
     }
   };
 
-  // UPDATED: Enhanced navigation items with farmer directory
+  // Enhanced navigation items with farmer directory
   const navigationItems = [
     {
       name: 'Dashboard',
@@ -92,12 +93,12 @@ const MainLayout = ({ children }) => {
       show: isAuthenticated,
       description: 'Overview and quick actions'
     },
-    // NEW: Farmers Directory - Show for customers and admins
+    // Farmers Directory - Show for customers and admins
     {
       name: 'Find Farmers',
       href: '/farmers',
       icon: Users,
-      show: isKlient || isAdmin,
+      show: isKlient,
       description: 'Browse local farmers and their specialties'
     },
     // SEARCH: Show for customers and admins
@@ -105,7 +106,7 @@ const MainLayout = ({ children }) => {
       name: 'Search & Map',
       href: '/search',
       icon: Search,
-      show: isKlient || isAdmin,
+      show: isKlient,
       description: 'Find local farm products with location-based search'
     },
     // BROWSE: Show for customers and admins
@@ -113,7 +114,7 @@ const MainLayout = ({ children }) => {
       name: 'Browse Products',
       href: '/browse',
       icon: ShoppingBag,
-      show: isKlient || isAdmin,
+      show: isKlient,
       description: 'Browse all available products'
     },
     // FARMER: Product management
@@ -121,7 +122,7 @@ const MainLayout = ({ children }) => {
       name: 'My Products',
       href: '/products/manage',
       icon: Package,
-      show: isRolnik || isAdmin,
+      show: isRolnik,
       description: 'Manage your product listings'
     },
     {
@@ -136,7 +137,7 @@ const MainLayout = ({ children }) => {
       name: 'Orders',
       href: '/orders',
       icon: ShoppingCart,
-      show: isAuthenticated,
+      show: isKlient || isRolnik,
       description: 'View your orders'
     },
     // CAMPAIGNS: Crowdfunding features
@@ -211,65 +212,41 @@ const MainLayout = ({ children }) => {
       {/* Navigation */}
       <nav className="bg-white shadow-sm border-b sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
+          <div className="flex justify-between h-16 ">
             {/* Logo and main navigation */}
             <div className="flex items-center">
               <Link to="/dashboard" className="flex items-center space-x-2">
                 <span className="text-xl font-bold text-green-600">Farm Direct</span>
               </Link>
               
-              {/* Desktop navigation - Shows on 1024px+ (unchanged) */}
-              <div className="hidden lg:ml-8 lg:flex lg:space-x-1">
+              {/* Desktop navigation - Shows on 1024px+ */}
+              <div className="hidden xl:ml-8 xl:flex xl:space-x-1">
                 {visibleNavItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = location.pathname === item.href || 
                     (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
                   
                   return (
-                    <Link
-                      key={item.name}
-                      to={item.href}
-                      className={`inline-flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                        isActive
-                          ? 'bg-green-100 text-green-700 border border-green-200'
-                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                      }`}
-                      title={item.description}
-                    >
-                      <Icon className="w-4 h-4 mr-2" />
-                      {item.name}
-                    </Link>
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    className={`flex items-center justify-center px-1 py-2 rounded-md text-sm font-medium transition-colors min-w-[100px] ${
+                      isActive
+                        ? 'bg-green-50 text-green-700 border border-green-200'
+                        : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 mr-2 flex-shrink-0" />
+                    <span>{item.name}</span>
+                  </Link>
                   );
                 })}
               </div>
             </div>
 
-            {/* Right side navigation - Shows on 1024px+ (unchanged) */}
-            <div className="hidden lg:ml-6 lg:flex lg:items-center space-x-3">
-              
-              {/* Quick Access Buttons for customers */}
-              {(isKlient || isAdmin) && (
-                <div className="flex items-center space-x-2">
-                  {/* Quick Farmers Button */}
-                  <Link 
-                    to="/farmers" 
-                    className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-md hover:bg-gray-100"
-                    title="Find Local Farmers"
-                  >
-                    <Users className="h-5 w-5" />
-                  </Link>
-                  
-                  {/* Quick Search Button */}
-                  <Link 
-                    to="/search" 
-                    className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-md hover:bg-gray-100"
-                    title="Search Products & Map"
-                  >
-                    <Search className="h-5 w-5" />
-                  </Link>
-                </div>
-              )}
-              
+            {/* Right side navigation - Shows on 1024px+ */}
+            <div className="hidden xl:ml-6 xl:flex xl:items-center space-x-3">
+                           
               {/* Notification Bell */}
               <NotificationBell />
               
@@ -327,7 +304,7 @@ const MainLayout = ({ children }) => {
                           {userProfile?.firstName} {userProfile?.lastName}
                         </p>
                         <p className="text-sm text-gray-500 truncate">
-                          {userProfile?.email}
+                          {userProfile?.email || currentUser?.email}
                         </p>
                         <Badge variant="secondary" className="text-xs mt-1">
                           {getRoleDisplayName()}
@@ -357,34 +334,8 @@ const MainLayout = ({ children }) => {
                     </Link>
                   </DropdownMenuItem>
                   
-                  {/* NEW: Customer-specific menu items */}
-                  {(isKlient || isAdmin) && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
-                        <Link to="/farmers" className="cursor-pointer">
-                          <Users className="mr-3 h-4 w-4" />
-                          <div>
-                            <p className="font-medium">Find Farmers</p>
-                            <p className="text-xs text-gray-500">Browse local farmers</p>
-                          </div>
-                        </Link>
-                      </DropdownMenuItem>
-                      
-                      <DropdownMenuItem asChild>
-                        <Link to="/search" className="cursor-pointer">
-                          <Search className="mr-3 h-4 w-4" />
-                          <div>
-                            <p className="font-medium">Search & Map</p>
-                            <p className="text-xs text-gray-500">Find products near you</p>
-                          </div>
-                        </Link>
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                  
                   {/* Farmer-specific menu items */}
-                  {(isRolnik || isAdmin) && (
+                  {(isRolnik ) && (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>
@@ -414,6 +365,15 @@ const MainLayout = ({ children }) => {
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>
+                        <Link to="/notifications/create" className="cursor-pointer">
+                          <MessageSquare className="mr-3 h-4 w-4" />
+                          <div>
+                            <p className="font-medium">Send Notifications</p>
+                            <p className="text-xs text-gray-500">Notify your customers</p>
+                          </div>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
                         <Link to="/admin" className="cursor-pointer">
                           <Shield className="mr-3 h-4 w-4" />
                           <div>
@@ -437,11 +397,11 @@ const MainLayout = ({ children }) => {
               </DropdownMenu>
             </div>
 
-            {/* Mobile menu button - CHANGED: lg:hidden instead of sm:hidden (shows on <1024px instead of <640px) */}
-            <div className="lg:hidden flex items-center space-x-2">
+            {/* Mobile menu button */}
+            <div className="xl:hidden flex items-center space-x-2">
               
               {/* Mobile Quick Actions */}
-              {(isKlient || isAdmin) && (
+              {(isKlient ) && (
                 <>
                   <Link to="/farmers" className="p-2 text-gray-400" title="Find Farmers">
                     <Users className="h-5 w-5" />
@@ -485,9 +445,9 @@ const MainLayout = ({ children }) => {
           </div>
         </div>
 
-        {/* Mobile navigation menu - CHANGED: lg:hidden instead of sm:hidden (shows on <1024px instead of <640px) */}
+        {/* Mobile navigation menu */}
         {mobileMenuOpen && (
-          <div className="lg:hidden bg-white border-t">
+          <div className="xl:hidden bg-white border-t">
             <div className="pt-2 pb-3 space-y-1">
               {visibleNavItems.map((item) => {
                 const Icon = item.icon;
@@ -532,7 +492,7 @@ const MainLayout = ({ children }) => {
               </Link>
 
               {/* Farmer-specific mobile menu items */}
-              {(isRolnik || isAdmin) && (
+              {(isRolnik ) && (
                 <>
                   <Link
                     to="/notifications/create"
@@ -567,8 +527,28 @@ const MainLayout = ({ children }) => {
                   </Link>
                 </>
               )}
+                
+                {isAdmin && (
+                  
+                  <Link
+                    to="/notifications/create"
+                    className={`flex items-center pl-3 pr-4 py-3 sm:py-2 border-l-4 text-base sm:text-sm font-medium transition-colors ${
+                      location.pathname === '/notifications/create'
+                        ? 'bg-green-50 border-green-500 text-green-700'
+                        : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
+                    }`}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <MessageSquare className="w-5 h-5 sm:w-4 sm:h-4 mr-3 sm:mr-2" />
+                    <div>
+                      <p className="font-medium">Send Notifications</p>
+                      <p className="text-xs sm:text-[11px] text-gray-500 leading-tight">Notify your customers</p>
+                    </div>
+                  </Link>
+                  
+                )}
             </div>
-            
+           
             {/* Mobile user section with Profile Settings button */}
             <div className="pt-4 pb-3 border-t border-gray-200">
               <div className="px-3 py-3 sm:py-2 bg-gray-50 mx-3 rounded-lg">
@@ -586,7 +566,7 @@ const MainLayout = ({ children }) => {
                         {userProfile?.firstName} {userProfile?.lastName}
                       </div>
                       <div className="text-xs sm:text-[11px] font-medium text-gray-500">
-                        {userProfile?.email}
+                        {userProfile?.email || currentUser?.email}
                       </div>
                       <Badge variant="secondary" className="text-xs sm:text-[10px] mt-1">
                         {getRoleDisplayName()}
@@ -610,18 +590,6 @@ const MainLayout = ({ children }) => {
               </div>
               
               <div className="space-y-1 mt-3">
-                
-                {isAdmin && (
-                  <Link
-                    to="/admin"
-                    className="flex items-center px-4 py-2 sm:py-1 text-base sm:text-sm font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <Shield className="mr-3 sm:mr-2 h-5 w-5 sm:h-4 sm:w-4" />
-                    Admin Panel
-                  </Link>
-                )}
-                
                 <button
                   onClick={() => {
                     handleLogout();

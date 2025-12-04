@@ -26,7 +26,7 @@ import {
   Check,
   AlertTriangle
 } from 'lucide-react';
-import { registerUser } from '../../firebase/auth';
+import { registerUser } from '../../services/civicAuthService';
 
 const RegisterForm = () => {
   const { toast } = useToast();

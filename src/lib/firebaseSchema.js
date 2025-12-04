@@ -10,132 +10,41 @@ export const COLLECTIONS = {
   NOTIFICATIONS: 'notifications',
   CONVERSATIONS: 'conversations',
   MESSAGES: 'messages',
-  INVENTORY_LOGS: 'inventory_logs'
+  INVENTORY_LOGS: 'inventory_logs',
+  PAYMENT_METHODS: 'payment_methods'
 };
 
-// Notification schema
-export const createNotificationSchema = () => ({
-  id: '',
-  userId: '',
-  type: '', // See NOTIFICATION_TYPES
-  priority: 'medium', // low, medium, high, urgent
-  
-  title: '',
-  message: '',
-  
-  // Action data for navigation
-  actionData: {},
-  
-  // Delivery channels
-  channels: {
-    inApp: { sent: false, read: false, readAt: null },
-    email: { sent: false, delivered: false, sentAt: null },
-    sms: { sent: false, delivered: false, sentAt: null }
-  },
-  
-  // Scheduling
-  scheduledFor: null, // For delayed notifications
-  expiresAt: null,
-  
-  createdAt: null,
-  readAt: null
-});
-
-// Notification types
-export const NOTIFICATION_TYPES = {
-  // Inventory
-  LOW_STOCK: 'low_stock',
-  OUT_OF_STOCK: 'out_of_stock',
-  BATCH_EXPIRING: 'batch_expiring',
-  
-  // Orders
-  NEW_ORDER: 'new_order',
-  ORDER_CONFIRMED: 'order_confirmed',
-  ORDER_SHIPPED: 'order_shipped',
-  ORDER_DELIVERED: 'order_delivered',
-  ORDER_CANCELLED: 'order_cancelled',
-  
-  // Reviews
-  NEW_REVIEW: 'new_review',
-  REVIEW_RESPONSE: 'review_response',
-  
-  // Chat
-  NEW_MESSAGE: 'new_message',
-  
-  // Seasonal
-  SEASON_STARTING: 'season_starting',
-  SEASON_ENDING: 'season_ending',
-  
-  // System
-  PAYMENT_RECEIVED: 'payment_received',
-  PROFILE_UPDATED: 'profile_updated',
-  VERIFICATION_APPROVED: 'verification_approved'
+// Payment method types
+export const PAYMENT_TYPES = {
+  BANK_TRANSFER: 'bank_transfer',
+  BLIK: 'blik',
+  CRYPTO: 'crypto',
+  CASH: 'cash',
+  CARD: 'card'
 };
 
-// Product schema with inventory management
-export const createProductSchema = () => ({
-  id: '',
-  name: '',
-  description: '',
-  price: 0,
-  farmerId: '',
-  rolnikId: '', // Alternative field name
-  category: '',
-  images: [],
-  
-  // Enhanced inventory system
-  inventory: {
-    totalStock: 0,
-    reservedStock: 0,
-    availableStock: 0,
-    lowStockThreshold: 10,
-    unit: 'kg', // kg, pieces, bunches, liters, etc.
-    
-    batches: [], // Array of batch objects
-    
-    // Stock tracking
-    lastRestocked: null,
-    nextExpectedRestock: null
-  },
-  
-  // Seasonal availability
-  seasonality: {
-    isActive: true,
-    startSeason: null, // Date string
-    endSeason: null,   // Date string
-    recurringYearly: true
-  },
-  
-  // Auto-management settings
-  autoManagement: {
-    hideWhenOutOfStock: true,
-    allowBackorders: false,
-    autoReactivateInSeason: true,
-    autoDeactivateOutOfSeason: false
-  },
-  
-  // Geographic and quality info
-  location: {
-    farmAddress: '',
-    coordinates: { lat: 0, lng: 0 },
-    geoHash: ''
-  },
-  
-  // Quality indicators
-  quality: {
-    organic: false,
-    localGrown: true,
-    freshness: 'daily', // daily, weekly, preserved
-    certifications: [] // organic, bio, fair-trade, etc.
-  },
-  
-  // Status and metadata
-  status: 'active', // active, inactive, sold_out, archived
-  createdAt: null,
-  updatedAt: null
-});
+// Crypto networks
+export const CRYPTO_NETWORKS = {
+  ETHEREUM: 'ethereum',
+  BITCOIN: 'bitcoin',
+  POLYGON: 'polygon',
+  BSC: 'bsc',
+  SOLANA: 'solana'
+};
 
-// Enhanced order schema
+// Payment status types
+export const PAYMENT_STATUS = {
+  PENDING: 'pending',
+  CONFIRMING: 'confirming',
+  CONFIRMED: 'confirmed',
+  PAID: 'paid',
+  FAILED: 'failed',
+  CANCELLED: 'cancelled',
+  REFUNDED: 'refunded',
+  EXPIRED: 'expired'
+};
+
+// Enhanced order schema with advanced payment support
 export const createOrderSchema = () => ({
   id: '',
   customerId: '',
@@ -183,9 +92,69 @@ export const createOrderSchema = () => ({
   deliveryTimeSlot: '',
   deliveryInstructions: '',
   
-  // Payment
-  paymentMethod: 'cash', // cash, card, bank_transfer
-  paymentStatus: 'pending', // pending, paid, failed, refunded
+  // Enhanced Payment Information
+  payment: {
+    method: 'cash', // cash, bank_transfer, blik, crypto, card
+    status: 'pending', // pending, confirming, confirmed, paid, failed, refunded
+    
+    // Payment details based on method
+    paymentDetails: {
+      // Bank transfer details
+      bankTransfer: {
+        bankName: '',
+        accountNumber: '',
+        accountHolder: '',
+        transferTitle: '',
+        amount: 0,
+        currency: 'PLN',
+        deadline: null // Payment deadline
+      },
+      
+      // BLIK details
+      blik: {
+        phoneNumber: '',
+        amount: 0,
+        currency: 'PLN',
+        transferTitle: '',
+        deadline: null
+      },
+      
+      // Crypto details
+      crypto: {
+        network: '', // ethereum, bitcoin, polygon, etc.
+        walletAddress: '',
+        amount: 0,
+        currency: '', // ETH, BTC, USDC, etc.
+        txHash: '', // Transaction hash when paid
+        confirmations: 0,
+        requiredConfirmations: 3,
+        exchangeRate: 0, // Rate at time of order (crypto to PLN)
+        deadline: null
+      },
+      
+      // Card payment details (for future use)
+      card: {
+        paymentIntentId: '',
+        last4: '',
+        brand: '',
+        processingFee: 0
+      }
+    },
+    
+    // Payment tracking
+    createdAt: null,
+    paidAt: null,
+    confirmedAt: null,
+    expiresAt: null,
+    
+    // Payment verification
+    verification: {
+      method: 'manual', // manual, automatic, webhook
+      verifiedBy: '', // User ID who verified
+      verifiedAt: null,
+      notes: ''
+    }
+  },
   
   // Timestamps
   createdAt: null,
@@ -195,7 +164,7 @@ export const createOrderSchema = () => ({
   deliveredAt: null
 });
 
-// User schema
+// Enhanced User schema with payment information
 export const createUserSchema = () => ({
   id: '',
   email: '',
@@ -221,6 +190,54 @@ export const createUserSchema = () => ({
     geoHash: ''
   },
   
+  // Payment information (for farmers)
+  paymentInfo: {
+    // Bank transfer information
+    bankAccount: {
+      enabled: false,
+      bankName: '',
+      accountNumber: '',
+      accountHolder: '',
+      swiftCode: '',
+      iban: '',
+      verified: false,
+      verifiedAt: null
+    },
+    
+    // BLIK information
+    blik: {
+      enabled: false,
+      phoneNumber: '',
+      verified: false,
+      verifiedAt: null,
+      lastTestAmount: null // For verification
+    },
+    
+    // Crypto wallets
+    cryptoWallets: [
+      {
+        id: '',
+        network: 'ethereum', // ethereum, bitcoin, polygon, etc.
+        address: '',
+        currency: 'ETH', // ETH, BTC, USDC, etc.
+        label: '', // Custom label for the wallet
+        enabled: true,
+        verified: false,
+        verifiedAt: null,
+        verificationTxHash: '' // Hash of verification transaction
+      }
+    ],
+    
+    // Payment preferences
+    preferences: {
+      autoConfirmPayments: false,
+      paymentDeadlineHours: 24,
+      minimumOrderAmount: 0,
+      acceptedCurrencies: ['PLN'],
+      preferredMethod: 'bank_transfer' // Default payment method
+    }
+  },
+  
   // Notification preferences
   notificationPreferences: {
     email: {
@@ -228,20 +245,26 @@ export const createUserSchema = () => ({
       newMessages: true,
       lowStock: true,
       reviews: true,
-      marketing: false
+      marketing: false,
+      paymentReceived: true,
+      paymentDeadline: true
     },
     sms: {
       orderUpdates: false,
       newMessages: false,
       lowStock: true,
-      reviews: false
+      reviews: false,
+      paymentReceived: true,
+      paymentDeadline: true
     },
     inApp: {
       orderUpdates: true,
       newMessages: true,
       lowStock: true,
       reviews: true,
-      marketing: true
+      marketing: true,
+      paymentReceived: true,
+      paymentDeadline: true
     }
   },
   
@@ -256,156 +279,213 @@ export const createUserSchema = () => ({
   lastLoginAt: null
 });
 
-// Message schema
-export const createMessageSchema = () => ({
+// Payment method schema for storing farmer payment configurations
+export const createPaymentMethodSchema = () => ({
   id: '',
-  conversationId: '',
-  senderId: '',
-  receiverId: '',
-  content: '',
-  type: 'text', // text, image, file
+  farmerId: '',
+  type: '', // bank_transfer, blik, crypto
   
-  // Read status
-  readAt: null,
-  deliveredAt: null,
+  // Payment method details
+  details: {
+    // Bank account details
+    bankName: '',
+    accountNumber: '',
+    accountHolder: '',
+    swiftCode: '',
+    iban: '',
+    
+    // BLIK phone number
+    phoneNumber: '',
+    
+    // Crypto wallet details
+    network: '',
+    address: '',
+    currency: '',
+    label: ''
+  },
   
-  // Attachments
-  attachments: [],
+  // Verification status
+  verified: false,
+  verifiedAt: null,
+  verificationMethod: '', // document_upload, test_transaction, third_party
   
-  createdAt: null
-});
-
-// Conversation schema
-export const createConversationSchema = () => ({
-  id: '',
-  participants: [], // Array of user IDs
-  type: 'direct', // direct, group
-  
-  // Last message info
-  lastMessage: '',
-  lastMessageAt: null,
-  lastMessageSenderId: '',
+  // Settings
+  enabled: true,
+  isDefault: false,
+  minimumAmount: 0,
+  maximumAmount: null,
   
   // Metadata
-  title: '', // For group conversations
-  isActive: true,
-  
   createdAt: null,
-  updatedAt: null
+  updatedAt: null,
+  lastUsedAt: null
 });
 
-// Review schema
-export const createReviewSchema = () => ({
+// Notification schema with payment events
+export const createNotificationSchema = () => ({
   id: '',
-  productId: '',
-  customerId: '',
-  farmerId: '',
+  userId: '',
+  type: '', // See NOTIFICATION_TYPES
+  priority: 'medium', // low, medium, high, urgent
   
-  // Review content
-  rating: 0, // 1-5 stars
   title: '',
-  comment: '',
+  message: '',
   
-  // Media
-  images: [],
+  // Action data for navigation
+  actionData: {},
   
-  // Verification
-  isVerified: false, // Verified purchase
-  orderReference: '',
+  // Delivery channels
+  channels: {
+    inApp: { sent: false, read: false, readAt: null },
+    email: { sent: false, delivered: false, sentAt: null },
+    sms: { sent: false, delivered: false, sentAt: null }
+  },
   
-  // Response
-  farmerResponse: '',
-  farmerResponseAt: null,
-  
-  // Status
-  status: 'published', // published, hidden, flagged
+  // Scheduling
+  scheduledFor: null, // For delayed notifications
+  expiresAt: null,
   
   createdAt: null,
-  updatedAt: null
+  readAt: null
 });
 
-// Batch/Inventory Log schema
-export const createInventoryLogSchema = () => ({
-  id: '',
-  productId: '',
-  batchId: '',
-  farmerId: '',
+// Enhanced notification types including payment events
+export const NOTIFICATION_TYPES = {
+  // Inventory
+  LOW_STOCK: 'low_stock',
+  OUT_OF_STOCK: 'out_of_stock',
+  BATCH_EXPIRING: 'batch_expiring',
   
-  // Transaction details
-  type: 'restock', // restock, sale, adjustment, waste
-  quantity: 0,
-  unit: '',
+  // Orders
+  NEW_ORDER: 'new_order',
+  ORDER_CONFIRMED: 'order_confirmed',
+  ORDER_SHIPPED: 'order_shipped',
+  ORDER_DELIVERED: 'order_delivered',
+  ORDER_CANCELLED: 'order_cancelled',
   
-  // Batch information
-  batchInfo: {
-    harvestDate: null,
-    expiryDate: null,
-    quality: 'A', // A, B, C grade
-    certifications: [],
-    notes: ''
-  },
+  // Payment Events
+  PAYMENT_RECEIVED: 'payment_received',
+  PAYMENT_CONFIRMED: 'payment_confirmed',
+  PAYMENT_FAILED: 'payment_failed',
+  PAYMENT_DEADLINE_APPROACHING: 'payment_deadline_approaching',
+  PAYMENT_EXPIRED: 'payment_expired',
   
-  // Reference
-  referenceId: '', // Order ID for sales, etc.
-  notes: '',
+  // Reviews
+  NEW_REVIEW: 'new_review',
+  REVIEW_RESPONSE: 'review_response',
   
-  createdAt: null
-});
-
-// Helper functions
-export const getDefaultNotificationPreferences = () => ({
-  email: {
-    orderUpdates: true,
-    newMessages: true,
-    lowStock: true,
-    reviews: true,
-    marketing: false
-  },
-  sms: {
-    orderUpdates: false,
-    newMessages: false,
-    lowStock: true,
-    reviews: false
-  },
-  inApp: {
-    orderUpdates: true,
-    newMessages: true,
-    lowStock: true,
-    reviews: true,
-    marketing: true
-  }
-});
-
-export const getNotificationTypeDisplayName = (type) => {
-  const displayNames = {
-    [NOTIFICATION_TYPES.NEW_ORDER]: 'New Order',
-    [NOTIFICATION_TYPES.ORDER_CONFIRMED]: 'Order Confirmed',
-    [NOTIFICATION_TYPES.ORDER_SHIPPED]: 'Order Shipped',
-    [NOTIFICATION_TYPES.ORDER_DELIVERED]: 'Order Delivered',
-    [NOTIFICATION_TYPES.ORDER_CANCELLED]: 'Order Cancelled',
-    [NOTIFICATION_TYPES.NEW_MESSAGE]: 'New Message',
-    [NOTIFICATION_TYPES.NEW_REVIEW]: 'New Review',
-    [NOTIFICATION_TYPES.REVIEW_RESPONSE]: 'Review Response',
-    [NOTIFICATION_TYPES.LOW_STOCK]: 'Low Stock',
-    [NOTIFICATION_TYPES.OUT_OF_STOCK]: 'Out of Stock',
-    [NOTIFICATION_TYPES.BATCH_EXPIRING]: 'Batch Expiring',
-    [NOTIFICATION_TYPES.SEASON_STARTING]: 'Season Starting',
-    [NOTIFICATION_TYPES.SEASON_ENDING]: 'Season Ending',
-    [NOTIFICATION_TYPES.PAYMENT_RECEIVED]: 'Payment Received',
-    [NOTIFICATION_TYPES.PROFILE_UPDATED]: 'Profile Updated',
-    [NOTIFICATION_TYPES.VERIFICATION_APPROVED]: 'Verification Approved'
-  };
+  // Chat
+  NEW_MESSAGE: 'new_message',
   
-  return displayNames[type] || type;
+  // Seasonal
+  SEASON_STARTING: 'season_starting',
+  SEASON_ENDING: 'season_ending',
+  
+  // System
+  PROFILE_UPDATED: 'profile_updated',
+  VERIFICATION_APPROVED: 'verification_approved',
+  PAYMENT_METHOD_ADDED: 'payment_method_added',
+  PAYMENT_METHOD_VERIFIED: 'payment_method_verified'
 };
 
-export const getPriorityColor = (priority) => {
-  const colors = {
-    low: 'gray',
-    medium: 'blue',
-    high: 'orange',
-    urgent: 'red'
+// Helper functions for payment processing
+export const getPaymentMethodDisplayName = (method) => {
+  const displayNames = {
+    [PAYMENT_TYPES.CASH]: 'Cash on Delivery',
+    [PAYMENT_TYPES.BANK_TRANSFER]: 'Bank Transfer',
+    [PAYMENT_TYPES.BLIK]: 'BLIK Transfer',
+    [PAYMENT_TYPES.CRYPTO]: 'Cryptocurrency',
+    [PAYMENT_TYPES.CARD]: 'Credit/Debit Card'
   };
   
-  return colors[priority] || 'gray';
+  return displayNames[method] || method;
+};
+
+export const getCryptoNetworkDisplayName = (network) => {
+  const displayNames = {
+    [CRYPTO_NETWORKS.ETHEREUM]: 'Ethereum (ETH)',
+    [CRYPTO_NETWORKS.BITCOIN]: 'Bitcoin (BTC)',
+    [CRYPTO_NETWORKS.POLYGON]: 'Polygon (MATIC)',
+    [CRYPTO_NETWORKS.BSC]: 'Binance Smart Chain (BNB)',
+    [CRYPTO_NETWORKS.SOLANA]: 'Solana (SOL)'
+  };
+  
+  return displayNames[network] || network;
+};
+
+export const getPaymentStatusColor = (status) => {
+  const colors = {
+    [PAYMENT_STATUS.PENDING]: 'yellow',
+    [PAYMENT_STATUS.CONFIRMING]: 'blue',
+    [PAYMENT_STATUS.CONFIRMED]: 'green',
+    [PAYMENT_STATUS.PAID]: 'green',
+    [PAYMENT_STATUS.FAILED]: 'red',
+    [PAYMENT_STATUS.CANCELLED]: 'gray',
+    [PAYMENT_STATUS.REFUNDED]: 'orange',
+    [PAYMENT_STATUS.EXPIRED]: 'red'
+  };
+  
+  return colors[status] || 'gray';
+};
+
+// Generate payment reference for bank transfers and BLIK
+export const generatePaymentReference = (orderId, customerId) => {
+  const timestamp = Date.now().toString().slice(-6);
+  const customerSuffix = customerId.slice(-4);
+  const orderSuffix = orderId.slice(-4);
+  
+  return `FD${timestamp}${customerSuffix}${orderSuffix}`.toUpperCase();
+};
+
+// Calculate payment deadline
+export const calculatePaymentDeadline = (hours = 24) => {
+  const deadline = new Date();
+  deadline.setHours(deadline.getHours() + hours);
+  return deadline;
+};
+
+// Validate crypto wallet address format
+export const validateCryptoAddress = (address, network) => {
+  const validators = {
+    ethereum: /^0x[a-fA-F0-9]{40}$/,
+    bitcoin: /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^bc1[a-z0-9]{39,59}$/,
+    polygon: /^0x[a-fA-F0-9]{40}$/,
+    bsc: /^0x[a-fA-F0-9]{40}$/,
+    solana: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
+  };
+  
+  const validator = validators[network];
+  return validator ? validator.test(address) : false;
+};
+
+// Validate Polish bank account number (IBAN)
+export const validatePolishIBAN = (iban) => {
+  const polishIBANRegex = /^PL\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}$/;
+  return polishIBANRegex.test(iban.replace(/\s/g, ''));
+};
+
+// Validate Polish phone number for BLIK
+export const validatePolishPhoneNumber = (phoneNumber) => {
+  const polishPhoneRegex = /^(\+48)?[-.\s]?[4-9]\d{8}$/;
+  return polishPhoneRegex.test(phoneNumber.replace(/[-.\s]/g, ''));
+};
+
+export default {
+  COLLECTIONS,
+  PAYMENT_TYPES,
+  CRYPTO_NETWORKS,
+  PAYMENT_STATUS,
+  NOTIFICATION_TYPES,
+  createOrderSchema,
+  createUserSchema,
+  createPaymentMethodSchema,
+  createNotificationSchema,
+  getPaymentMethodDisplayName,
+  getCryptoNetworkDisplayName,
+  getPaymentStatusColor,
+  generatePaymentReference,
+  calculatePaymentDeadline,
+  validateCryptoAddress,
+  validatePolishIBAN,
+  validatePolishPhoneNumber
 };

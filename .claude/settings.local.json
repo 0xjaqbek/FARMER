@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git checkout:*)",
+      "Bash(npm install:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nUpdate manifest and meta tags with production domain\n\nUpdated Base Mini App configuration with production domain:\n- Domain: https://farmer4u.web.app\n\n## Changes\n- public/.well-known/farcaster.json: Updated all URLs to farmer4u.web.app\n- index.html: Updated fc:miniapp meta tag with production domain\n- BASE_MINIAPP_SETUP.md: Added specific deployment instructions\n\n## Manifest Updates\n- homeUrl: https://farmer4u.web.app\n- iconUrl: Using existing android-launchericon-512-512.png\n- splashImageUrl: Using app icon as splash\n- splashBackgroundColor: #16a34a (app green color)\n- Category: Changed from \"finance\" to \"shopping\" (more accurate)\n- Tags: Updated to marketplace-focused tags\n- noindex: Changed to false (allow indexing)\n\n## Next Steps\n1. Deploy to Firebase: npm run build && firebase deploy\n2. Verify manifest accessible at: https://farmer4u.web.app/.well-known/farcaster.json\n3. Generate account association at: https://build.base.org\n4. Add Base Account address to manifest\n5. Test in Base App\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(npm run build:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

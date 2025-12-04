@@ -18,7 +18,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { 
+  Copy,
   Users, 
+  X,
   Shield, 
   CheckCircle, 
   XCircle, 
@@ -50,7 +52,12 @@ import {
   Target,
   Leaf,
   Menu,
-  ChevronDown
+  ChevronDown,
+  FileText,  
+  Award,  
+  ExternalLink,
+  Wallet,
+  AlertCircle 
 } from 'lucide-react';
 
 // Import real Firebase admin functions
@@ -71,6 +78,10 @@ import {
   deleteCampaign,
   getCampaignStats
 } from '../../firebase/crowdfunding';
+
+// import BlockchainDeployment from '../../components/admin/BlockchainDeployment';
+
+import { useWeb3 } from '../../hooks/useWeb3';
 
 // Responsive Tab Navigation Component
 const ResponsiveAdminTabs = ({ activeTab, setActiveTab, systemStats = {}, campaignStats = {} }) => {
@@ -229,8 +240,13 @@ const ResponsiveAdminTabs = ({ activeTab, setActiveTab, systemStats = {}, campai
 };
 
 const AdminDashboard = () => {
-  const { userProfile } = useAuth();
+    const { userProfile } = useAuth();
   const { toast } = useToast();
+  
+  const web3Data = useWeb3();
+  const { isConnected = false, connect = () => {}, disconnect = () => {}, account = null, network = null } = web3Data || {};
+
+const isAdmin = userProfile?.role === 'admin';
   
   const [activeTab, setActiveTab] = useState('overview');
   const [users, setUsers] = useState([]);
@@ -252,9 +268,11 @@ const AdminDashboard = () => {
   const [selectedCampaign, setSelectedCampaign] = useState(null);
   const [showCampaignDetails, setShowCampaignDetails] = useState(false);
   const [campaignStats, setCampaignStats] = useState({});
+  const [deploying, setDeploying] = useState(false);
 
-  // Check if user is admin
-  const isAdmin = userProfile?.role === 'admin';
+
+
+  
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -269,41 +287,50 @@ const AdminDashboard = () => {
     filterCampaigns();
   }, [campaigns, campaignSearchTerm, campaignFilterStatus]);
 
-  const loadDashboardData = async () => {
-    try {
-      setLoading(true);
-      
-      console.log('🔥 Loading admin dashboard data...');
-      
-      const [usersData, statsData, activityData, campaignsData, campaignStatsData] = await Promise.all([
-        getAllUsers(),
-        getSystemStats(),
-        getRecentActivity(10),
-        getAllCampaignsForAdmin(), // Changed from getActiveCampaigns(true)
-        getCampaignStats()
-      ]);
-      
-      // Debug the campaign data
-      console.log('📊 Campaign data received:', campaignsData);
-      console.log('📊 Number of campaigns:', campaignsData?.length || 0);
-      
-      setUsers(usersData);
-      setSystemStats(statsData);
-      setRecentActivity(activityData);
-      setCampaigns(campaignsData);
-      setCampaignStats(campaignStatsData);
-      
-    } catch (error) {
-      console.error('Error loading dashboard data:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load dashboard data",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+const loadDashboardData = async () => {
+  try {
+    setLoading(true);
+    
+    console.log('🔥 Loading admin dashboard data...');
+    
+    // Use Promise.allSettled instead of Promise.all to handle partial failures
+    const results = await Promise.allSettled([
+      getAllUsers(),
+      getSystemStats(),
+      getRecentActivity(10),
+      getAllCampaignsForAdmin(),
+      getCampaignStats()
+    ]);
+    
+    // Extract successful results
+    const [usersResult, statsResult, activityResult, campaignsResult, campaignStatsResult] = results;
+    
+    // Set data from successful calls, use defaults for failed ones
+    setUsers(usersResult.status === 'fulfilled' ? usersResult.value : []);
+    setSystemStats(statsResult.status === 'fulfilled' ? statsResult.value : {});
+    setRecentActivity(activityResult.status === 'fulfilled' ? activityResult.value : []);
+    setCampaigns(campaignsResult.status === 'fulfilled' ? campaignsResult.value : []);
+    setCampaignStats(campaignStatsResult.status === 'fulfilled' ? campaignStatsResult.value : {});
+    
+    // Log any errors
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        const names = ['users', 'stats', 'activity', 'campaigns', 'campaignStats'];
+        console.error(`Failed to load ${names[index]}:`, result.reason);
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error loading dashboard data:', error);
+    toast({
+      title: "Partial Loading Error",
+      description: "Some dashboard data could not be loaded. Check console for details.",
+      variant: "destructive"
+    });
+  } finally {
+    setLoading(false);
+  }
+};
 
   const filterUsers = () => {
     let filtered = [...users];
@@ -568,6 +595,48 @@ const AdminDashboard = () => {
     );
   }
 
+  const AdminWalletStatus = () => (
+<Card className={`border-2 ${isConnected ? 
+  'border-green-200 bg-green-50' : 'border-orange-200 bg-orange-50'}`}>
+  <CardContent className="p-4">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <Wallet className={`h-5 w-5 ${isConnected ? 'text-green-600' : 'text-orange-600'}`} />
+        <div>
+          <p className="font-medium">
+            {isConnected ? 'Admin Wallet Connected' : 'Admin Wallet Required'}
+          </p>
+          <p className="text-sm text-gray-600">
+            {isConnected ? (
+              <>
+                {account?.slice(0, 6)}...{account?.slice(-4)} 
+                {network && <span className="ml-2">• {network.name}</span>}
+                <span className="text-green-600"> • Ready for Blockchain Operations</span>
+              </>
+            ) : (
+              'Connect your admin wallet to deploy campaigns to blockchain'
+            )}
+          </p>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        {isConnected ? (
+          <Button onClick={disconnect || (() => {})} variant="outline" size="sm">
+            Disconnect
+          </Button>
+        ) : (
+          <Button onClick={connect || (() => {})} variant="outline" size="sm">
+            <Wallet className="w-4 h-4 mr-2" />
+            Connect Admin Wallet
+          </Button>
+        )}
+      </div>
+    </div>
+  </CardContent>
+</Card>
+);
+
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -592,57 +661,7 @@ const AdminDashboard = () => {
         </div>
       </div>
 
-      {/* Overview Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Users</p>
-                <p className="text-3xl font-bold text-gray-900">{systemStats.totalUsers}</p>
-              </div>
-              <Users className="h-8 w-8 text-blue-600" />
-            </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Verified Farmers</p>
-                <p className="text-3xl font-bold text-green-600">{systemStats.verifiedFarmers}</p>
-                <p className="text-xs text-gray-500">of {systemStats.totalFarmers} farmers</p>
-              </div>
-              <UserCheck className="h-8 w-8 text-green-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Pending Verifications</p>
-                <p className="text-3xl font-bold text-yellow-600">{systemStats.pendingVerifications}</p>
-              </div>
-              <Clock className="h-8 w-8 text-yellow-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Campaign Funds Raised</p>
-                <p className="text-3xl font-bold text-purple-600">{campaignStats.totalRaised?.toLocaleString() || 0} PLN</p>
-              </div>
-              <DollarSign className="h-8 w-8 text-purple-600" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
 
       {/* Responsive Tab Navigation */}
       <ResponsiveAdminTabs 
@@ -651,6 +670,8 @@ const AdminDashboard = () => {
         systemStats={systemStats}
         campaignStats={campaignStats}
       />
+
+      
 
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -865,6 +886,46 @@ const AdminDashboard = () => {
               <CardTitle className="flex items-center gap-2">
                 <Shield className="h-5 w-5" />
                 Farmer Verification Queue
+
+                      {/* Overview Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Total Users</p>
+                <p className="text-3xl font-bold text-gray-900">{systemStats.totalUsers}</p>
+              </div>
+              <Users className="h-8 w-8 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Verified Farmers</p>
+                <p className="text-3xl font-bold text-green-600">{systemStats.verifiedFarmers}</p>
+                <p className="text-xs text-gray-500">of {systemStats.totalFarmers} farmers</p>
+              </div>
+              <UserCheck className="h-8 w-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Pending Verifications</p>
+                <p className="text-3xl font-bold text-yellow-600">{systemStats.pendingVerifications}</p>
+              </div>
+              <Clock className="h-8 w-8 text-yellow-600" />
+            </div>
+          </CardContent>
+        </Card>
+        </div>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -1429,118 +1490,879 @@ const AdminDashboard = () => {
       {/* Campaign Details Modal */}
       {showCampaignDetails && selectedCampaign && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <Card className="w-full max-w-4xl max-h-96 overflow-y-auto">
-            <CardHeader>
+          <Card className="w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+            <CardHeader className="sticky top-0 bg-white border-b z-10">
               <div className="flex items-center justify-between">
-                <CardTitle>Campaign Details</CardTitle>
+                <CardTitle className="text-2xl">Campaign Details</CardTitle>
                 <Button
                   variant="outline"
                   onClick={() => setShowCampaignDetails(false)}
                 >
-                  <XCircle className="w-4 h-4" />
+                  <X className="w-4 h-4" />
                 </Button>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
+            <CardContent className="p-6">
+              <div className="space-y-8">
+                
                 {/* Campaign Header */}
-                <div>
-                  <h2 className="text-2xl font-bold">{selectedCampaign.title}</h2>
-                  <p className="text-gray-600 mt-1">{selectedCampaign.description}</p>
-                  <div className="flex gap-2 mt-2">
-                    <Badge variant="secondary">{selectedCampaign.category}</Badge>
-                    <Badge className={selectedCampaign.verified ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>
-                      {selectedCampaign.verified ? "Verified" : "Pending"}
-                    </Badge>
-                    {selectedCampaign.featured && (
-                      <Badge className="bg-yellow-100 text-yellow-800">
-                        <Star className="w-3 h-3 mr-1" />
-                        Featured
-                      </Badge>
-                    )}
+                <div className="space-y-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h1 className="text-3xl font-bold mb-2">{selectedCampaign.title}</h1>
+                      <p className="text-lg text-gray-600 mb-4">{selectedCampaign.description}</p>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="secondary">{selectedCampaign.category}</Badge>
+                        <Badge variant="outline">{selectedCampaign.type}</Badge>
+                        <Badge className={selectedCampaign.verified ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>
+                          {selectedCampaign.verified ? 'Verified' : 'Pending Verification'}
+                        </Badge>
+                        <Badge className={
+                          selectedCampaign.status === 'active' ? 'bg-green-100 text-green-800' :
+                          selectedCampaign.status === 'draft' ? 'bg-gray-100 text-gray-800' :
+                          selectedCampaign.status === 'completed' ? 'bg-blue-100 text-blue-800' :
+                          'bg-red-100 text-red-800'
+                        }>
+                          {selectedCampaign.status}
+                        </Badge>
+                        {selectedCampaign.featured && (
+                          <Badge className="bg-purple-100 text-purple-800">Featured</Badge>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 ml-4">
+                      {!selectedCampaign.verified && (
+                        <Button
+                          onClick={() => {
+                            handleVerifyCampaign(selectedCampaign.id);
+                            setShowCampaignDetails(false);
+                          }}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Verify Campaign
+                        </Button>
+                      )}
+                      <Button
+                        variant="destructive"
+                        onClick={() => {
+                          handleDeleteCampaign(selectedCampaign.id);
+                          setShowCampaignDetails(false);
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete
+                      </Button>
+                    </div>
                   </div>
                 </div>
 
-                {/* Campaign Progress */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Card>
+                {/* Financial Overview */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <Card className="border-green-200">
                     <CardContent className="p-4 text-center">
-                      <DollarSign className="h-8 w-8 text-green-600 mx-auto mb-2" />
-                      <p className="text-2xl font-bold">{selectedCampaign.currentAmount?.toLocaleString() || 0}</p>
-                      <p className="text-sm text-gray-600">PLN Raised</p>
+                      <Target className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                      <p className="text-2xl font-bold">{selectedCampaign.goalAmount?.toLocaleString() || 0} PLN</p>
+                      <p className="text-sm text-gray-600">Goal Amount</p>
                     </CardContent>
                   </Card>
                   
-                  <Card>
+                  <Card className="border-blue-200">
                     <CardContent className="p-4 text-center">
-                      <Target className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-                      <p className="text-2xl font-bold">{selectedCampaign.goalAmount?.toLocaleString() || 0}</p>
-                      <p className="text-sm text-gray-600">PLN Goal</p>
+                      <DollarSign className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+                      <p className="text-2xl font-bold">{selectedCampaign.currentAmount?.toLocaleString() || 0} PLN</p>
+                      <p className="text-sm text-gray-600">Raised Amount</p>
                     </CardContent>
                   </Card>
                   
-                  <Card>
+                  <Card className="border-purple-200">
                     <CardContent className="p-4 text-center">
                       <Users className="h-8 w-8 text-purple-600 mx-auto mb-2" />
                       <p className="text-2xl font-bold">{selectedCampaign.backerCount || 0}</p>
                       <p className="text-sm text-gray-600">Backers</p>
                     </CardContent>
                   </Card>
+                  
+                  <Card className="border-orange-200">
+                    <CardContent className="p-4 text-center">
+                      <Calendar className="h-8 w-8 text-orange-600 mx-auto mb-2" />
+                      <p className="text-2xl font-bold">
+                        {selectedCampaign.goalAmount > 0 ? 
+                          Math.round((selectedCampaign.currentAmount / selectedCampaign.goalAmount) * 100) : 0}%
+                      </p>
+                      <p className="text-sm text-gray-600">Progress</p>
+                    </CardContent>
+                  </Card>
                 </div>
 
                 {/* Progress Bar */}
-                <div>
-                  <div className="flex justify-between text-sm mb-2">
-                    <span>Progress</span>
-                    <span>{Math.round(((selectedCampaign.currentAmount || 0) / (selectedCampaign.goalAmount || 1)) * 100)}%</span>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>Campaign Progress</span>
+                    <span>{selectedCampaign.duration || 30} days duration</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-3">
-                    <div
-                      className="bg-green-600 h-3 rounded-full"
+                  <div className="bg-gray-200 rounded-full h-3">
+                    <div 
+                      className="bg-green-600 h-3 rounded-full transition-all duration-300"
                       style={{ 
-                        width: `${Math.min(((selectedCampaign.currentAmount || 0) / (selectedCampaign.goalAmount || 1)) * 100, 100)}%` 
+                        width: `${selectedCampaign.goalAmount > 0 ? 
+                          Math.min((selectedCampaign.currentAmount / selectedCampaign.goalAmount) * 100, 100) : 0}%` 
                       }}
                     ></div>
                   </div>
                 </div>
 
-                {/* Admin Actions */}
-                <div className="flex gap-4 pt-4 border-t">
-                  {!selectedCampaign.verified ? (
-                    <Button
-                      onClick={() => {
-                        handleVerifyCampaign(selectedCampaign.id);
-                        setShowCampaignDetails(false);
-                      }}
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      Verify & Feature Campaign
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        handleUnverifyCampaign(selectedCampaign.id);
-                        setShowCampaignDetails(false);
-                      }}
-                    >
-                      <XCircle className="w-4 h-4 mr-2" />
-                      Remove Verification
-                    </Button>
-                  )}
+                {/* Two Column Layout */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   
-                  <Button
-                    variant="destructive"
-                    onClick={() => {
-                      handleDeleteCampaign(selectedCampaign.id);
-                      setShowCampaignDetails(false);
-                    }}
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete Campaign
-                  </Button>
+                  {/* Left Column */}
+                  <div className="space-y-6">
+                    
+                    {/* Farmer Information */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Users className="h-5 w-5" />
+                          Farmer Information
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div>
+                          <Label className="text-sm font-medium text-gray-500">Farmer Name</Label>
+                          <p className="text-base">{selectedCampaign.farmerName || 'Not specified'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-gray-500">Farm Name</Label>
+                          <p className="text-base">{selectedCampaign.farmName || 'Not specified'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-gray-500">Email</Label>
+                          <p className="text-base">{selectedCampaign.farmerEmail || 'Not specified'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-gray-500">Location</Label>
+                          <p className="text-base flex items-center gap-1">
+                            <MapPin className="h-4 w-4" />
+                            {selectedCampaign.location || 'Not specified'}
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Campaign Story */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <FileText className="h-5 w-5" />
+                          Campaign Story
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="prose max-w-none">
+                          <p className="whitespace-pre-wrap text-gray-700">
+                            {selectedCampaign.story || 'No story provided'}
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Rewards */}
+                    {selectedCampaign.rewards && selectedCampaign.rewards.length > 0 && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <Award className="h-5 w-5" />
+                            Reward Tiers
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-4">
+                            {selectedCampaign.rewards.map((reward, index) => (
+                              <div key={index} className="border rounded-lg p-4">
+                                <div className="flex justify-between items-start mb-2">
+                                  <h4 className="font-semibold">{reward.title || `Tier ${index + 1}`}</h4>
+                                  <Badge variant="outline">{reward.amount} PLN</Badge>
+                                </div>
+                                <p className="text-gray-600 text-sm mb-2">{reward.description}</p>
+                                <div className="flex justify-between text-xs text-gray-500">
+                                  <span>Delivery: {reward.estimatedDelivery || 'Not specified'}</span>
+                                  <span>Limit: {reward.backerLimit || 'Unlimited'}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Tags */}
+                    {selectedCampaign.tags && selectedCampaign.tags.length > 0 && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Tags</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex flex-wrap gap-2">
+                            {selectedCampaign.tags.map((tag, index) => (
+                              <Badge key={index} variant="secondary">{tag}</Badge>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+
+                  {/* Right Column */}
+                  <div className="space-y-6">
+                    
+                    {/* Campaign Dates */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Calendar className="h-5 w-5" />
+                          Timeline
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div>
+                          <Label className="text-sm font-medium text-gray-500">Created</Label>
+                          <p className="text-base">{formatDate(selectedCampaign.createdAt)}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-gray-500">Last Updated</Label>
+                          <p className="text-base">{formatDate(selectedCampaign.updatedAt)}</p>
+                        </div>
+                        {selectedCampaign.startDate && (
+                          <div>
+                            <Label className="text-sm font-medium text-gray-500">Started</Label>
+                            <p className="text-base">{formatDate(selectedCampaign.startDate)}</p>
+                          </div>
+                        )}
+                        {selectedCampaign.endDate && (
+                          <div>
+                            <Label className="text-sm font-medium text-gray-500">End Date</Label>
+                            <p className="text-base">{formatDate(selectedCampaign.endDate)}</p>
+                          </div>
+                        )}
+                        <div>
+                          <Label className="text-sm font-medium text-gray-500">Duration</Label>
+                          <p className="text-base">{selectedCampaign.duration || 30} days</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Impact & Timeline */}
+                    {(selectedCampaign.environmentalImpact || selectedCampaign.socialImpact) && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <Leaf className="h-5 w-5" />
+                            Impact
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          {selectedCampaign.environmentalImpact && (
+                            <div>
+                              <Label className="text-sm font-medium text-gray-500">Environmental Impact</Label>
+                              <p className="text-sm whitespace-pre-wrap">{selectedCampaign.environmentalImpact}</p>
+                            </div>
+                          )}
+                          {selectedCampaign.socialImpact && (
+                            <div>
+                              <Label className="text-sm font-medium text-gray-500">Social Impact</Label>
+                              <p className="text-sm whitespace-pre-wrap">{selectedCampaign.socialImpact}</p>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Risks & Challenges */}
+                    {selectedCampaign.risksChallenges && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <AlertCircle className="h-5 w-5" />
+                            Risks & Challenges
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm whitespace-pre-wrap">{selectedCampaign.risksChallenges}</p>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Project Timeline */}
+                    {selectedCampaign.timeline && selectedCampaign.timeline.length > 0 && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <Clock className="h-5 w-5" />
+                            Project Timeline
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-4">
+                            {selectedCampaign.timeline.map((phase, index) => (
+                              <div key={index} className="border-l-2 border-green-200 pl-4">
+                                <h4 className="font-semibold text-green-800">{phase.phase}</h4>
+                                <p className="text-sm text-gray-600 mb-1">{phase.description}</p>
+                                <p className="text-xs text-gray-500">Duration: {phase.duration}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Blockchain Information & Deployment */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Wallet className="h-5 w-5" />
+                          Blockchain Information & Deployment
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {/* Wallet Verification Status */}
+                        <div>
+                          <Label className="text-sm font-medium text-gray-500">Wallet Verified</Label>
+                          <p className="text-base flex items-center gap-2">
+                            {selectedCampaign.walletVerified ? (
+                              <>
+                                <CheckCircle className="h-4 w-4 text-green-600" />
+                                <span className="text-green-600">Verified</span>
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="h-4 w-4 text-red-600" />
+                                <span className="text-red-600">Not Verified</span>
+                              </>
+                            )}
+                          </p>
+                        </div>
+
+                        {/* Farmer Wallet Address */}
+                        {selectedCampaign.farmerWallet && (
+                          <div>
+                            <Label className="text-sm font-medium text-gray-500">Farmer Wallet</Label>
+                            <div className="flex items-center gap-2">
+                              <p className="text-base font-mono text-sm bg-gray-100 px-2 py-1 rounded">
+                                {selectedCampaign.farmerWallet}
+                              </p>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => navigator.clipboard.writeText(selectedCampaign.farmerWallet)}
+                                className="h-auto p-1"
+                              >
+                                <Copy className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Wallet Verification Details */}
+                        {selectedCampaign.walletVerification && (
+                          <div className="p-3 bg-green-50 rounded-lg">
+                            <p className="flex items-center gap-2 text-sm">
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                              <span className="text-green-800">
+                                Wallet verified: {new Date(selectedCampaign.walletVerification.timestamp).toLocaleString()}
+                              </span>
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Blockchain Deployment Status */}
+                        <div>
+                          <Label className="text-sm font-medium text-gray-500">Blockchain Deployment</Label>
+                          <div className="mt-2">
+                            {!selectedCampaign.blockchainDeployment || selectedCampaign.blockchainDeployment.status === 'pending' ? (
+                              <Badge variant="secondary">Ready for Deployment</Badge>
+                            ) : selectedCampaign.blockchainDeployment.status === 'deployed' ? (
+                              <Badge className="bg-green-100 text-green-800">Deployed</Badge>
+                            ) : (
+                              <Badge variant="destructive">Failed</Badge>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Web3 Data */}
+                        {selectedCampaign.web3Data && (
+                          <div className="grid grid-cols-2 gap-4 p-3 bg-blue-50 rounded-lg">
+                            <div>
+                              <Label className="text-xs font-medium text-gray-500">ETH Equivalent</Label>
+                              <p className="text-sm font-semibold">{selectedCampaign.web3Data.goalAmountEth?.toFixed(4) || 0} ETH</p>
+                            </div>
+                            <div>
+                              <Label className="text-xs font-medium text-gray-500">Campaign Type</Label>
+                              <p className="text-sm font-semibold">
+                                {['Pre-Order', 'Equipment', 'Expansion', 'Emergency'][selectedCampaign.web3Data.campaignType] || 'Unknown'}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Deployment Actions */}
+                        {selectedCampaign.walletVerified && (
+                          <div className="border-t pt-4">
+                            {(!selectedCampaign.blockchainDeployment || selectedCampaign.blockchainDeployment.status === 'pending') ? (
+                              <div className="space-y-3">
+                                <Alert>
+                                  <AlertCircle className="h-4 w-4" />
+                                  <AlertDescription>
+                                    This campaign is ready for blockchain deployment. Ensure you're connected to the correct network before deploying.
+                                  </AlertDescription>
+                                </Alert>
+<Button
+  onClick={async () => {
+    if (!isConnected) {
+      toast({
+        title: "Wallet Required",
+        description: "Please connect your admin wallet using the wallet panel above",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!confirm(`Deploy and launch campaign "${selectedCampaign.title}" to blockchain?\n\nThis will:\n1. Verify the farmer's wallet\n2. Create the campaign on blockchain\n3. Launch the campaign to Active status\n4. Enable crypto contributions`)) {
+      return;
+    }
+
+    setDeploying(true);
+
+    try {
+      const { ethers } = await import('ethers');
+      const { updateCampaign } = await import('../../firebase/crowdfunding');
+      
+      const contractAddress = import.meta.env.VITE_APP_CONTRACT_ADDRESS;
+      
+      if (!contractAddress || contractAddress === "0x...") {
+        throw new Error('Contract address not configured. Please set VITE_APP_CONTRACT_ADDRESS in your .env file');
+      }
+
+      if (!ethers.isAddress(contractAddress)) {
+        throw new Error('Invalid contract address format');
+      }
+
+      if (!window.ethereum) {
+        throw new Error('MetaMask not found');
+      }
+
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      
+      const signerAddress = await signer.getAddress();
+      if (signerAddress.toLowerCase() !== account.toLowerCase()) {
+        throw new Error('Wallet account mismatch');
+      }
+
+      const contractABI = [
+        "event CampaignCreated(uint256 indexed campaignId, string firebaseId, address indexed farmer, uint256 goalAmount, uint256 deadline, uint8 campaignType)",
+        "event CampaignStatusChanged(uint256 indexed campaignId, uint8 oldStatus, uint8 newStatus)",
+        "function createCampaignAsAdmin(string memory firebaseId, uint256 goalAmount, uint256 durationDays, uint8 campaignType, address farmerAddress) external returns (uint256)",
+        "function launchCampaignAsAdmin(uint256 campaignId) external",
+        "function getTotalCampaigns() external view returns (uint256)",
+        "function verifyFarmer(address farmer, bool verified) external",
+        "function verifiedFarmers(address) external view returns (bool)"
+      ];
+
+      const contract = new ethers.Contract(contractAddress, contractABI, signer);
+
+      // Test contract connection
+      try {
+        const totalCampaigns = await contract.getTotalCampaigns();
+        console.log('Contract connection successful. Total campaigns:', totalCampaigns.toString());
+      } catch (testError) {
+        console.error('Contract test failed:', testError);
+        throw new Error('Contract connection failed. Please verify the contract address and network.');
+      }
+
+      // Get and validate farmer wallet
+      const farmerWallet = selectedCampaign.farmerWallet;
+      if (!farmerWallet || !ethers.isAddress(farmerWallet)) {
+        throw new Error('Invalid farmer wallet address. Check campaign data.');
+      }
+
+      console.log('Farmer wallet from campaign:', farmerWallet);
+
+      // STEP 1: Verify farmer
+      toast({
+        title: "Verifying Farmer",
+        description: "Checking farmer verification status...",
+      });
+
+      try {
+        const isVerified = await contract.verifiedFarmers(farmerWallet);
+        console.log('Current verification status:', isVerified);
+        
+        if (!isVerified) {
+          console.log('Farmer not verified, verifying now...');
+          const verifyTx = await contract.verifyFarmer(farmerWallet, true);
+          console.log('Farmer verification transaction sent:', verifyTx.hash);
+          await verifyTx.wait();
+          console.log('Farmer verified successfully');
+          
+          toast({
+            title: "Farmer Verified",
+            description: "Farmer wallet has been verified",
+          });
+        } else {
+          console.log('Farmer already verified');
+        }
+      } catch (verifyError) {
+        console.error('Farmer verification failed:', verifyError);
+        throw new Error('Failed to verify farmer: ' + verifyError.message);
+      }
+
+      // STEP 2: Create campaign
+      toast({
+        title: "Creating Campaign",
+        description: "Creating campaign on blockchain...",
+      });
+
+      // Calculate goal amount in wei
+      const goalAmountEth = parseFloat(selectedCampaign.goalAmount) / 4000; // Assuming 1 ETH = 4000 PLN
+      const goalAmountWei = ethers.parseEther(goalAmountEth.toString());
+
+      // Map campaign type
+      const typeMapping = {
+        'preorder': 0,
+        'equipment': 1,
+        'expansion': 2,
+        'emergency': 3
+      };
+      const campaignType = typeMapping[selectedCampaign.type] || 0;
+
+      console.log('Creating campaign with parameters:', {
+        firebaseId: selectedCampaign.id,
+        goalAmountEth,
+        goalAmountWei: goalAmountWei.toString(),
+        duration: selectedCampaign.duration || 30,
+        campaignType,
+        farmerWallet
+      });
+
+      const createTx = await contract.createCampaignAsAdmin(
+        selectedCampaign.id,
+        goalAmountWei,
+        selectedCampaign.duration || 30,
+        campaignType,
+        farmerWallet
+      );
+
+      console.log('Campaign creation transaction sent:', createTx.hash);
+      const createReceipt = await createTx.wait();
+      console.log('Campaign created successfully:', createReceipt);
+
+      // Extract campaign ID from events
+      let web3CampaignId = null;
+      console.log('Processing receipt logs:', createReceipt.logs.length);
+
+      if (createReceipt.logs && createReceipt.logs.length > 0) {
+        for (let i = 0; i < createReceipt.logs.length; i++) {
+          const log = createReceipt.logs[i];
+          try {
+            const parsedLog = contract.interface.parseLog(log);
+            console.log(`Log ${i}:`, parsedLog?.name, parsedLog?.args);
+            
+            if (parsedLog && parsedLog.name === 'CampaignCreated') {
+              web3CampaignId = parsedLog.args[0].toString();
+              console.log('Successfully extracted campaign ID:', web3CampaignId);
+              break;
+            }
+          } catch (parseError) {
+            console.log(`Failed to parse log ${i}:`, parseError.message);
+            continue;
+          }
+        }
+      }
+
+      // Fallback method: get the latest campaign ID
+      if (!web3CampaignId) {
+        try {
+          console.log('Event parsing failed, using fallback method...');
+          const totalCampaigns = await contract.getTotalCampaigns();
+          web3CampaignId = totalCampaigns.toString();
+          console.log('Using latest campaign ID from counter:', web3CampaignId);
+        } catch (error) {
+          console.error('Fallback method also failed:', error);
+          web3CampaignId = 'Unknown';
+        }
+      }
+
+      // STEP 3: Launch the campaign to Active status
+      if (web3CampaignId && web3CampaignId !== 'Unknown') {
+        try {
+          toast({
+            title: "Launching Campaign",
+            description: "Activating campaign for contributions...",
+          });
+
+          console.log('Launching campaign with ID:', web3CampaignId);
+          
+          const launchTx = await contract.launchCampaignAsAdmin(web3CampaignId);
+          console.log('Launch transaction sent:', launchTx.hash);
+          
+          const launchReceipt = await launchTx.wait();
+          console.log('Campaign launched successfully:', launchReceipt.hash);
+          
+          toast({
+            title: "Campaign Launched",
+            description: "Campaign is now active and accepting contributions",
+          });
+
+        } catch (launchError) {
+          console.error('Campaign launch failed:', launchError);
+          // Don't throw here - campaign was created successfully, just not launched
+          toast({
+            title: "Launch Warning",
+            description: "Campaign created but launch failed. May need manual launch.",
+            variant: "destructive"
+          });
+        }
+      }
+
+      // STEP 4: Update Firebase
+      await updateCampaign(selectedCampaign.id, {
+        blockchainDeployment: {
+          status: 'deployed',
+          contractAddress: contractAddress,
+          web3CampaignId: web3CampaignId,
+          transactionHash: createReceipt.hash,
+          blockNumber: createReceipt.blockNumber,
+          deployedAt: new Date(),
+          deployedBy: account,
+          farmerVerified: true,
+          launched: true // Mark as launched
+        },
+        web3Enabled: true,
+        web3CampaignId: web3CampaignId, // Add to top level
+        status: 'active',
+        updatedAt: new Date()
+      });
+
+      // Update local state
+      setSelectedCampaign(prev => ({
+        ...prev,
+        blockchainDeployment: {
+          status: 'deployed',
+          contractAddress: contractAddress,
+          web3CampaignId: web3CampaignId,
+          transactionHash: createReceipt.hash,
+          blockNumber: createReceipt.blockNumber,
+          deployedAt: new Date(),
+          deployedBy: account,
+          farmerVerified: true,
+          launched: true
+        },
+        web3Enabled: true,
+        web3CampaignId: web3CampaignId,
+        status: 'active'
+      }));
+
+      if (setCampaigns) {
+        setCampaigns(prev => prev.map(c => 
+          c.id === selectedCampaign.id ? {
+            ...c,
+            blockchainDeployment: {
+              status: 'deployed',
+              contractAddress: contractAddress,
+              web3CampaignId: web3CampaignId,
+              transactionHash: createReceipt.hash,
+              blockNumber: createReceipt.blockNumber,
+              deployedAt: new Date(),
+              deployedBy: account,
+              farmerVerified: true,
+              launched: true
+            },
+            web3Enabled: true,
+            web3CampaignId: web3CampaignId,
+            status: 'active'
+          } : c
+        ));
+      }
+
+      toast({
+        title: "Deployment Successful!",
+        description: `Campaign deployed and launched! TX: ${createReceipt.hash.slice(0, 10)}... | Campaign ID: ${web3CampaignId || 'Unknown'}`,
+      });
+
+    } catch (error) {
+      console.error('Deployment failed:', error);
+      
+      let errorMessage = 'Unknown deployment error';
+      
+      if (error.message.includes('user rejected')) {
+        errorMessage = 'Transaction rejected by user';
+      } else if (error.message.includes('insufficient funds')) {
+        errorMessage = 'Insufficient funds for gas fees';
+      } else if (error.message.includes('Farmer not verified')) {
+        errorMessage = 'Farmer verification failed. Please check admin permissions.';
+      } else if (error.message.includes('Failed to verify farmer')) {
+        errorMessage = error.message;
+      } else if (error.message.includes('Invalid farmer wallet')) {
+        errorMessage = 'Invalid farmer wallet address. Check campaign data.';
+      } else if (error.message.includes('Contract connection failed')) {
+        errorMessage = 'Cannot connect to contract. Check network and contract address.';
+      } else {
+        errorMessage = error.message || 'Deployment failed';
+      }
+
+      toast({
+        title: "Deployment Failed",
+        description: errorMessage,
+        variant: "destructive"
+      });
+    } finally {
+      setDeploying(false);
+    }
+  }}
+  disabled={deploying || !selectedCampaign?.farmerWallet}
+  className="w-full"
+>
+  {deploying ? (
+    <>
+      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+      Deploying & Launching...
+    </>
+  ) : (
+    <>
+      <Upload className="w-4 h-4 mr-2" />
+      Deploy & Launch Campaign
+    </>
+  )}
+</Button>
+                              </div>
+                            ) : selectedCampaign.blockchainDeployment?.status === 'deployed' && (
+                              <div className="space-y-3">
+                                <div className="p-3 bg-green-50 rounded-lg">
+                                  <p className="text-sm text-green-800 font-medium mb-2">
+                                    Successfully deployed to blockchain
+                                  </p>
+                                  <div className="space-y-1 text-xs text-green-700">
+                                    <p>Contract: {selectedCampaign.blockchainDeployment.contractAddress}</p>
+                                    <p>Campaign ID: {selectedCampaign.blockchainDeployment.web3CampaignId}</p>
+                                    <p>Deployed: {new Date(selectedCampaign.blockchainDeployment.deployedAt).toLocaleString()}</p>
+                                    <p>Deployed by: {selectedCampaign.blockchainDeployment.deployedBy}</p>
+                                  </div>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => window.open(
+                                      `https://sepolia.etherscan.io/tx/${selectedCampaign.blockchainDeployment.transactionHash}`,
+                                      '_blank'
+                                    )}
+                                    className="flex-1"
+                                  >
+                                    <ExternalLink className="w-4 h-4 mr-2" />
+                                    View on Etherscan
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => navigator.clipboard.writeText(selectedCampaign.blockchainDeployment.transactionHash)}
+                                  >
+                                    <Copy className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Warning for non-verified wallets */}
+                        {!selectedCampaign.walletVerified && (
+                          <Alert variant="destructive">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>
+                              Campaign cannot be deployed to blockchain until wallet ownership is verified by the farmer.
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
+
+                {/* Admin Actions */}
+                <Card className="border-orange-200 bg-orange-50">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-orange-800">
+                      <Shield className="h-5 w-5" />
+                      Admin Actions
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-wrap gap-3">
+                      <AdminWalletStatus />
+                      {!selectedCampaign.verified && (
+                        <Button
+                          onClick={() => {
+                            handleVerifyCampaign(selectedCampaign.id);
+                            setShowCampaignDetails(false);
+                          }}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Verify Campaign
+                        </Button>
+                      )}
+
+                      
+                      
+                      {selectedCampaign.verified && (
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            handleUnverifyCampaign(selectedCampaign.id);
+                            setShowCampaignDetails(false);
+                          }}
+                        >
+                          <XCircle className="w-4 h-4 mr-2" />
+                          Remove Verification
+                        </Button>
+                      )}
+                      
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          // Toggle featured status
+                          const updatedCampaign = { ...selectedCampaign, featured: !selectedCampaign.featured };
+                          setSelectedCampaign(updatedCampaign);
+                          // Add API call to update featured status
+                        }}
+                      >
+                        <Star className="w-4 h-4 mr-2" />
+                        {selectedCampaign.featured ? 'Remove from Featured' : 'Make Featured'}
+                      </Button>
+                      
+                      <Button
+                        variant="outline"
+                        onClick={() => window.open(`/campaigns/${selectedCampaign.id}`, '_blank')}
+                      >
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        View Public Page
+                      </Button>
+                      
+                      <Button
+                        variant="destructive"
+                        onClick={() => {
+                          if (confirm('Are you sure you want to delete this campaign? This action cannot be undone.')) {
+                            handleDeleteCampaign(selectedCampaign.id);
+                            setShowCampaignDetails(false);
+                          }
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete Campaign
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             </CardContent>
           </Card>
